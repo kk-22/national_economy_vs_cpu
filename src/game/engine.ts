@@ -255,6 +255,7 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity):
         return player.hand.length - 2 >= cost
       })
     }
+    case 'draw-consumption-to': return player.hand.length < effect.target
     case 'reveal-pick':     return state_deck_has_cards_placeholder()
     default:                return true
   }
@@ -337,16 +338,8 @@ function applyEffect(state: GameState, playerId: number, effect: GameEffect, isC
     case 'draw-consumption':
       return drawConsumption(state, playerId, effect.n)
 
-    case 'slash-burn': {
-      let s = drawConsumption(state, playerId, 5)
-      // Remove 焼畑 from owned buildings
-      s = updatePlayer(s, playerId, p => ({
-        ...p,
-        ownedBuildings: p.ownedBuildings.filter(b => b.name !== '焼畑'),
-      }))
-      s = addLog(s, '焼畑が消滅しました')
-      return s
-    }
+    case 'slash-burn':
+      return drawConsumption(state, playerId, 5)
 
     case 'gain-supply': {
       let s = { ...state, household: state.household - effect.n }
@@ -1021,6 +1014,18 @@ function processRoundEnd(state: GameState): GameState {
   // Advance round
   const nextRound = s.round + 1
   const playerCount = s.players.length
+
+  // Burn 焼畑 that had a worker placed this round
+  for (const player of s.players) {
+    const burnBuilding = player.ownedBuildings.find(b => b.name === '焼畑' && b.workerHereId !== null)
+    if (burnBuilding) {
+      s = updatePlayer(s, player.id, p => ({
+        ...p,
+        ownedBuildings: p.ownedBuildings.filter(ob => ob.id !== burnBuilding.id),
+      }))
+      s = addLog(s, `${player.name} の焼畑が消滅しました`)
+    }
+  }
 
   // Reset workers
   s = {

@@ -47,32 +47,31 @@ import type { GameEffect } from './game/types'
 
 function effectDesc(effect: GameEffect): string {
   switch (effect.kind) {
-    case 'draw':               return `カードを${effect.n}枚引く`
+    case 'draw':               return `山札から建物カードを${effect.n}枚引く`
     case 'draw-consumption':   return `消費財を${effect.n}枚引く`
     case 'draw-become-start':  return `カードを1枚引き、スタートプレイヤーになる`
-    case 'slash-burn':         return `使用後に廃棄される`
-    case 'gain-supply':        return `家計から $${effect.n} もらう`
-    case 'reveal-pick':        return `山札から${effect.n}枚公開し1枚取る`
-    case 'discard-draw':       return `カード${effect.discard}枚捨てて${effect.draw}枚引く`
+    case 'slash-burn':         return `消費財を5枚引く。ラウンド終了時に廃棄`
+    case 'gain-supply':        return `家計から $${effect.n} もらう（家計に$${effect.n}以上必要）`
+    case 'reveal-pick':        return `山札から建物カード${effect.n}枚を公開し、1枚選んで手札に加える`
+    case 'discard-draw':       return `手札${effect.discard}枚捨てて山札から${effect.draw}枚引く`
     case 'build':              return effect.discount > 0
-                                 ? `コスト${effect.discount}割引で建設${effect.drawAfter > 0 ? `、その後${effect.drawAfter}枚引く` : ''}`
-                                 : `建設する${effect.drawAfter > 0 ? `、その後${effect.drawAfter}枚引く` : ''}`
-    case 'draw-consumption-to':return `消費財を計${effect.target}枚になるまで引く`
+                                 ? `コスト${effect.discount}割引で建設${effect.drawAfter > 0 ? `。その後${effect.drawAfter}枚引く` : ''}`
+                                 : `建設する${effect.drawAfter > 0 ? `。その後${effect.drawAfter}枚引く` : ''}`
+    case 'draw-consumption-to':return `消費財を計${effect.target}枚になるまで引く（手札${effect.target}枚以上なら配置不可）`
     case 'build-farm-free':    return `農場を1棟無料で建設`
-    case 'discard-gain':       return `カード${effect.discard}枚捨てて家計から $${effect.gain} もらう`
+    case 'discard-gain':       return `手札${effect.discard}枚捨てて家計から $${effect.gain} もらう（家計に$${effect.gain}以上必要）`
     case 'add-worker':         return `労働者を1人雇う${effect.immediate ? '（即時使用可）' : ''}`
     case 'fill-workers':       return `労働者を${effect.target}人になるまで雇う`
-    case 'build-double':       return `同コストの建物を2棟同時に建設`
-    case 'draw-if-empty':      return `手札0枚なら${effect.empty}枚、それ以外は${effect.normal}枚引く`
-    case 'discard-gain':       return `カード${effect.discard}枚捨てて家計から $${effect.gain} もらう`
-    case 'p-hand-limit':       return `手札上限 +${effect.n}`
-    case 'p-worker-limit':     return `労働者上限 +${effect.n}`
-    case 'p-forgive-wages':    return `未払い賃金を最大${effect.max}まで免除`
-    case 'p-per-building':     return `建物1棟につき +${effect.pts}点`
-    case 'p-per-consumption':  return `消費財1枚につき +${effect.pts}点`
-    case 'p-per-worker':       return `労働者1人につき +${effect.pts}点`
-    case 'p-per-no-sell':      return `建物を売却しなかった場合 +${effect.pts}点`
-    case 'p-per-factory':      return `工場系建物1棟につき +${effect.pts}点`
+    case 'build-double':       return `同コストの建物を2棟同時に建設（コスト1つ分を支払う）`
+    case 'draw-if-empty':      return `手札0枚なら${effect.empty}枚、手札1枚以上なら${effect.normal}枚引く`
+    case 'p-hand-limit':       return `手札上限 +${effect.n}（恒久効果）`
+    case 'p-worker-limit':     return `雇用できる労働者の上限 +${effect.n}（恒久効果）`
+    case 'p-forgive-wages':    return `ゲーム終了時、未払い賃金を最大${effect.max}枚まで免除`
+    case 'p-per-building':     return `ゲーム終了時、所有建物1棟につき +${effect.pts}点`
+    case 'p-per-consumption':  return `ゲーム終了時、手札の消費財1枚につき +${effect.pts}点（上限枚数に減らした後で計算）`
+    case 'p-per-worker':       return `ゲーム終了時、労働者1人につき +${effect.pts}点`
+    case 'p-per-no-sell':      return `ゲーム終了時、売却不可の建物1棟につき +${effect.pts}点`
+    case 'p-per-factory':      return `ゲーム終了時、工場系建物1棟につき +${effect.pts}点`
     case 'none':               return `効果なし`
     default:                   return ''
   }
