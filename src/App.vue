@@ -42,6 +42,47 @@ function buildingWorkerName(workerHereId: string | null): string | null {
   const p = game.value.players.find(pl => pl.workers.some(w => w.id === workerHereId))
   return p?.name ?? null
 }
+
+import type { GameEffect } from './game/types'
+
+function effectDesc(effect: GameEffect): string {
+  switch (effect.kind) {
+    case 'draw':               return `カードを${effect.n}枚引く`
+    case 'draw-consumption':   return `消費財を${effect.n}枚引く`
+    case 'draw-become-start':  return `カードを1枚引き、スタートプレイヤーになる`
+    case 'slash-burn':         return `使用後に廃棄される`
+    case 'gain-supply':        return `家計から $${effect.n} もらう`
+    case 'reveal-pick':        return `山札から${effect.n}枚公開し1枚取る`
+    case 'discard-draw':       return `カード${effect.discard}枚捨てて${effect.draw}枚引く`
+    case 'build':              return effect.discount > 0
+                                 ? `コスト${effect.discount}割引で建設${effect.drawAfter > 0 ? `、その後${effect.drawAfter}枚引く` : ''}`
+                                 : `建設する${effect.drawAfter > 0 ? `、その後${effect.drawAfter}枚引く` : ''}`
+    case 'draw-consumption-to':return `消費財を計${effect.target}枚になるまで引く`
+    case 'build-farm-free':    return `農場を1棟無料で建設`
+    case 'discard-gain':       return `カード${effect.discard}枚捨てて家計から $${effect.gain} もらう`
+    case 'add-worker':         return `労働者を1人雇う${effect.immediate ? '（即時使用可）' : ''}`
+    case 'fill-workers':       return `労働者を${effect.target}人になるまで雇う`
+    case 'build-double':       return `同コストの建物を2棟同時に建設`
+    case 'draw-if-empty':      return `手札0枚なら${effect.empty}枚、それ以外は${effect.normal}枚引く`
+    case 'discard-gain':       return `カード${effect.discard}枚捨てて家計から $${effect.gain} もらう`
+    case 'p-hand-limit':       return `手札上限 +${effect.n}`
+    case 'p-worker-limit':     return `労働者上限 +${effect.n}`
+    case 'p-forgive-wages':    return `未払い賃金を最大${effect.max}まで免除`
+    case 'p-per-building':     return `建物1棟につき +${effect.pts}点`
+    case 'p-per-consumption':  return `消費財1枚につき +${effect.pts}点`
+    case 'p-per-worker':       return `労働者1人につき +${effect.pts}点`
+    case 'p-per-no-sell':      return `建物を売却しなかった場合 +${effect.pts}点`
+    case 'p-per-factory':      return `工場系建物1棟につき +${effect.pts}点`
+    case 'none':               return `効果なし`
+    default:                   return ''
+  }
+}
+
+function cardTooltip(name: string): string {
+  const d = getBuildingDef(name)
+  if (!d) return ''
+  return effectDesc(d.effect)
+}
 </script>
 
 <template>
@@ -189,6 +230,7 @@ function buildingWorkerName(workerHereId: string | null): string | null {
             v-for="wp in game.publicWorkplaces"
             :key="wp.id"
             :class="['workplace', { available: !pendingAction && isHumanTurn && availablePublicWorkplaces.some(w => w.id === wp.id) }]"
+            :data-tooltip="effectDesc(wp.effect)"
             @click="!pendingAction && isHumanTurn && availablePublicWorkplaces.some(w => w.id === wp.id) && clickPublicWorkplace(wp.id)"
           >
             <div class="wp-name">{{ wp.name }}</div>
@@ -210,7 +252,8 @@ function buildingWorkerName(workerHereId: string | null): string | null {
         <div class="subsection">
           <h3>手札 ({{ humanPlayer?.hand.length }}枚)</h3>
           <div class="card-row">
-            <div v-for="card in humanPlayer?.hand" :key="card.id" class="card">
+            <div v-for="card in humanPlayer?.hand" :key="card.id" class="card"
+              :data-tooltip="card.kind === 'building' ? cardTooltip(card.name!) : undefined">
               <div>{{ cardLabel(card) }}</div>
               <div v-if="card.kind === 'building'" class="card-meta">{{ defStr(card.name!) }}</div>
             </div>
@@ -224,6 +267,7 @@ function buildingWorkerName(workerHereId: string | null): string | null {
               v-for="b in humanPlayer?.ownedBuildings"
               :key="b.id"
               :class="['building', { available: !pendingAction && isHumanTurn && availableOwnedBuildings.some(x => x.id === b.id) }]"
+              :data-tooltip="cardTooltip(b.name)"
               @click="!pendingAction && isHumanTurn && availableOwnedBuildings.some(x => x.id === b.id) && clickOwnedBuilding(b.id)"
             >
               <div>{{ b.name }}</div>
@@ -330,6 +374,24 @@ h3 { font-size: 12px; margin: 8px 0 4px; color: #6b7280; }
 .back-btn { margin-top: 8px; padding: 4px 12px; background: transparent; border: 1px solid #555; border-radius: 4px; cursor: pointer; color: #aaa; font-size: 12px; }
 .back-btn:hover { border-color: #aaa; color: #eee; }
 .no-options { font-size: 11px; color: #ef4444; margin: 4px 0 0; }
+
+[data-tooltip] { position: relative; }
+[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111827;
+  color: #e5e7eb;
+  padding: 5px 9px;
+  border-radius: 5px;
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 300;
+  border: 1px solid #4b5563;
+  pointer-events: none;
+}
 
 .worker-row { display: flex; gap: 4px; font-size: 18px; flex-wrap: wrap; }
 .worker.training { opacity: 0.45; }
