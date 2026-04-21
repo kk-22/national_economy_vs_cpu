@@ -1,4 +1,4 @@
-import { BUILDING_CARDS, ROUND_CARDS, INITIAL_SUPPLY, MAX_WORKERS_PER_PLAYER } from './constants'
+import { BUILDING_CARDS, ROUND_CARDS, MAX_WORKERS_PER_PLAYER } from './constants'
 import type {
   GameState, GameConfig, Player, Worker, HandCard, BuildingCard,
   OwnedBuilding, PublicWorkplace, GameEffect, ScoreResult
@@ -123,7 +123,7 @@ export function createGame(config: GameConfig): GameState {
     publicWorkplaces: [],
     buildingDeck: [],
     discardPile: [],
-    supply: INITIAL_SUPPLY,
+    household: 0,
     phase: 'placement',
     pendingAction: null,
     log: [],
@@ -167,10 +167,6 @@ export function createGame(config: GameConfig): GameState {
     state = drawCards(state, p.id, 3)
   }
 
-  // Deduct initial money from supply
-  const totalInitial = players.reduce((sum, _, i) => sum + 5 + i, 0)
-  state = { ...state, supply: state.supply - totalInitial }
-
   // Flip round 1 card and add workplaces
   state = flipRoundCard(state, 1, playerCount)
   state = addLog(state, 'ゲーム開始！')
@@ -209,7 +205,7 @@ function flipRoundCard(state: GameState, round: number, playerCount: number): Ga
 export function getAvailablePublicWorkplaces(state: GameState, playerId: number): PublicWorkplace[] {
   const player = getPlayer(state, playerId)
   if (availableWorkers(player).length === 0) return []
-  return state.publicWorkplaces.filter(wp => canUseWorkplace(wp.effect, wp.workerIds.length, wp.allowMultiple, player))
+  return state.publicWorkplaces.filter(wp => canUseWorkplace(wp.effect, wp.workerIds.length, wp.allowMultiple, player, state.household))
 }
 
 export function getAvailableOwnedBuildings(state: GameState, playerId: number): OwnedBuilding[] {
@@ -223,16 +219,16 @@ export function getAvailableOwnedBuildings(state: GameState, playerId: number): 
   })
 }
 
-function canUseWorkplace(effect: GameEffect, currentWorkers: number, allowMultiple: boolean, player: Player): boolean {
+function canUseWorkplace(effect: GameEffect, currentWorkers: number, allowMultiple: boolean, player: Player, household: number): boolean {
   if (currentWorkers > 0 && !allowMultiple) return false
-  return canUseEffect(effect, player)
+  return canUseEffect(effect, player, household)
 }
 
-function canUseEffect(effect: GameEffect, player: Player): boolean {
+function canUseEffect(effect: GameEffect, player: Player, household = Infinity): boolean {
   switch (effect.kind) {
+    case 'gain-supply':     return household >= effect.n
     case 'discard-draw':    return player.hand.length >= effect.discard
-    case 'discard-gain':    return player.hand.length >= effect.discard
-    case 'discard-all-gain':return player.hand.length >= 1
+    case 'discard-gain':    return player.hand.length >= effect.discard && household >= effect.gain
     case 'add-worker':      return workerCount(player) < MAX_WORKERS_PER_PLAYER
     case 'fill-workers':    return workerCount(player) < effect.target
     case 'build':           return player.hand.some(c => {
@@ -272,7 +268,7 @@ function state_deck_has_cards_placeholder(): boolean { return true }
 export function placeWorkerOnPublic(state: GameState, playerId: number, workplaceId: string): GameState {
   const player = getPlayer(state, playerId)
   const workplace = state.publicWorkplaces.find(w => w.id === workplaceId)!
-  if (!canUseWorkplace(workplace.effect, workplace.workerIds.length, workplace.allowMultiple, player)) return state
+  if (!canUseWorkplace(workplace.effect, workplace.workerIds.length, workplace.allowMultiple, player, state.household)) return state
   const worker = availableWorkers(player)[0]
   if (!worker) return state
 
@@ -301,7 +297,7 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
   const building = player.ownedBuildings.find(b => b.id === buildingId)!
   const def = BUILDING_CARDS[building.name]!
   if (!def || !def.isWorkplace || building.workerHereId !== null) return state
-  if (!canUseEffect(def.effect, player)) return state
+  if (!canUseEffect(def.effect, player, state.household)) return state
   const worker = availableWorkers(player)[0]
   if (!worker) return state
 
@@ -353,10 +349,8 @@ function applyEffect(state: GameState, playerId: number, effect: GameEffect, isC
     }
 
     case 'gain-supply': {
-      const gain = Math.min(effect.n, state.supply)
-      let s = { ...state, supply: state.supply - gain }
-      s = updatePlayer(s, playerId, p => ({ ...p, money: p.money + gain }))
-      if (gain < effect.n) s = addLog(s, '家計が不足しているため全額受け取れませんでした')
+      let s = { ...state, household: state.household - effect.n }
+      s = updatePlayer(s, playerId, p => ({ ...p, money: p.money + effect.n }))
       return s
     }
 
@@ -398,19 +392,6 @@ function applyEffect(state: GameState, playerId: number, effect: GameEffect, isC
       if (getFarmBuildableCards(state, playerId).length === 0)
         return addLog(state, `${player.name} は建設できる農場がないためスキップ`)
       return { ...state, pendingAction: { kind: 'choose-farm-build', playerId } }
-    }
-
-    case 'discard-all-gain': {
-      const gain = Math.min(effect.n, state.supply)
-      let s = updatePlayer(state, playerId, p => ({
-        ...p,
-        hand: [],
-        money: p.money + gain,
-      }))
-      // Discarded buildings go to discard pile
-      const discarded = player.hand.filter(c => c.kind === 'building') as BuildingCard[]
-      s = { ...s, supply: s.supply - gain, discardPile: [...s.discardPile, ...discarded] }
-      return s
     }
 
     case 'draw-consumption-to': {
@@ -728,10 +709,9 @@ export function confirmDiscard(state: GameState): GameState {
   s = { ...s, discardPile: [...s.discardPile, ...discarded] }
 
   if (action.gainAmount > 0) {
-    const gain = Math.min(action.gainAmount, s.supply)
-    s = { ...s, supply: s.supply - gain }
-    s = updatePlayer(s, action.playerId, p => ({ ...p, money: p.money + gain }))
-    s = addLog(s, `${player.name} がカードを${action.count}枚捨てて $${gain} 獲得`)
+    s = { ...s, household: s.household - action.gainAmount }
+    s = updatePlayer(s, action.playerId, p => ({ ...p, money: p.money + action.gainAmount }))
+    s = addLog(s, `${player.name} がカードを${action.count}枚捨てて $${action.gainAmount} 獲得`)
   } else {
     // discard-draw case: draw cards equal to what was expected
     // gainAmount === -1 means draw after discard
@@ -821,9 +801,8 @@ function cpuDiscardGain(state: GameState, playerId: number, discard: number, gai
   const discarded = toDiscard.filter(c => c.kind === 'building') as BuildingCard[]
   let s = updatePlayer(state, playerId, p => ({ ...p, hand: p.hand.slice(discard) }))
   s = { ...s, discardPile: [...s.discardPile, ...discarded] }
-  const actualGain = Math.min(gain, s.supply)
-  s = { ...s, supply: s.supply - actualGain }
-  return updatePlayer(s, playerId, p => ({ ...p, money: p.money + actualGain }))
+  s = { ...s, household: s.household - gain }
+  return updatePlayer(s, playerId, p => ({ ...p, money: p.money + gain }))
 }
 
 function cpuBuild(state: GameState, playerId: number, discount: number, drawAfter: number): GameState {
@@ -978,12 +957,12 @@ function processRoundEnd(state: GameState): GameState {
 
     if (playerMoney >= remaining) {
       s = updatePlayer(s, player.id, p => ({ ...p, money: p.money - remaining }))
-      s = { ...s, supply: s.supply + remaining }
+      s = { ...s, household: s.household + remaining }
     } else {
       // Try to sell buildings
       remaining -= playerMoney
       s = updatePlayer(s, player.id, p => ({ ...p, money: 0 }))
-      s = { ...s, supply: s.supply + playerMoney }
+      s = { ...s, household: s.household + playerMoney }
 
       // Sell buildings until enough
       const sellable = getPlayer(s, player.id).ownedBuildings
@@ -996,12 +975,10 @@ function processRoundEnd(state: GameState): GameState {
         // Check: is selling this building enough (don't oversell)
         const value = def.assetValue
         if (value <= remaining || sellable.filter(sb => sb.id !== b.id).reduce((sum, sb) => sum + (BUILDING_CARDS[sb.name]?.assetValue ?? 0), 0) < remaining) {
-          // Sell this building
-          const gain = Math.min(value, s.supply)
-          s = { ...s, supply: s.supply - gain }
+          // Sell this building: money comes from サプライ (infinite external bank)
           s = updatePlayer(s, player.id, p => ({
             ...p,
-            money: p.money + gain,
+            money: p.money + value,
             ownedBuildings: p.ownedBuildings.filter(ob => ob.id !== b.id),
           }))
           // Add to public workplaces if it's a workplace
@@ -1011,17 +988,17 @@ function processRoundEnd(state: GameState): GameState {
             const wp: PublicWorkplace = { id: wpId, name: b.name, effect: def.effect, allowMultiple: false, workerIds: [] }
             s = { ...s, publicWorkplaces: [...s.publicWorkplaces, wp] }
           }
-          s = addLog(s, `${player.name} が ${b.name} を $${gain} で売却`)
-          remaining -= gain
+          s = addLog(s, `${player.name} が ${b.name} を $${value} で売却`)
+          remaining -= value
           const newMoney = getPlayer(s, player.id).money
           if (newMoney >= remaining) {
             s = updatePlayer(s, player.id, p => ({ ...p, money: p.money - remaining }))
-            s = { ...s, supply: s.supply + remaining }
+            s = { ...s, household: s.household + remaining }
             remaining = 0
           } else {
             remaining -= newMoney
             s = updatePlayer(s, player.id, p => ({ ...p, money: 0 }))
-            s = { ...s, supply: s.supply + newMoney }
+            s = { ...s, household: s.household + newMoney }
           }
         }
       }
@@ -1135,7 +1112,7 @@ export function createDebugGame(): GameState {
     publicWorkplaces: [],
     buildingDeck: [],
     discardPile: [],
-    supply: 40,
+    household: 40,
     phase: 'placement',
     pendingAction: null,
     log: ['【デバッグ】ラウンド8からスタート'],
@@ -1158,7 +1135,7 @@ export function createDebugGame(): GameState {
       id: i,
       name: playerNames[i],
       isCpu,
-      money: 10,
+      money: 0,
       hand: [],
       ownedBuildings: [],
       workers: [

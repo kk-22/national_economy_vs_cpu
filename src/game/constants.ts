@@ -13,7 +13,7 @@ export const BUILDING_CARDS: Record<string, BuildingCardDef> = {
   '社宅':     { name: '社宅',     cost: 2, assetValue: 8,  tags: [],          canSell: false, isWorkplace: false, count: 2, effect: { kind: 'p-worker-limit', n: 1 } },
   '不動産屋': { name: '不動産屋', cost: 3, assetValue: 10, tags: [],          canSell: false, isWorkplace: false, count: 2, effect: { kind: 'p-per-building', pts: 3 } },
   '開拓民':   { name: '開拓民',   cost: 3, assetValue: 14, tags: [],          canSell: true,  isWorkplace: true,  count: 2, effect: { kind: 'build-farm-free' } },
-  'レストラン':{ name: 'レストラン', cost: 3, assetValue: 16, tags: [],       canSell: true,  isWorkplace: true,  count: 2, effect: { kind: 'discard-all-gain', n: 15 } },
+  'レストラン':{ name: 'レストラン', cost: 3, assetValue: 16, tags: [],       canSell: true,  isWorkplace: true,  count: 2, effect: { kind: 'discard-gain', discard: 1, gain: 15 } },
   '大農園':   { name: '大農園',   cost: 3, assetValue: 12, tags: ['farm'],    canSell: true,  isWorkplace: true,  count: 3, effect: { kind: 'draw-consumption', n: 3 } },
   '農協':     { name: '農協',     cost: 3, assetValue: 12, tags: [],          canSell: false, isWorkplace: false, count: 1, effect: { kind: 'p-per-consumption', pts: 3 } },
   'ゼネコン': { name: 'ゼネコン', cost: 4, assetValue: 18, tags: [],          canSell: true,  isWorkplace: true,  count: 3, effect: { kind: 'build', discount: 0, drawAfter: 2 } },
@@ -81,5 +81,4 @@ export const ROUND_CARDS: RoundCard[] = [
   },
 ]
 
-export const INITIAL_SUPPLY = 100 // TODO: confirm exact amount
 export const MAX_WORKERS_PER_PLAYER = 6

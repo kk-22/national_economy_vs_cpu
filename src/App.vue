@@ -89,7 +89,7 @@ function buildingWorkerName(workerHereId: string | null): string | null {
     <div class="header">
       <span>ラウンド {{ game.round }}/9</span>
       <span>賃金 ${{ currentWage }}</span>
-      <span>家計 ${{ game.supply }}</span>
+      <span>家計 ${{ game.household }}</span>
       <span :class="{ myturn: isHumanTurn }">手番: {{ currentPlayer?.name }}</span>
     </div>
 

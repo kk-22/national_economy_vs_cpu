@@ -23,7 +23,6 @@ export type GameEffect =
   | { kind: 'build'; discount: number; drawAfter: number }
   | { kind: 'draw-consumption-to'; target: number }
   | { kind: 'build-farm-free' }
-  | { kind: 'discard-all-gain'; n: number }
   | { kind: 'draw-if-empty'; normal: number; empty: number }
   | { kind: 'discard-gain'; discard: number; gain: number }
   | { kind: 'add-worker'; immediate: boolean }
@@ -103,7 +102,7 @@ export interface GameState {
   publicWorkplaces: PublicWorkplace[]
   buildingDeck: BuildingCard[]
   discardPile: BuildingCard[]
-  supply: number
+  household: number
   phase: GamePhase
   pendingAction: PendingAction | null
   log: string[]
