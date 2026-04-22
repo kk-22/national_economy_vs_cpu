@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useGame } from './composables/useGame'
+import type { GameEffect, Worker } from './game/types'
 
 const {
-  game, humanPlayer, currentPlayer, isHumanTurn, currentWage,
+  game, humanPlayer, isHumanTurn, currentWage,
   availablePublicWorkplaces, availableOwnedBuildings,
   pendingAction, paymentSelected, buildableCards, scores, getBuildingDef,
   startGame, startDebugGame, clickPublicWorkplace, clickOwnedBuilding,
@@ -13,22 +14,37 @@ const {
   clickRevealedCard,
 } = useGame()
 
+const showSetup = ref(false)
 const setupCpu = ref(1)
 
-function begin() {
-  startGame({ humanName: 'プレイヤー', cpuCount: setupCpu.value })
+const tooltipState = ref<{ text: string; x: number; y: number } | null>(null)
+function onTipEnter(e: MouseEvent, text: string) {
+  if (!text) return
+  tooltipState.value = { text, x: e.clientX, y: e.clientY }
 }
+function onTipLeave() {
+  tooltipState.value = null
+}
+
+onMounted(() => {
+  startGame({ humanName: 'プレイヤー', cpuCount: 1 })
+})
+
+function openSetup() { showSetup.value = true }
+function beginGame() {
+  startGame({ humanName: 'プレイヤー', cpuCount: setupCpu.value })
+  showSetup.value = false
+}
+function beginDebugGame() {
+  startDebugGame()
+  showSetup.value = false
+}
+
+const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
 
 function cardLabel(card: { kind: string; name?: string }) {
   return card.kind === 'building' ? card.name! : '消費財'
 }
-
-function defStr(name: string) {
-  const d = getBuildingDef(name)
-  if (!d) return ''
-  return `コスト${d.cost} / 資産$${d.assetValue}`
-}
-
 function workerNames(workerIds: string[]): string[] {
   if (!game.value) return []
   return workerIds.map(wid => {
@@ -36,14 +52,15 @@ function workerNames(workerIds: string[]): string[] {
     return p?.name ?? '?'
   })
 }
-
 function buildingWorkerName(workerHereId: string | null): string | null {
   if (!workerHereId || !game.value) return null
   const p = game.value.players.find(pl => pl.workers.some(w => w.id === workerHereId))
   return p?.name ?? null
 }
-
-import type { GameEffect } from './game/types'
+function workerStatus(workers: Worker[]): string {
+  const available = workers.filter(w => !w.isTraining && !w.placedAt).length
+  return `${available}/${workers.length}`
+}
 
 function effectDesc(effect: GameEffect): string {
   switch (effect.kind) {
@@ -68,7 +85,7 @@ function effectDesc(effect: GameEffect): string {
     case 'p-worker-limit':     return `雇用できる労働者の上限 +${effect.n}（恒久効果）`
     case 'p-forgive-wages':    return `ゲーム終了時、未払い賃金を最大${effect.max}枚まで免除`
     case 'p-per-building':     return `ゲーム終了時、所有建物1棟につき +${effect.pts}点`
-    case 'p-per-consumption':  return `ゲーム終了時、手札の消費財1枚につき +${effect.pts}点（上限枚数に減らした後で計算）`
+    case 'p-per-consumption':  return `ゲーム終了時、手札の消費財1枚につき +${effect.pts}点`
     case 'p-per-worker':       return `ゲーム終了時、労働者1人につき +${effect.pts}点`
     case 'p-per-no-sell':      return `ゲーム終了時、売却不可の建物1棟につき +${effect.pts}点`
     case 'p-per-factory':      return `ゲーム終了時、工場系建物1棟につき +${effect.pts}点`
@@ -76,7 +93,6 @@ function effectDesc(effect: GameEffect): string {
     default:                   return ''
   }
 }
-
 function cardTooltip(name: string): string {
   const d = getBuildingDef(name)
   if (!d) return ''
@@ -85,319 +101,632 @@ function cardTooltip(name: string): string {
 </script>
 
 <template>
-  <!-- Setup screen -->
-  <div v-if="!game" class="setup">
-    <h1>ナショナルエコノミー</h1>
-    <label>CPU数:
-      <select v-model.number="setupCpu">
-        <option :value="1">1</option>
-        <option :value="2">2</option>
-        <option :value="3">3</option>
-      </select>
-    </label><br/>
-    <button @click="begin">ゲーム開始</button>
-    <button class="debug-btn" @click="startDebugGame">デバッグスタート</button>
-  </div>
-
-  <!-- Game over screen -->
-  <div v-else-if="game.phase === 'game-over'" class="gameover">
-    <h1>ゲーム終了</h1>
-    <table>
-      <thead>
-        <tr><th>プレイヤー</th><th>建物</th><th>残金</th><th>ボーナス</th><th>ペナルティ</th><th>合計</th></tr>
-      </thead>
-      <tbody>
-        <tr v-for="sc in scores" :key="sc.playerId">
-          <td>{{ game.players[sc.playerId].name }}</td>
-          <td>${{ sc.buildingValue }}</td>
-          <td>${{ sc.money }}</td>
-          <td>+{{ sc.bonuses }}</td>
-          <td>-{{ sc.unpaidPenalty }}</td>
-          <td><strong>${{ sc.total }}</strong></td>
-        </tr>
-      </tbody>
-    </table>
-    <p>🏆 {{ game.players[scores!.reduce((a, b) => a.total > b.total ? a : b).playerId].name }} の勝利！</p>
-    <button @click="startGame({ humanName: humanPlayer!.name, cpuCount: game!.players.filter(p => p.isCpu).length })">
-      もう一度
-    </button>
-  </div>
-
-  <!-- Game screen -->
-  <div v-else class="game">
-    <!-- Header -->
-    <div class="header">
-      <span>ラウンド {{ game.round }}/9</span>
-      <span>賃金 ${{ currentWage }}</span>
-      <span>家計 ${{ game.household }}</span>
-      <span :class="{ myturn: isHumanTurn }">手番: {{ currentPlayer?.name }}</span>
-    </div>
-
-    <!-- Pending action panel -->
-    <div v-if="pendingAction" class="pending-panel">
-      <template v-if="pendingAction.kind === 'choose-build-target' || pendingAction.kind === 'choose-farm-build' || pendingAction.kind === 'choose-double-first'">
-        <h3>
-          {{ pendingAction.kind === 'choose-farm-build' ? '建設する農場を選んでください（無料）'
-           : pendingAction.kind === 'choose-double-first' ? '1棟目を選んでください（同じコストの建物を2棟建設）'
-           : '建設する建物を選んでください' }}
-        </h3>
-        <div class="card-row">
-          <button
-            v-for="card in buildableCards"
-            :key="card.id"
-            class="card selectable"
-            @click="clickBuildTarget(card.id)"
-          >
-            {{ card.name }}<br/><small>{{ defStr(card.name) }}</small>
-          </button>
-        </div>
-        <p v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</p>
-        <button class="back-btn" @click="clickCancelBuildChoice">✕ キャンセル</button>
-      </template>
-
-      <template v-else-if="pendingAction.kind === 'choose-double-second'">
-        <h3>2棟目を選んでください（コスト{{ pendingAction.firstCost }}の別の建物）</h3>
-        <div class="card-row">
-          <button
-            v-for="card in humanPlayer!.hand.filter(c => c.kind === 'building' && getBuildingDef(c.name!)?.cost === (pendingAction as any).firstCost && c.id !== (pendingAction as any).firstId)"
-            :key="card.id"
-            class="card selectable"
-            @click="clickBuildTarget(card.id)"
-          >
-            {{ card.kind === 'building' ? card.name : '' }}<br/><small>{{ card.kind === 'building' ? defStr(card.name!) : '' }}</small>
-          </button>
-        </div>
-        <button class="back-btn" @click="clickCancelDoubleSecond">← 戻る</button>
-      </template>
-
-      <template v-else-if="pendingAction.kind === 'choose-build-payment' || pendingAction.kind === 'choose-double-payment'">
-        <h3>支払い用カードを{{ (pendingAction as any).cost }}枚選んでください ({{ paymentSelected.length }}/{{ (pendingAction as any).cost }})</h3>
-        <div class="card-row">
-          <button
-            v-for="card in humanPlayer!.hand.filter(c => c.id !== (pendingAction as any).targetId && c.id !== (pendingAction as any).firstId && c.id !== (pendingAction as any).secondId)"
-            :key="card.id"
-            :class="['card', 'selectable', { selected: paymentSelected.includes(card.id) }]"
-            @click="clickPaymentCard(card.id)"
-          >
-            {{ cardLabel(card) }}
-          </button>
-        </div>
-        <button class="back-btn" @click="pendingAction.kind === 'choose-build-payment' ? clickCancelBuildPayment() : clickCancelDoublePayment()">← 戻る</button>
-      </template>
-
-      <template v-else-if="pendingAction.kind === 'choose-discard'">
-        <h3>カードを{{ pendingAction.count }}枚捨ててください ({{ pendingAction.selected.length }}/{{ pendingAction.count }})</h3>
-        <div class="card-row">
-          <button
-            v-for="card in humanPlayer!.hand"
-            :key="card.id"
-            :class="['card', 'selectable', { selected: pendingAction.selected.includes(card.id) }]"
-            @click="clickDiscardCard(card.id)"
-          >
-            {{ cardLabel(card) }}
-          </button>
-        </div>
-        <button
-          v-if="pendingAction.selected.length === pendingAction.count"
-          class="confirm-btn"
-          @click="confirmDiscardAction"
-        >確定</button>
-        <button class="back-btn" @click="clickCancelDiscardChoice">✕ キャンセル</button>
-      </template>
-
-      <template v-else-if="pendingAction.kind === 'choose-from-revealed'">
-        <h3>1枚選んでください（残りは捨て札）</h3>
-        <div class="card-row">
-          <button
-            v-for="card in pendingAction.revealed"
-            :key="card.id"
-            class="card selectable"
-            @click="clickRevealedCard(card.id)"
-          >
-            {{ cardLabel(card) }}
-          </button>
-        </div>
-      </template>
-    </div>
-
-    <div class="main">
-      <!-- Public workplaces -->
-      <section class="section workplaces">
-        <h2>公共職場</h2>
-        <div class="card-row">
-          <div
-            v-for="wp in game.publicWorkplaces"
-            :key="wp.id"
-            :class="['workplace', { available: !pendingAction && isHumanTurn && availablePublicWorkplaces.some(w => w.id === wp.id) }]"
-            :data-tooltip="effectDesc(wp.effect)"
-            @click="!pendingAction && isHumanTurn && availablePublicWorkplaces.some(w => w.id === wp.id) && clickPublicWorkplace(wp.id)"
-          >
-            <div class="wp-name">{{ wp.name }}</div>
-            <div class="wp-labels">
-              <span
-                v-for="(name, i) in workerNames(wp.workerIds)"
-                :key="i"
-                :class="['wp-label', { faded: wp.allowMultiple }]"
-              >{{ name }}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Human player -->
-      <section class="section player-area">
-        <h2>{{ humanPlayer?.name }} — ${{ humanPlayer?.money }} | 未払い {{ humanPlayer?.unpaidWages }}枚</h2>
-
-        <div class="subsection">
-          <h3>手札 ({{ humanPlayer?.hand.length }}枚)</h3>
-          <div class="card-row">
-            <div v-for="card in humanPlayer?.hand" :key="card.id" class="card"
-              :data-tooltip="card.kind === 'building' ? cardTooltip(card.name!) : undefined">
-              <div>{{ cardLabel(card) }}</div>
-              <div v-if="card.kind === 'building'" class="card-meta">{{ defStr(card.name!) }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="subsection">
-          <h3>建設済み ({{ humanPlayer?.ownedBuildings.length }}棟)</h3>
-          <div class="card-row">
-            <div
-              v-for="b in humanPlayer?.ownedBuildings"
-              :key="b.id"
-              :class="['building', { available: !pendingAction && isHumanTurn && availableOwnedBuildings.some(x => x.id === b.id) }]"
-              :data-tooltip="cardTooltip(b.name)"
-              @click="!pendingAction && isHumanTurn && availableOwnedBuildings.some(x => x.id === b.id) && clickOwnedBuilding(b.id)"
-            >
-              <div>{{ b.name }}</div>
-              <div class="card-meta">資産 ${{ getBuildingDef(b.name)?.assetValue }}</div>
-              <span v-if="buildingWorkerName(b.workerHereId)" class="wp-label">{{ buildingWorkerName(b.workerHereId) }}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="subsection">
-          <h3>労働者</h3>
-          <div class="worker-row">
-            <span v-for="w in humanPlayer?.workers" :key="w.id"
-              :class="['worker', { training: w.isTraining, placed: !!w.placedAt }]"
-            >{{ w.isTraining ? '📚' : w.placedAt ? '🔨' : '🧍' }}</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- CPU players -->
-      <section class="section cpu-area">
-        <h2>CPU</h2>
-        <div v-for="p in game.players.filter(p => p.isCpu)" :key="p.id" class="cpu-player">
-          <div><strong>{{ p.name }}</strong></div>
-          <div>${{ p.money }} | 未払い{{ p.unpaidWages }}枚</div>
-          <div>手札{{ p.hand.length }}枚 | 建物{{ p.ownedBuildings.length }}棟</div>
-          <div>
-            <span v-for="w in p.workers" :key="w.id">
-              {{ w.isTraining ? '📚' : w.placedAt ? '🔨' : '🧍' }}
-            </span>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <!-- Log -->
-    <section class="log">
-      <div class="log-inner">
-        <div v-for="(msg, i) in [...game.log].reverse().slice(0, 40)" :key="i" class="log-line">{{ msg }}</div>
+  <!-- Setup modal -->
+  <div v-if="showSetup" class="modal-overlay">
+    <div class="modal">
+      <h2>ゲーム設定</h2>
+      <label>CPU数
+        <select v-model.number="setupCpu">
+          <option :value="1">1</option>
+          <option :value="2">2</option>
+          <option :value="3">3</option>
+        </select>
+      </label>
+      <div class="modal-actions">
+        <button class="btn-primary" @click="beginGame">ゲーム開始</button>
+        <button class="btn-debug" @click="beginDebugGame">デバッグスタート</button>
+        <button class="btn-secondary" @click="showSetup = false">キャンセル</button>
       </div>
-    </section>
+    </div>
   </div>
+
+  <!-- Game over -->
+  <div v-else-if="game?.phase === 'game-over'" class="gameover">
+    <div class="gameover-card">
+      <h1>ゲーム終了</h1>
+      <table>
+        <thead><tr><th>プレイヤー</th><th>建物</th><th>残金</th><th>ボーナス</th><th>ペナルティ</th><th>合計</th></tr></thead>
+        <tbody>
+          <tr v-for="sc in scores" :key="sc.playerId"
+            :class="{ winner: sc.playerId === scores!.reduce((a,b) => a.total > b.total ? a : b).playerId }">
+            <td>{{ game!.players[sc.playerId].name }}</td>
+            <td>${{ sc.buildingValue }}</td>
+            <td>${{ sc.money }}</td>
+            <td>+{{ sc.bonuses }}</td>
+            <td>-{{ sc.unpaidPenalty }}</td>
+            <td><strong>${{ sc.total }}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="winner-msg">🏆 {{ game!.players[scores!.reduce((a,b) => a.total > b.total ? a : b).playerId].name }} の勝利！</p>
+      <div class="gameover-actions">
+        <button class="btn-primary" @click="startGame({ humanName: humanPlayer!.name, cpuCount: game!.players.filter(p => p.isCpu).length })">もう一度</button>
+        <button class="btn-secondary" @click="openSetup">設定を変更</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main game screen -->
+  <div v-else-if="game" class="game">
+
+    <!-- Body: left content + right log -->
+    <div class="game-body">
+
+      <!-- Left: sections + fixed-bottom player -->
+      <div class="game-main">
+
+        <!-- CPU section -->
+        <section class="section cpu-section">
+          <div class="cpu-grid" :style="{ gridTemplateColumns: `repeat(${cpuPlayers.length}, 1fr)` }">
+            <div v-for="cpu in cpuPlayers" :key="cpu.id" class="cpu-col">
+              <div class="cpu-header">
+                <span class="cpu-name">{{ cpu.name }}</span>
+                <span class="cpu-money">${{ cpu.money }}</span>
+                <span v-if="cpu.unpaidWages > 0" class="unpaid-badge">未払い{{ cpu.unpaidWages }}</span>
+                <span class="worker-badge">{{ workerStatus(cpu.workers) }}</span>
+                <span class="hand-count">手札{{ cpu.hand.length }}</span>
+              </div>
+              <div class="cpu-cards-scroll">
+                <div class="card-wrap">
+                  <div v-for="b in cpu.ownedBuildings" :key="b.id"
+                    class="bcard"
+                    @mouseenter="onTipEnter($event, cardTooltip(b.name))"
+                    @mouseleave="onTipLeave">
+                    <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
+                    <span class="bcard-name">{{ b.name }}</span>
+                    <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
+                    <span v-if="buildingWorkerName(b.workerHereId)" class="bcard-worker-dot"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Public workplaces section -->
+        <section class="section workplaces-section">
+          <div class="section-label">公共施設</div>
+          <div class="wp-cards-scroll">
+            <div class="card-wrap">
+              <div
+                v-for="wp in game.publicWorkplaces" :key="wp.id"
+                :class="['wpcard', { available: !pendingAction && isHumanTurn && availablePublicWorkplaces.some(w => w.id === wp.id) }]"
+                @mouseenter="onTipEnter($event, effectDesc(wp.effect))"
+                @mouseleave="onTipLeave"
+                @click="!pendingAction && isHumanTurn && availablePublicWorkplaces.some(w => w.id === wp.id) && clickPublicWorkplace(wp.id)"
+              >
+                <div class="wpcard-name">{{ wp.name }}</div>
+                <div class="wpcard-workers">
+                  <span v-for="(name, i) in workerNames(wp.workerIds)" :key="i"
+                    :class="['wp-wlabel', { faded: wp.allowMultiple }]">{{ name }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Player area: fixed at bottom -->
+        <div class="player-area">
+
+          <!-- Player header -->
+          <div class="player-header">
+            <span class="player-name">{{ humanPlayer?.name }}</span>
+            <span class="player-money">${{ humanPlayer?.money }}</span>
+            <span v-if="humanPlayer?.unpaidWages" class="unpaid-badge">未払い{{ humanPlayer.unpaidWages }}</span>
+            <span class="worker-badge">{{ humanPlayer ? workerStatus(humanPlayer.workers) : '' }}</span>
+            <span class="hand-count">手札{{ humanPlayer?.hand.length }}</span>
+          </div>
+
+          <!-- Pending action -->
+          <div v-if="pendingAction" class="pending-area">
+            <template v-if="pendingAction.kind === 'choose-build-target' || pendingAction.kind === 'choose-farm-build' || pendingAction.kind === 'choose-double-first'">
+              <span class="pending-title">
+                {{ pendingAction.kind === 'choose-farm-build' ? '農場を選択（無料）'
+                 : pendingAction.kind === 'choose-double-first' ? '1棟目を選択（同コスト2棟）'
+                 : '建設する建物を選択' }}
+              </span>
+              <div class="card-wrap">
+                <button v-for="card in buildableCards" :key="card.id"
+                  class="bcard selectable"
+                  @mouseenter="onTipEnter($event, cardTooltip(card.name))"
+                  @mouseleave="onTipLeave"
+                  @click="clickBuildTarget(card.id)">
+                  <span class="bcard-cost">{{ getBuildingDef(card.name)?.cost }}</span>
+                  <span class="bcard-name">{{ card.name }}</span>
+                  <span class="bcard-asset">{{ getBuildingDef(card.name)?.assetValue }}</span>
+                </button>
+                <span v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</span>
+              </div>
+              <button class="btn-cancel" @click="clickCancelBuildChoice">キャンセル</button>
+            </template>
+
+            <template v-else-if="pendingAction.kind === 'choose-double-second'">
+              <span class="pending-title">2棟目を選択（コスト{{ pendingAction.firstCost }}）</span>
+              <div class="card-wrap">
+                <button
+                  v-for="card in humanPlayer!.hand.filter(c => c.kind === 'building' && getBuildingDef(c.name!)?.cost === (pendingAction as any).firstCost && c.id !== (pendingAction as any).firstId)"
+                  :key="card.id" class="bcard selectable"
+                  @mouseenter="card.kind === 'building' && onTipEnter($event, cardTooltip(card.name!))"
+                  @mouseleave="onTipLeave"
+                  @click="clickBuildTarget(card.id)">
+                  <span class="bcard-cost">{{ getBuildingDef((card as any).name)?.cost }}</span>
+                  <span class="bcard-name">{{ (card as any).name }}</span>
+                  <span class="bcard-asset">{{ getBuildingDef((card as any).name)?.assetValue }}</span>
+                </button>
+              </div>
+              <button class="btn-cancel" @click="clickCancelDoubleSecond">戻る</button>
+            </template>
+
+            <template v-else-if="pendingAction.kind === 'choose-build-payment' || pendingAction.kind === 'choose-double-payment'">
+              <span class="pending-title">支払い {{ (pendingAction as any).cost }}枚選択 ({{ paymentSelected.length }}/{{ (pendingAction as any).cost }})</span>
+              <div class="card-wrap">
+                <button
+                  v-for="card in humanPlayer!.hand.filter(c => c.id !== (pendingAction as any).targetId && c.id !== (pendingAction as any).firstId && c.id !== (pendingAction as any).secondId)"
+                  :key="card.id"
+                  :class="['hcard', 'selectable', { selected: paymentSelected.includes(card.id) }]"
+                  @click="clickPaymentCard(card.id)">
+                  <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
+                  <span class="bcard-name">{{ cardLabel(card) }}</span>
+                  <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
+                </button>
+              </div>
+              <button class="btn-cancel" @click="pendingAction.kind === 'choose-build-payment' ? clickCancelBuildPayment() : clickCancelDoublePayment()">戻る</button>
+            </template>
+
+            <template v-else-if="pendingAction.kind === 'choose-discard'">
+              <span class="pending-title">捨て札を選択 ({{ pendingAction.selected.length }}/{{ pendingAction.count }})</span>
+              <div class="card-wrap">
+                <button v-for="card in humanPlayer!.hand" :key="card.id"
+                  :class="['hcard', 'selectable', { selected: pendingAction.selected.includes(card.id) }]"
+                  @click="clickDiscardCard(card.id)">
+                  <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
+                  <span class="bcard-name">{{ cardLabel(card) }}</span>
+                  <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
+                </button>
+              </div>
+              <button v-if="pendingAction.selected.length === pendingAction.count" class="btn-confirm" @click="confirmDiscardAction">確定</button>
+              <button class="btn-cancel" @click="clickCancelDiscardChoice">キャンセル</button>
+            </template>
+
+            <template v-else-if="pendingAction.kind === 'choose-from-revealed'">
+              <span class="pending-title">1枚選択（残りは捨て札）</span>
+              <div class="card-wrap">
+                <button v-for="card in pendingAction.revealed" :key="card.id"
+                  class="bcard selectable"
+                  @mouseenter="card.kind === 'building' && onTipEnter($event, cardTooltip(card.name!))"
+                  @mouseleave="onTipLeave"
+                  @click="clickRevealedCard(card.id)">
+                  <span class="bcard-name">{{ cardLabel(card) }}</span>
+                </button>
+              </div>
+            </template>
+          </div>
+
+          <!-- Normal view (no pending) -->
+          <div v-else class="player-content">
+            <div v-if="humanPlayer?.ownedBuildings.length" class="player-subsection">
+              <div class="subsection-label">建設済み {{ humanPlayer.ownedBuildings.length }}棟</div>
+              <div class="bld-scroll">
+                <div class="card-wrap">
+                  <div v-for="b in humanPlayer.ownedBuildings" :key="b.id"
+                    :class="['bcard', { available: !pendingAction && isHumanTurn && availableOwnedBuildings.some(x => x.id === b.id) }]"
+                    @mouseenter="onTipEnter($event, cardTooltip(b.name))"
+                    @mouseleave="onTipLeave"
+                    @click="!pendingAction && isHumanTurn && availableOwnedBuildings.some(x => x.id === b.id) && clickOwnedBuilding(b.id)">
+                    <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
+                    <span class="bcard-name">{{ b.name }}</span>
+                    <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
+                    <span v-if="buildingWorkerName(b.workerHereId)" class="bcard-worker-dot"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="player-subsection">
+              <div class="subsection-label">手札</div>
+              <div class="hand-scroll">
+                <div class="card-wrap">
+                  <div v-for="card in humanPlayer?.hand" :key="card.id"
+                    class="hcard"
+                    @mouseenter="card.kind === 'building' && onTipEnter($event, cardTooltip(card.name!))"
+                    @mouseleave="onTipLeave">
+                    <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
+                    <span class="bcard-name">{{ cardLabel(card) }}</span>
+                    <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /player-area -->
+      </div><!-- /game-main -->
+
+      <!-- Right: log panel -->
+      <div class="log-panel">
+        <div class="log-info">
+          <span class="hbadge">ラウンド {{ game.round }}/9</span>
+          <span class="hbadge">賃金 ${{ currentWage }}</span>
+          <span class="hbadge">家計 ${{ game.household }}</span>
+          <button class="btn-restart" @click="openSetup">作り直す</button>
+        </div>
+        <div class="log-label">ログ</div>
+        <div v-for="(msg, i) in [...game.log].reverse().slice(0, 80)" :key="i" class="log-line">{{ msg }}</div>
+      </div>
+
+    </div><!-- /game-body -->
+  </div>
+
+  <Teleport to="body">
+    <div v-if="tooltipState" class="global-tooltip"
+      :style="{ left: tooltipState.x + 'px', top: (tooltipState.y - 14) + 'px' }">
+      {{ tooltipState.text }}
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
-* { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-.setup { max-width: 360px; margin: 80px auto; text-align: center; }
-.setup h1 { margin-bottom: 24px; }
-.setup label { display: block; margin: 12px 0; text-align: left; }
-.setup input, .setup select { margin-left: 8px; background: #2a2a3e; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 4px 8px; }
-.setup button { margin-top: 20px; padding: 10px 32px; font-size: 16px; background: #4fc3f7; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: #111; }
-.setup .debug-btn { display: block; margin: 10px auto 0; background: #374151; color: #9ca3af; font-size: 13px; padding: 6px 20px; }
-
-.gameover { max-width: 680px; margin: 60px auto; text-align: center; }
-.gameover table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-.gameover th, .gameover td { padding: 8px 12px; border: 1px solid #444; }
-.gameover th { background: #1a1a2e; }
-
-.game { display: flex; flex-direction: column; height: 100vh; background: #0d0d1a; color: #ddd; font-size: 13px; }
-
-.header { display: flex; gap: 20px; padding: 8px 16px; background: #1a1a2e; border-bottom: 1px solid #333; font-weight: bold; align-items: center; }
-.myturn { color: #4fc3f7; }
-
-.pending-panel { background: #1e1a00; border-bottom: 2px solid #f59e0b; padding: 10px 16px; }
-.pending-panel h3 { margin: 0 0 8px; color: #f59e0b; font-size: 13px; }
-
-.main { display: flex; gap: 10px; padding: 10px; flex: 1; overflow: hidden; }
-
-.section { background: #111827; border-radius: 8px; padding: 10px; }
-.workplaces { flex: 0 0 auto; min-width: 140px; }
-.player-area { flex: 1; overflow-y: auto; }
-.cpu-area { flex: 0 0 180px; overflow-y: auto; }
-
-.log { height: 120px; background: #0a0a14; border-top: 1px solid #222; padding: 6px 12px; overflow-y: auto; }
-.log-line { font-size: 11px; color: #888; padding: 1px 0; }
-
-h2 { font-size: 13px; margin: 0 0 8px; color: #9ca3af; }
-h3 { font-size: 12px; margin: 8px 0 4px; color: #6b7280; }
-.subsection { margin-bottom: 10px; }
-
-.card-row { display: flex; flex-wrap: wrap; gap: 5px; }
-
-.card, .workplace, .building {
-  background: #1f2937; border: 1px solid #374151; border-radius: 5px;
-  padding: 6px 8px; min-width: 72px; max-width: 120px;
+/* ===== Overall layout ===== */
+.game {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  color: #1e293b;
+  overflow: hidden;
 }
-.card-meta { font-size: 10px; color: #6b7280; }
 
-.workplace { min-width: 80px; text-align: center; cursor: default; }
-.wp-name { font-weight: 600; font-size: 12px; }
-.wp-labels { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 3px; justify-content: center; }
-.wp-label { font-size: 10px; background: #374151; color: #d1d5db; border-radius: 3px; padding: 1px 5px; display: inline-block; }
-.wp-label.faded { opacity: 0.45; }
+/* ===== Info badges ===== */
+.hbadge {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+}
+.btn-restart {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+  padding: 3px 8px; font-size: 11px; color: #64748b; cursor: pointer; white-space: nowrap; margin-top: 4px;
+}
+.btn-restart:hover { background: #f8fafc; border-color: #94a3b8; }
 
-.available { border-color: #3b82f6 !important; background: #172554 !important; cursor: pointer !important; }
-.available:hover { background: #1e3a8a !important; }
+/* ===== Body ===== */
+.game-body {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
 
-.selectable { cursor: pointer; border: 1px solid #374151; }
-.selectable:hover { border-color: #f59e0b; }
-.selected { border-color: #f59e0b !important; background: #292007 !important; }
+/* ===== Left side ===== */
+.game-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 10px 0;
+  gap: 8px;
+}
 
-.confirm-btn { margin-top: 8px; padding: 5px 14px; background: #3b82f6; border: none; border-radius: 4px; cursor: pointer; color: #fff; font-weight: bold; font-size: 13px; }
-.back-btn { margin-top: 8px; padding: 4px 12px; background: transparent; border: 1px solid #555; border-radius: 4px; cursor: pointer; color: #aaa; font-size: 12px; }
-.back-btn:hover { border-color: #aaa; color: #eee; }
-.no-options { font-size: 11px; color: #ef4444; margin: 4px 0 0; }
+/* ===== Sections ===== */
+.section {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.section-label, .subsection-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  margin-bottom: 7px;
+}
 
-[data-tooltip] { position: relative; }
-[data-tooltip]:hover::after {
-  content: attr(data-tooltip);
+.cpu-section { background: #f8f9ff; border-color: #c7d2fe; flex-shrink: 0; }
+.workplaces-section { background: #fffbeb; border-color: #fde68a; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.cpu-grid { display: grid; gap: 8px; }
+.cpu-col {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cpu-cards-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 200px;
+}
+.cpu-header { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 6px; }
+.cpu-name { font-weight: 700; color: #6366f1; font-size: 13px; }
+.cpu-money { font-weight: 700; color: #059669; }
+.worker-badge {
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;
+  padding: 1px 7px; font-size: 11px; font-weight: 700; color: #1d4ed8;
+}
+.hand-count { font-size: 11px; color: #94a3b8; }
+.unpaid-badge {
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px;
+  padding: 1px 7px; font-size: 11px; font-weight: 700; color: #dc2626;
+}
+
+/* ===== Card wrap ===== */
+.card-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.wp-cards-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.bld-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 175px;
+}
+.hand-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 135px;
+}
+
+/* ===== Building card (bcard) ===== */
+.bcard {
+  position: relative;
+  width: 76px;
+  min-height: 80px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  padding: 4px 5px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: default;
+  user-select: none;
+}
+.bcard-cost {
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: #111827;
-  color: #e5e7eb;
+  top: 4px;
+  left: 5px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #3b82f6;
+  line-height: 1;
+}
+.bcard-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
+  line-height: 1.2;
+  margin-top: 16px;
+  word-break: break-all;
+}
+.bcard-asset {
+  font-size: 17px;
+  font-weight: 800;
+  color: #059669;
+  line-height: 1;
+}
+.bcard-worker-dot {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  background: #f59e0b;
+  border-radius: 50%;
+}
+
+/* hand card (hcard) — same shape as bcard */
+.hcard {
+  position: relative;
+  width: 76px;
+  min-height: 80px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  padding: 4px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: default;
+  user-select: none;
+}
+
+/* ===== Workplace card ===== */
+.wpcard {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  padding: 6px 10px;
+  min-width: 76px;
+  text-align: center;
+  cursor: default;
+}
+.wpcard-name { font-weight: 700; font-size: 12px; color: #1e293b; }
+.wpcard-workers { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; justify-content: center; }
+.wp-wlabel {
+  font-size: 10px; background: #e0e7ff; color: #4338ca;
+  border-radius: 10px; padding: 1px 6px;
+}
+.wp-wlabel.faded { opacity: 0.4; }
+
+/* ===== Available/selectable states ===== */
+.available {
+  border-color: #3b82f6 !important;
+  background: #eff6ff !important;
+  cursor: pointer !important;
+}
+.available:hover { background: #dbeafe !important; }
+.selectable { cursor: pointer !important; }
+.selectable:hover { border-color: #f59e0b !important; background: #fffbeb !important; }
+.selected { border-color: #f59e0b !important; background: #fef3c7 !important; }
+
+/* ===== Player area (fixed at bottom of game-main) ===== */
+.player-area {
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #f0fdf4;
+  border-top: 2px solid #86efac;
+  padding: 8px 12px;
+}
+.player-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.player-name { font-weight: 700; color: #059669; font-size: 15px; }
+.player-money { font-weight: 700; color: #0369a1; font-size: 15px; }
+.player-content { display: flex; flex-direction: column; gap: 6px; }
+.player-subsection {}
+
+/* ===== Pending area ===== */
+.pending-area {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+}
+.pending-title {
+  font-weight: 700; color: #92400e; font-size: 12px; white-space: nowrap;
+}
+.no-options { font-size: 11px; color: #ef4444; }
+.btn-confirm {
+  background: #3b82f6; color: #fff; border: none; border-radius: 6px;
+  padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 12px;
+}
+.btn-cancel {
+  background: #fff; color: #64748b; border: 1px solid #e2e8f0; border-radius: 6px;
+  padding: 4px 10px; cursor: pointer; font-size: 12px;
+}
+.btn-cancel:hover { background: #f8fafc; }
+
+/* ===== Tooltip (rendered via Teleport in <body>, styled globally) ===== */
+
+/* ===== Log panel ===== */
+.log-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 6px;
+}
+.log-panel {
+  width: 180px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #fff;
+  border-left: 1px solid #e2e8f0;
+  padding: 10px 8px;
+}
+.log-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+.log-line {
+  font-size: 11px;
+  color: #64748b;
+  padding: 3px 0;
+  border-bottom: 1px solid #f1f5f9;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+/* ===== Setup modal ===== */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+}
+.modal {
+  background: #fff; border-radius: 12px; padding: 28px 32px;
+  min-width: 260px; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.modal h2 { font-size: 18px; color: #1e293b; }
+.modal label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #475569; font-weight: 600; }
+.modal select { padding: 7px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; background: #f8fafc; }
+.modal-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.btn-primary {
+  background: #3b82f6; color: #fff; border: none; border-radius: 7px;
+  padding: 9px 20px; font-weight: 700; cursor: pointer; font-size: 13px;
+}
+.btn-primary:hover { background: #2563eb; }
+.btn-debug {
+  background: #374151; color: #9ca3af; border: none; border-radius: 7px;
+  padding: 7px 20px; cursor: pointer; font-size: 12px;
+}
+.btn-debug:hover { background: #1f2937; color: #d1d5db; }
+.btn-secondary {
+  background: #fff; color: #64748b; border: 1px solid #e2e8f0; border-radius: 7px;
+  padding: 7px 14px; cursor: pointer; font-size: 13px; text-align: center;
+}
+.btn-secondary:hover { background: #f8fafc; }
+
+/* ===== Game over ===== */
+.gameover {
+  min-height: 100vh; background: #f1f5f9;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.gameover-card {
+  background: #fff; border-radius: 12px; padding: 32px;
+  max-width: 600px; width: 100%; box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+}
+.gameover-card h1 { font-size: 22px; margin-bottom: 16px; }
+.gameover-card table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+.gameover-card th, .gameover-card td { padding: 8px 12px; border: 1px solid #e2e8f0; text-align: center; font-size: 13px; }
+.gameover-card th { background: #f8fafc; color: #64748b; font-weight: 600; }
+.gameover-card tr.winner td { background: #eff6ff; font-weight: 700; }
+.winner-msg { font-size: 16px; font-weight: 700; color: #1d4ed8; margin-bottom: 16px; }
+.gameover-actions { display: flex; gap: 8px; }
+</style>
+
+<style>
+.global-tooltip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  background: #1e293b;
+  color: #f1f5f9;
   padding: 5px 9px;
-  border-radius: 5px;
+  border-radius: 6px;
   font-size: 11px;
   white-space: nowrap;
-  z-index: 300;
-  border: 1px solid #4b5563;
+  z-index: 9999;
   pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
-
-.worker-row { display: flex; gap: 4px; font-size: 18px; flex-wrap: wrap; }
-.worker.training { opacity: 0.45; }
-.worker.placed { opacity: 0.6; }
-
-.cpu-player { margin-bottom: 10px; padding: 8px; background: #1f2937; border-radius: 6px; line-height: 1.6; }
-.cpu-player strong { color: #c4b5fd; }
-
-button { background: #1f2937; border: 1px solid #374151; color: #ddd; border-radius: 4px; padding: 4px 8px; font-size: 12px; }
 </style>

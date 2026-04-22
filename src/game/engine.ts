@@ -1120,7 +1120,7 @@ export function createDebugGame(): GameState {
     household: 40,
     phase: 'placement',
     pendingAction: null,
-    log: ['【デバッグ】ラウンド8からスタート'],
+    log: ['【デバッグ】ラウンド8スタート'],
     _nextId: 0,
   }
 
@@ -1140,7 +1140,7 @@ export function createDebugGame(): GameState {
       id: i,
       name: playerNames[i],
       isCpu,
-      money: 0,
+      money: 20,
       hand: [],
       ownedBuildings: [],
       workers: [
@@ -1153,48 +1153,64 @@ export function createDebugGame(): GameState {
   }
   state = { ...state, players }
 
-  // Give each player 工場 + 農場 as owned buildings
+  // Give each player one of every building type
   for (const p of state.players) {
-    let b1: string, b2: string
-    ;[state, b1] = genId(state, 'b-')
-    ;[state, b2] = genId(state, 'b-')
-    state = updatePlayer(state, p.id, pl => ({
-      ...pl,
-      ownedBuildings: [
-        { id: b1, name: '工場', workerHereId: null },
-        { id: b2, name: '農場', workerHereId: null },
-      ],
-    }))
+    for (const def of Object.values(BUILDING_CARDS)) {
+      let bId: string
+      ;[state, bId] = genId(state, 'b-')
+      state = updatePlayer(state, p.id, pl => ({
+        ...pl,
+        ownedBuildings: [...pl.ownedBuildings, { id: bId, name: def.name, workerHereId: null }],
+      }))
+    }
   }
 
-  // Deal each player 10 random building cards + 5 consumption cards
+  // Deal each player 10 building cards + 3 consumption cards
   for (const p of state.players) {
     state = drawCards(state, p.id, 10)
-    state = drawConsumption(state, p.id, 5)
+    state = drawConsumption(state, p.id, 3)
   }
 
-  // Public workplaces: all isWorkplace + canSell buildings sorted by cost, 1 each
-  const wpDefs = Object.values(BUILDING_CARDS)
-    .filter(d => d.isWorkplace && d.canSell)
+  // Public workplaces: all unique workplaces from all round cards (rounds 1-9)
+  const seen = new Set<string>()
+  for (const rc of ROUND_CARDS.slice(0, 8)) {
+    for (const wp of rc.workplaces) {
+      if (!seen.has(wp.name)) {
+        seen.add(wp.name)
+        let wpId: string
+        ;[state, wpId] = genId(state, 'wp-dbg-')
+        state = {
+          ...state,
+          publicWorkplaces: [...state.publicWorkplaces, {
+            id: wpId,
+            name: wp.name,
+            effect: wp.effect,
+            allowMultiple: true,
+            workerIds: [],
+          }],
+        }
+      }
+    }
+  }
+
+  // Add all canSell buildings (売却可能) as public workplaces
+  const canSellDefs = Object.values(BUILDING_CARDS)
+    .filter(d => d.canSell)
     .sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name))
-  for (const def of wpDefs) {
+  for (const def of canSellDefs) {
     let wpId: string
-    ;[state, wpId] = genId(state, 'wp-dbg-')
+    ;[state, wpId] = genId(state, 'wp-dbg-bld-')
     state = {
       ...state,
       publicWorkplaces: [...state.publicWorkplaces, {
         id: wpId,
         name: def.name,
         effect: def.effect,
-        allowMultiple: false,
+        allowMultiple: true,
         workerIds: [],
       }],
     }
   }
 
-  // Add round 8 workplaces (専門学校)
-  state = flipRoundCard(state, 8, playerCount)
-
-  state = processCpuTurns(state)
   return state
 }

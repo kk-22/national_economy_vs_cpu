@@ -73,6 +73,10 @@ national_ecnomy_vs_cpu/
 - `docs/building-cards.md` に一覧あり（TODO項目は要確認）
 - ゲーム内では `src/game/constants.ts` にTypeScriptオブジェクトとして定義する
 
+## 作業ルール
+
+- **コミットはユーザーが明示的に指示した場合のみ行うこと。実装・動作確認まで行い、コミットは待つ。**
+
 ## デプロイ
 
 ```bash
