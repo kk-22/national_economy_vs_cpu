@@ -16,6 +16,7 @@ const {
 
 const showSetup = ref(false)
 const setupCpu = ref(1)
+const menuOpen = ref(false)
 
 const tooltipState = ref<{ text: string; x: number; y: number } | null>(null)
 function onTipEnter(e: MouseEvent, text: string) {
@@ -148,6 +149,16 @@ function cardTooltip(name: string): string {
 
   <!-- Main game screen -->
   <div v-else-if="game" class="game">
+
+    <!-- Mobile header (hidden on desktop) -->
+    <div class="mobile-header">
+      <div class="mobile-info">
+        <span class="hbadge">ラウンド {{ game.round }}/9</span>
+        <span class="hbadge">賃金 ${{ currentWage }}</span>
+        <span class="hbadge">家計 ${{ game.household }}</span>
+      </div>
+      <button class="menu-btn" @click="menuOpen = true">☰</button>
+    </div>
 
     <!-- Body: left content + right log -->
     <div class="game-body">
@@ -361,6 +372,25 @@ function cardTooltip(name: string): string {
       :style="{ left: tooltipState.x + 'px', top: (tooltipState.y - 14) + 'px' }">
       {{ tooltipState.text }}
     </div>
+
+    <!-- Mobile drawer -->
+    <template v-if="game">
+      <div class="drawer-overlay" :class="{ open: menuOpen }" @click="menuOpen = false"></div>
+      <div class="drawer-panel" :class="{ open: menuOpen }">
+        <div class="drawer-top">
+          <span class="drawer-title">メニュー</span>
+          <button class="drawer-close" @click="menuOpen = false">✕</button>
+        </div>
+        <div class="drawer-info">
+          <span class="hbadge">ラウンド {{ game.round }}/9</span>
+          <span class="hbadge">賃金 ${{ currentWage }}</span>
+          <span class="hbadge">家計 ${{ game.household }}</span>
+          <button class="btn-restart" @click="openSetup(); menuOpen = false">作り直す</button>
+        </div>
+        <div class="drawer-log-label">ログ</div>
+        <div v-for="(msg, i) in [...game.log].reverse().slice(0, 80)" :key="i" class="drawer-log-line">{{ msg }}</div>
+      </div>
+    </template>
   </Teleport>
 </template>
 
@@ -396,13 +426,44 @@ function cardTooltip(name: string): string {
 }
 .btn-restart:hover { background: #f8fafc; border-color: #94a3b8; }
 
+/* ===== Mobile header (hidden on desktop) ===== */
+.mobile-header {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  gap: 6px;
+}
+.mobile-info { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.menu-btn {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 9px;
+  cursor: pointer;
+  color: #475569;
+  flex-shrink: 0;
+}
+.menu-btn:hover { background: #f1f5f9; }
+
 /* ===== Body ===== */
 .game-body {
-  width: 100%;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: row;
   overflow: hidden;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 640px) {
+  .mobile-header { display: flex; }
+  .log-panel { display: none; }
 }
 
 /* ===== Left side ===== */
@@ -716,6 +777,91 @@ function cardTooltip(name: string): string {
 </style>
 
 <style>
+/* ===== Mobile drawer ===== */
+.drawer-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 900;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.drawer-overlay.open { opacity: 1; pointer-events: auto; }
+.drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100dvh;
+  width: 260px;
+  max-width: 85vw;
+  background: #fff;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+  z-index: 901;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  overflow-y: auto;
+  padding: 14px 14px 24px;
+  flex-direction: column;
+  gap: 0;
+  box-sizing: border-box;
+  /* display controlled by media query below */
+  display: none;
+}
+.drawer-panel { pointer-events: none; }
+.drawer-panel.open { transform: translateX(0); pointer-events: auto; }
+.drawer-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.drawer-title { font-size: 14px; font-weight: 700; color: #1e293b; }
+.drawer-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+}
+.drawer-close:hover { color: #475569; }
+.drawer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 8px;
+}
+.drawer-info .hbadge { font-size: 12px; padding: 4px 10px; }
+.drawer-info .btn-restart { font-size: 12px; padding: 5px 10px; margin-top: 2px; }
+.drawer-log-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+.drawer-log-line {
+  font-size: 11px;
+  color: #64748b;
+  padding: 3px 0;
+  border-bottom: 1px solid #f1f5f9;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+@media (max-width: 640px) {
+  .drawer-overlay,
+  .drawer-panel { display: flex; }
+  .drawer-panel { flex-direction: column; }
+}
+
+/* ===== Global tooltip ===== */
 .global-tooltip {
   position: fixed;
   transform: translate(-50%, -100%);

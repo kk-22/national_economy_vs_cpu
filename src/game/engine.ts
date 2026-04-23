@@ -1185,7 +1185,7 @@ export function createDebugGame(): GameState {
             id: wpId,
             name: wp.name,
             effect: wp.effect,
-            allowMultiple: true,
+            allowMultiple: wp.allowMultiple,
             workerIds: [],
           }],
         }
@@ -1206,7 +1206,7 @@ export function createDebugGame(): GameState {
         id: wpId,
         name: def.name,
         effect: def.effect,
-        allowMultiple: true,
+        allowMultiple: false,
         workerIds: [],
       }],
     }
