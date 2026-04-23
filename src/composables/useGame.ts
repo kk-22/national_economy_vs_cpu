@@ -37,8 +37,8 @@ export function useGame() {
     state.game = createGame(config)
   }
 
-  function startDebugGame() {
-    state.game = createDebugGame()
+  function startDebugGame(cpuCount: number = 3) {
+    state.game = createDebugGame(cpuCount)
   }
 
   const game = computed(() => state.game)

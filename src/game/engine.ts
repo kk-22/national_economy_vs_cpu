@@ -113,7 +113,7 @@ function availableWorkers(player: Player): Worker[] {
 // ---- Game initialization ----
 
 export function createGame(config: GameConfig): GameState {
-  const playerCount = 1 + config.cpuCount
+  const playerCount = config.cpuOnly ? config.cpuCount : 1 + config.cpuCount
 
   let state: GameState = {
     round: 1,
@@ -138,8 +138,8 @@ export function createGame(config: GameConfig): GameState {
   // Create players
   const players: Player[] = []
   for (let i = 0; i < playerCount; i++) {
-    const isCpu = i > 0
-    const name = isCpu ? `CPU ${i}` : config.humanName
+    const isCpu = config.cpuOnly ? true : i > 0
+    const name = isCpu ? `CPU ${config.cpuOnly ? i + 1 : i}` : config.humanName
 
     // Create 2 initial workers
     let w1Id: string, w2Id: string
@@ -1105,8 +1105,10 @@ export function calculateScores(state: GameState): ScoreResult[] {
 
 // ---- Debug game ----
 
-export function createDebugGame(): GameState {
-  const playerCount = 4
+export function createDebugGame(cpuCount: number = 3): GameState {
+  // デバッグは常にプレイヤー1人 + CPU（最大3人）
+  const cpuN = Math.min(Math.max(1, cpuCount), 3)
+  const playerCount = 1 + cpuN
   const playerNames = ['プレイヤー', 'CPU 1', 'CPU 2', 'CPU 3']
 
   let state: GameState = {

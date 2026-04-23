@@ -112,6 +112,7 @@ export interface GameState {
 export interface GameConfig {
   humanName: string
   cpuCount: number
+  cpuOnly?: boolean   // true = 全員CPU（プレイヤーなし）
 }
 
 export interface ScoreResult {

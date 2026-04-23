@@ -15,7 +15,7 @@ const {
 } = useGame()
 
 const showSetup = ref(false)
-const setupCpu = ref(1)
+const setupCpu = ref(3)   // 1〜3: 通常, 4: CPU4体（プレイヤーなし）
 const menuOpen = ref(false)
 
 const tooltipState = ref<{ text: string; x: number; y: number } | null>(null)
@@ -28,17 +28,31 @@ function onTipLeave() {
 }
 
 onMounted(() => {
-  startGame({ humanName: 'プレイヤー', cpuCount: 1 })
+  startGame({ humanName: 'プレイヤー', cpuCount: 3 })
 })
 
 function openSetup() { showSetup.value = true }
 function beginGame() {
-  startGame({ humanName: 'プレイヤー', cpuCount: setupCpu.value })
+  if (setupCpu.value === 4) {
+    startGame({ humanName: '', cpuCount: 4, cpuOnly: true })
+  } else {
+    startGame({ humanName: 'プレイヤー', cpuCount: setupCpu.value })
+  }
   showSetup.value = false
 }
 function beginDebugGame() {
-  startDebugGame()
+  // デバッグは常にプレイヤーあり（CPU最大3人）
+  startDebugGame(Math.min(setupCpu.value, 3))
   showSetup.value = false
+}
+function replayGame() {
+  const cpuCount = game.value!.players.filter(p => p.isCpu).length
+  const isAllCpu = !game.value!.players.some(p => !p.isCpu)
+  if (isAllCpu) {
+    startGame({ humanName: '', cpuCount, cpuOnly: true })
+  } else {
+    startGame({ humanName: humanPlayer.value?.name ?? 'プレイヤー', cpuCount })
+  }
 }
 
 const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
@@ -106,17 +120,29 @@ function cardTooltip(name: string): string {
   <div v-if="showSetup" class="modal-overlay">
     <div class="modal">
       <h2>ゲーム設定</h2>
-      <label>CPU数
-        <select v-model.number="setupCpu">
-          <option :value="1">1</option>
-          <option :value="2">2</option>
-          <option :value="3">3</option>
-        </select>
-      </label>
+      <div class="radio-group-label">CPU数</div>
+      <div class="radio-group">
+        <label class="radio-item">
+          <input type="radio" v-model.number="setupCpu" :value="1" />
+          <span>1人</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" v-model.number="setupCpu" :value="2" />
+          <span>2人</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" v-model.number="setupCpu" :value="3" />
+          <span>3人</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" v-model.number="setupCpu" :value="4" />
+          <span>4人（プレイヤーなし）</span>
+        </label>
+      </div>
       <div class="modal-actions">
         <button class="btn-primary" @click="beginGame">ゲーム開始</button>
         <button class="btn-debug" @click="beginDebugGame">デバッグスタート</button>
-        <button class="btn-secondary" @click="showSetup = false">キャンセル</button>
+        <button v-if="game" class="btn-secondary" @click="showSetup = false">キャンセル</button>
       </div>
     </div>
   </div>
@@ -141,7 +167,7 @@ function cardTooltip(name: string): string {
       </table>
       <p class="winner-msg">🏆 {{ game!.players[scores!.reduce((a,b) => a.total > b.total ? a : b).playerId].name }} の勝利！</p>
       <div class="gameover-actions">
-        <button class="btn-primary" @click="startGame({ humanName: humanPlayer!.name, cpuCount: game!.players.filter(p => p.isCpu).length })">もう一度</button>
+        <button class="btn-primary" @click="replayGame">もう一度</button>
         <button class="btn-secondary" @click="openSetup">設定を変更</button>
       </div>
     </div>
@@ -216,8 +242,8 @@ function cardTooltip(name: string): string {
           </div>
         </section>
 
-        <!-- Player area: fixed at bottom -->
-        <div class="player-area">
+        <!-- Player area: fixed at bottom (hidden in CPU-only mode) -->
+        <div v-if="humanPlayer" class="player-area">
 
           <!-- Player header -->
           <div class="player-header">
@@ -739,8 +765,17 @@ function cardTooltip(name: string): string {
   display: flex; flex-direction: column; gap: 14px;
 }
 .modal h2 { font-size: 18px; color: #1e293b; }
-.modal label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #475569; font-weight: 600; }
-.modal select { padding: 7px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; background: #f8fafc; }
+.radio-group-label { font-size: 13px; color: #475569; font-weight: 600; margin-bottom: 6px; }
+.radio-group { display: flex; flex-direction: column; gap: 6px; }
+.radio-item {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: #374151; cursor: pointer;
+  padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 7px;
+  background: #f8fafc; transition: background 0.1s;
+}
+.radio-item:hover { background: #eff6ff; border-color: #bfdbfe; }
+.radio-item input[type="radio"] { accent-color: #3b82f6; width: 15px; height: 15px; cursor: pointer; }
+.radio-item:has(input:checked) { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; font-weight: 600; }
 .modal-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
 .btn-primary {
   background: #3b82f6; color: #fff; border: none; border-radius: 7px;
