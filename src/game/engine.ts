@@ -110,6 +110,16 @@ function availableWorkers(player: Player): Worker[] {
   return player.workers.filter(w => !w.isTraining && w.placedAt === null)
 }
 
+// Player's worker cap: base 5 + 1 per 社宅 owned
+function getMaxWorkers(player: Player): number {
+  let max = MAX_WORKERS_PER_PLAYER
+  for (const b of player.ownedBuildings) {
+    const effect = BUILDING_CARDS[b.name]?.effect
+    if (effect?.kind === 'p-worker-limit') max += effect.n
+  }
+  return max
+}
+
 // ---- Game initialization ----
 
 export function createGame(config: GameConfig): GameState {
@@ -229,8 +239,8 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity):
     case 'gain-supply':     return household >= effect.n
     case 'discard-draw':    return player.hand.length >= effect.discard
     case 'discard-gain':    return player.hand.length >= effect.discard && household >= effect.gain
-    case 'add-worker':      return workerCount(player) < MAX_WORKERS_PER_PLAYER
-    case 'fill-workers':    return workerCount(player) < effect.target
+    case 'add-worker':      return workerCount(player) < getMaxWorkers(player)
+    case 'fill-workers':    return workerCount(player) < Math.min(effect.target, getMaxWorkers(player))
     case 'build':           return player.hand.some(c => {
       if (c.kind !== 'building') return false
       const def = BUILDING_CARDS[c.name]
@@ -407,7 +417,7 @@ function applyEffect(state: GameState, playerId: number, effect: GameEffect, isC
     }
 
     case 'add-worker': {
-      if (workerCount(player) >= MAX_WORKERS_PER_PLAYER) return state
+      if (workerCount(player) >= getMaxWorkers(player)) return state
       let wId: string
       let s: GameState
       ;[s, wId] = nextId(state)
@@ -418,11 +428,13 @@ function applyEffect(state: GameState, playerId: number, effect: GameEffect, isC
     }
 
     case 'fill-workers': {
+      const maxW = getMaxWorkers(player)
+      const fillTo = Math.min(effect.target, maxW)
       const current = workerCount(player)
-      if (current >= effect.target) return state
+      if (current >= fillTo) return state
       let s = state
-      for (let i = current; i < effect.target; i++) {
-        if (workerCount(getPlayer(s, playerId)) >= MAX_WORKERS_PER_PLAYER) break
+      for (let i = current; i < fillTo; i++) {
+        if (workerCount(getPlayer(s, playerId)) >= maxW) break
         let wId: string
         ;[s, wId] = nextId(s)
         s = updatePlayer(s, playerId, p => ({
@@ -430,7 +442,7 @@ function applyEffect(state: GameState, playerId: number, effect: GameEffect, isC
           workers: [...p.workers, { id: wId, playerId, isTraining: true, placedAt: null }],
         }))
       }
-      s = addLog(s, `${player.name} の労働者が${effect.target}人になりました（研修中）`)
+      s = addLog(s, `${player.name} の労働者が${fillTo}人になりました（研修中）`)
       return s
     }
 

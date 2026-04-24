@@ -81,4 +81,4 @@ export const ROUND_CARDS: RoundCard[] = [
   },
 ]
 
-export const MAX_WORKERS_PER_PLAYER = 6
+export const MAX_WORKERS_PER_PLAYER = 5

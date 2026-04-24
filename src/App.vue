@@ -212,14 +212,18 @@ function workerNames(workerIds: string[]): string[] {
     return p?.name ?? '?'
   })
 }
-function buildingWorkerName(workerHereId: string | null): string | null {
-  if (!workerHereId || !game.value) return null
-  const p = game.value.players.find(pl => pl.workers.some(w => w.id === workerHereId))
-  return p?.name ?? null
-}
 function workerStatus(workers: Worker[]): string {
   const available = workers.filter(w => !w.isTraining && !w.placedAt).length
   return `${available}/${workers.length}`
+}
+
+// カード幅に合わせて建物名フォントサイズを自動調整（1行に収める）
+// small=true は CPU 用の小カード（58px幅）
+function bcardNameStyle(name: string, small = false): Record<string, string> {
+  const usable = small ? 46 : 64   // カード内の水平方向の使える幅 (px)
+  const base   = small ? 11 : 14   // ベースフォントサイズ (px)
+  if (!name || name.length * base <= usable) return {}
+  return { fontSize: Math.max(8, Math.floor(usable / name.length)) + 'px' }
 }
 
 function effectDesc(effect: GameEffect): string {
@@ -356,13 +360,12 @@ function cardTooltip(name: string): string {
                 <div class="cpu-cards-scroll">
                   <div class="card-wrap">
                     <div v-for="b in cpu.ownedBuildings" :key="b.id"
-                      :class="['bcard', { 'card-activated': activatedIds.includes(b.id), 'card-built': builtIds.includes(b.id) }]"
+                      :class="['bcard', { used: b.workerHereId !== null, 'card-activated': activatedIds.includes(b.id), 'card-built': builtIds.includes(b.id) }]"
                       @mouseenter="onTipEnter($event, cardTooltip(b.name))"
                       @mouseleave="onTipLeave">
                       <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
-                      <span class="bcard-name">{{ b.name }}</span>
+                      <span class="bcard-name" :style="bcardNameStyle(b.name, true)">{{ b.name }}</span>
                       <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
-                      <span v-if="buildingWorkerName(b.workerHereId)" class="bcard-worker-dot"></span>
                     </div>
                   </div>
                 </div>
@@ -382,7 +385,7 @@ function cardTooltip(name: string): string {
               <div class="card-wrap">
                 <div
                   v-for="wp in game.publicWorkplaces" :key="wp.id"
-                  :class="['wpcard', { available: canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id), 'card-activated': activatedIds.includes(wp.id) }]"
+                  :class="['wpcard', { used: wp.workerIds.length > 0 && !wp.allowMultiple, available: canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id), 'card-activated': activatedIds.includes(wp.id) }]"
                   @mouseenter="onTipEnter($event, effectDesc(wp.effect))"
                   @mouseleave="onTipLeave"
                   @click="canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id) && clickPublicWorkplace(wp.id)"
@@ -429,7 +432,7 @@ function cardTooltip(name: string): string {
                     @mouseleave="onTipLeave"
                     @click="clickBuildTarget(card.id)">
                     <span class="bcard-cost">{{ getBuildingDef(card.name)?.cost }}</span>
-                    <span class="bcard-name">{{ card.name }}</span>
+                    <span class="bcard-name" :style="bcardNameStyle(card.name)">{{ card.name }}</span>
                     <span class="bcard-asset">{{ getBuildingDef(card.name)?.assetValue }}</span>
                   </button>
                   <span v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</span>
@@ -447,7 +450,7 @@ function cardTooltip(name: string): string {
                     @mouseleave="onTipLeave"
                     @click="clickBuildTarget(card.id)">
                     <span class="bcard-cost">{{ getBuildingDef((card as any).name)?.cost }}</span>
-                    <span class="bcard-name">{{ (card as any).name }}</span>
+                    <span class="bcard-name" :style="bcardNameStyle((card as any).name)">{{ (card as any).name }}</span>
                     <span class="bcard-asset">{{ getBuildingDef((card as any).name)?.assetValue }}</span>
                   </button>
                 </div>
@@ -463,7 +466,7 @@ function cardTooltip(name: string): string {
                     :class="['hcard', 'selectable', { selected: paymentSelected.includes(card.id) }]"
                     @click="clickPaymentCard(card.id)">
                     <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
-                    <span class="bcard-name">{{ cardLabel(card) }}</span>
+                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
                     <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                   </button>
                 </div>
@@ -477,7 +480,7 @@ function cardTooltip(name: string): string {
                     :class="['hcard', 'selectable', { selected: pendingAction.selected.includes(card.id) }]"
                     @click="clickDiscardCard(card.id)">
                     <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
-                    <span class="bcard-name">{{ cardLabel(card) }}</span>
+                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
                     <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                   </button>
                 </div>
@@ -493,7 +496,7 @@ function cardTooltip(name: string): string {
                     @mouseenter="card.kind === 'building' && onTipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="onTipLeave"
                     @click="clickRevealedCard(card.id)">
-                    <span class="bcard-name">{{ cardLabel(card) }}</span>
+                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
                   </button>
                 </div>
               </template>
@@ -510,7 +513,7 @@ function cardTooltip(name: string): string {
                     @mouseleave="onTipLeave"
                     @click="clickHandLimitCard(card.id)">
                     <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
-                    <span class="bcard-name">{{ cardLabel(card) }}</span>
+                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
                     <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                   </button>
                 </div>
@@ -526,14 +529,13 @@ function cardTooltip(name: string): string {
                 <div class="bld-scroll">
                   <div class="card-wrap">
                     <div v-for="b in humanPlayer.ownedBuildings" :key="b.id"
-                      :class="['bcard', { available: canPlayerAct && availableOwnedBuildings.some(x => x.id === b.id), 'card-activated': activatedIds.includes(b.id), 'card-built': builtIds.includes(b.id) }]"
+                      :class="['bcard', { used: b.workerHereId !== null, available: canPlayerAct && availableOwnedBuildings.some(x => x.id === b.id), 'card-activated': activatedIds.includes(b.id), 'card-built': builtIds.includes(b.id) }]"
                       @mouseenter="onTipEnter($event, cardTooltip(b.name))"
                       @mouseleave="onTipLeave"
                       @click="canPlayerAct && availableOwnedBuildings.some(x => x.id === b.id) && clickOwnedBuilding(b.id)">
                       <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
-                      <span class="bcard-name">{{ b.name }}</span>
+                      <span class="bcard-name" :style="bcardNameStyle(b.name)">{{ b.name }}</span>
                       <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
-                      <span v-if="buildingWorkerName(b.workerHereId)" class="bcard-worker-dot"></span>
                     </div>
                   </div>
                 </div>
@@ -547,7 +549,7 @@ function cardTooltip(name: string): string {
                       @mouseenter="card.kind === 'building' && onTipEnter($event, cardTooltip(card.name!))"
                       @mouseleave="onTipLeave">
                       <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
-                      <span class="bcard-name">{{ cardLabel(card) }}</span>
+                      <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
                       <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                     </div>
                   </div>
@@ -849,22 +851,14 @@ function cardTooltip(name: string): string {
   text-align: center;
   line-height: 1.2;
   margin-top: 16px;
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .bcard-asset {
   font-size: 17px;
   font-weight: 800;
   color: #059669;
   line-height: 1;
-}
-.bcard-worker-dot {
-  position: absolute;
-  top: 4px;
-  right: 5px;
-  width: 7px;
-  height: 7px;
-  background: #f59e0b;
-  border-radius: 50%;
 }
 
 /* hand card (hcard) — same shape as bcard */
@@ -902,6 +896,20 @@ function cardTooltip(name: string): string {
   border-radius: 10px; padding: 1px 6px;
 }
 .wp-wlabel.faded { opacity: 0.4; }
+
+/* ===== Used (worker placed, single-use) ===== */
+/* !important を使わないため、available の !important に負けて青が優先される */
+.bcard.used  { background: #f1f5f9; }
+.wpcard.used { background: #f1f5f9; }
+
+/* ===== Smaller cards in CPU columns ===== */
+.cpu-col .bcard {
+  width: 58px;
+  min-height: 60px;
+}
+.cpu-col .bcard-cost  { font-size: 12px; }
+.cpu-col .bcard-name  { font-size: 11px; margin-top: 12px; }
+.cpu-col .bcard-asset { font-size: 13px; }
 
 /* ===== Card animations ===== */
 @keyframes cardActivate {
