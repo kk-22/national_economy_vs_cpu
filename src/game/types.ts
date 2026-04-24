@@ -91,6 +91,7 @@ export type PendingAction =
   | { kind: 'choose-double-first'; playerId: number }
   | { kind: 'choose-double-second'; playerId: number; firstCost: number; firstId: string }
   | { kind: 'choose-double-payment'; playerId: number; firstId: string; secondId: string; cost: number; firstCost: number }
+  | { kind: 'choose-hand-limit'; playerId: number; limit: number; count: number; selected: string[]; noCpu: boolean }
 
 export type GamePhase = 'placement' | 'game-over'
 

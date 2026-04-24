@@ -266,7 +266,7 @@ function state_deck_has_cards_placeholder(): boolean { return true }
 
 // ---- Worker placement ----
 
-export function placeWorkerOnPublic(state: GameState, playerId: number, workplaceId: string): GameState {
+export function placeWorkerOnPublic(state: GameState, playerId: number, workplaceId: string, forceHumanPath = false): GameState {
   const player = getPlayer(state, playerId)
   const workplace = state.publicWorkplaces.find(w => w.id === workplaceId)!
   if (!canUseWorkplace(workplace.effect, workplace.workerIds.length, workplace.allowMultiple, player, state.household)) return state
@@ -290,10 +290,10 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
   s = applyEffect(s, playerId, workplace.effect, player.isCpu)
   if (s.pendingAction) return s
 
-  return afterAction(s)
+  return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
 }
 
-export function placeWorkerOnBuilding(state: GameState, playerId: number, buildingId: string): GameState {
+export function placeWorkerOnBuilding(state: GameState, playerId: number, buildingId: string, forceHumanPath = false): GameState {
   const player = getPlayer(state, playerId)
   const building = player.ownedBuildings.find(b => b.id === buildingId)!
   const def = BUILDING_CARDS[building.name]!
@@ -312,7 +312,7 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
   s = applyEffect(s, playerId, def.effect, player.isCpu)
   if (s.pendingAction) return s
 
-  return afterAction(s)
+  return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
 }
 
 // ---- Effect application ----
@@ -579,7 +579,7 @@ export function selectFarmBuildTarget(state: GameState, targetCardId: string): G
   let s: GameState
   ;[s] = constructBuilding(state, action.playerId, card.id, [], 0)
   s = { ...s, pendingAction: null }
-  return afterAction(s)
+  return afterHumanAction(s)
 }
 
 export function confirmBuildPayment(state: GameState, paymentIds: string[]): GameState {
@@ -590,7 +590,7 @@ export function confirmBuildPayment(state: GameState, paymentIds: string[]): Gam
   let s: GameState
   ;[s] = constructBuilding(state, action.playerId, action.targetId, paymentIds, action.drawAfter)
   s = { ...s, pendingAction: null }
-  return afterAction(s)
+  return afterHumanAction(s)
 }
 
 export function selectDoubleFirst(state: GameState, cardId: string): GameState {
@@ -644,7 +644,7 @@ export function confirmDoublePayment(state: GameState, paymentIds: string[]): Ga
   // Second building is free (already paid)
   ;[s] = constructBuilding(s, action.playerId, action.secondId, [], 0)
   s = { ...s, pendingAction: null }
-  return afterAction(s)
+  return afterHumanAction(s)
 }
 
 function constructBuilding(state: GameState, playerId: number, cardId: string, paymentIds: string[], drawAfter: number): [GameState] {
@@ -712,7 +712,7 @@ export function confirmDiscard(state: GameState): GameState {
   }
 
   s = { ...s, pendingAction: null }
-  return afterAction(s)
+  return afterHumanAction(s)
 }
 
 export function confirmDiscardDraw(state: GameState, drawCount: number): GameState {
@@ -733,7 +733,7 @@ export function confirmDiscardDraw(state: GameState, drawCount: number): GameSta
   s = addLog(s, `${player.name} がカードを${action.count}枚捨てて${drawCount}枚引きました`)
 
   s = { ...s, pendingAction: null }
-  return afterAction(s)
+  return afterHumanAction(s)
 }
 
 // ---- Reveal-pick resolution (human) ----
@@ -753,7 +753,7 @@ export function pickRevealedCard(state: GameState, cardId: string): GameState {
   s = { ...s, discardPile: [...s.discardPile, ...discarded], pendingAction: null }
   s = addLog(s, `${getPlayer(s, action.playerId).name} が公開カードから ${picked.kind === 'building' ? picked.name : '消費財'} を引きました`)
 
-  return afterAction(s)
+  return afterHumanAction(s)
 }
 
 // ---- CPU AI ----
@@ -876,6 +876,19 @@ function afterAction(state: GameState): GameState {
   return advanceTurn(state)
 }
 
+// Human action path: CPU turns are NOT auto-run. The UI triggers them after animation.
+function afterHumanAction(state: GameState): GameState {
+  if (state.pendingAction) return state
+
+  const allPlaced = state.players.every(p =>
+    p.workers.every(w => w.isTraining || w.placedAt !== null)
+  )
+
+  if (allPlaced) return processRoundEnd(state, true)
+
+  return advanceTurnNoCpu(state)
+}
+
 function advanceTurn(state: GameState): GameState {
   const total = state.players.length
   let next = (state.currentPlayerIndex + 1) % total
@@ -889,6 +902,20 @@ function advanceTurn(state: GameState): GameState {
     next = (next + 1) % total
   }
   return processRoundEnd(state)
+}
+
+// Advance turn without auto-running CPU (used by human action path)
+function advanceTurnNoCpu(state: GameState): GameState {
+  const total = state.players.length
+  let next = (state.currentPlayerIndex + 1) % total
+  for (let checked = 0; checked < total; checked++) {
+    const p = state.players[next]
+    if (availableWorkers(p).length > 0) {
+      return { ...state, currentPlayerIndex: next }
+    }
+    next = (next + 1) % total
+  }
+  return processRoundEnd(state, true)
 }
 
 export function processCpuTurns(state: GameState): GameState {
@@ -934,9 +961,53 @@ function cpuTakeTurn(state: GameState, playerId: number): GameState {
   return afterAction(state)
 }
 
+// 1アクションだけ実行するCPUターン（アニメーションステップ用）
+function cpuTakeTurnNoAuto(state: GameState, playerId: number): GameState {
+  const pubOptions = getAvailablePublicWorkplaces(state, playerId)
+  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+
+  if (pubOptions.length === 0 && bldOptions.length === 0) {
+    return afterHumanAction(state)
+  }
+
+  const usePub = pubOptions.length > 0 && (bldOptions.length === 0 || Math.random() < 0.5)
+  if (usePub && pubOptions.length > 0) {
+    const wp = pubOptions[Math.floor(Math.random() * pubOptions.length)]
+    return placeWorkerOnPublic(state, playerId, wp.id, true)  // forceHumanPath
+  } else if (bldOptions.length > 0) {
+    const b = bldOptions[Math.floor(Math.random() * bldOptions.length)]
+    return placeWorkerOnBuilding(state, playerId, b.id, true)  // forceHumanPath
+  }
+  return afterHumanAction(state)
+}
+
+// UIから1ステップずつ呼ばれるCPUアクション
+export function cpuOneTurnStep(state: GameState): GameState {
+  if (state.pendingAction) return state  // 未解決の保留アクションがある間は何もしない
+  const current = state.players[state.currentPlayerIndex]
+  if (!current?.isCpu) return state
+
+  const avail = availableWorkers(current)
+  if (avail.length === 0) {
+    // このCPUは配置済み → 次プレイヤーへ進める
+    return advanceTurnNoCpu(state)
+  }
+
+  return cpuTakeTurnNoAuto(state, current.id)
+}
+
 // ---- Round end ----
 
-function processRoundEnd(state: GameState): GameState {
+function getHandLimit(player: Player): number {
+  let limit = 5
+  for (const b of player.ownedBuildings) {
+    const effect = BUILDING_CARDS[b.name]?.effect
+    if (effect?.kind === 'p-hand-limit') limit += effect.n
+  }
+  return limit
+}
+
+function processRoundEnd(state: GameState, noCpu = false): GameState {
   let s = addLog(state, `--- ラウンド ${state.round} 終了 ---`)
   const wage = ROUND_CARDS[state.round - 1].wage
 
@@ -1004,6 +1075,46 @@ function processRoundEnd(state: GameState): GameState {
     }
   }
 
+  // ---- Hand limit check ----
+  // First pass: auto-discard for CPU players
+  for (const player of s.players) {
+    if (!player.isCpu) continue
+    const p = getPlayer(s, player.id)
+    const limit = getHandLimit(p)
+    if (p.hand.length <= limit) continue
+    const excess = p.hand.length - limit
+    // Discard consumption cards first, then buildings
+    const sorted = [...p.hand].sort((a, b) => {
+      if (a.kind === 'consumption' && b.kind !== 'consumption') return -1
+      if (b.kind === 'consumption' && a.kind !== 'consumption') return 1
+      return 0
+    })
+    const toDiscard = sorted.slice(0, excess)
+    const discardSet = new Set(toDiscard.map(c => c.id))
+    const discardedBuildings = toDiscard.filter(c => c.kind === 'building') as BuildingCard[]
+    s = updatePlayer(s, player.id, pl => ({ ...pl, hand: pl.hand.filter(c => !discardSet.has(c.id)) }))
+    s = { ...s, discardPile: [...s.discardPile, ...discardedBuildings] }
+    s = addLog(s, `${player.name} が手札上限（${limit}枚）超過のため ${excess} 枚捨て`)
+  }
+  // Second pass: prompt human player if needed
+  for (const player of s.players) {
+    if (player.isCpu) continue
+    const p = getPlayer(s, player.id)
+    const limit = getHandLimit(p)
+    if (p.hand.length <= limit) continue
+    const excess = p.hand.length - limit
+    s = addLog(s, `${player.name} の手札が上限（${limit}枚）を超えています。${excess}枚捨ててください`)
+    s = { ...s, pendingAction: { kind: 'choose-hand-limit', playerId: player.id, limit, count: excess, selected: [], noCpu } }
+    return s
+  }
+
+  return startNextRound(s, noCpu)
+}
+
+// Called after wages + hand limit handling: game-over check + round advancement
+function startNextRound(state: GameState, noCpu: boolean): GameState {
+  let s = state
+
   // Check game over
   if (s.round >= 9) {
     s = { ...s, phase: 'game-over' }
@@ -1053,9 +1164,50 @@ function processRoundEnd(state: GameState): GameState {
   // Set start player
   s = { ...s, currentPlayerIndex: s.startPlayerIndex }
 
-  // Let CPUs go
-  s = processCpuTurns(s)
+  // Let CPUs go (skipped for human action path; UI triggers CPU after animation)
+  if (!noCpu) s = processCpuTurns(s)
   return s
+}
+
+export function toggleHandLimitSelection(state: GameState, cardId: string): GameState {
+  const pa = state.pendingAction
+  if (!pa || pa.kind !== 'choose-hand-limit') return state
+  const selected = pa.selected.includes(cardId)
+    ? pa.selected.filter(id => id !== cardId)
+    : [...pa.selected, cardId]
+  return { ...state, pendingAction: { ...pa, selected } }
+}
+
+export function confirmHandLimitDiscard(state: GameState): GameState {
+  const pa = state.pendingAction
+  if (!pa || pa.kind !== 'choose-hand-limit') return state
+  if (pa.selected.length !== pa.count) return state
+
+  const player = getPlayer(state, pa.playerId)
+  const removed = player.hand.filter(c => pa.selected.includes(c.id))
+  const discardedBuildings = removed.filter(c => c.kind === 'building') as BuildingCard[]
+
+  let s = updatePlayer(state, pa.playerId, p => ({
+    ...p,
+    hand: p.hand.filter(c => !pa.selected.includes(c.id)),
+  }))
+  s = { ...s, discardPile: [...s.discardPile, ...discardedBuildings], pendingAction: null }
+  s = addLog(s, `${player.name} が手札を${pa.limit}枚に整理しました`)
+
+  return startNextRound(s, pa.noCpu)
+}
+
+// Safety net: called when the UI detects the human player has no available
+// workers but is still marked as the current player.  Reuses afterHumanAction
+// so it either advances to the next CPU or triggers round-end.
+export function skipEmptyPlayerTurn(state: GameState): GameState {
+  const current = state.players[state.currentPlayerIndex]
+  // Only act when it really is the human player's turn and they have no moves
+  if (current?.isCpu) return state
+  if (state.pendingAction) return state
+  const avail = availableWorkers(current)
+  if (avail.length > 0) return state
+  return afterHumanAction(state)
 }
 
 // ---- Scoring ----

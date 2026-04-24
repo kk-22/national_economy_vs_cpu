@@ -3,6 +3,8 @@ import type { GameConfig, GameState } from '../game/types'
 import {
   createGame,
   createDebugGame,
+  processCpuTurns,
+  cpuOneTurnStep,
   getAvailablePublicWorkplaces,
   getAvailableOwnedBuildings,
   placeWorkerOnPublic,
@@ -27,6 +29,9 @@ import {
   getBuildableCards,
   getFarmBuildableCards,
   getDoubleBuildableFirstCards,
+  skipEmptyPlayerTurn,
+  toggleHandLimitSelection,
+  confirmHandLimitDiscard,
 } from '../game/engine'
 import { BUILDING_CARDS, ROUND_CARDS } from '../game/constants'
 
@@ -39,6 +44,30 @@ export function useGame() {
 
   function startDebugGame(cpuCount: number = 3) {
     state.game = createDebugGame(cpuCount)
+  }
+
+  // 安全策: プレイヤーのターンなのにワーカーが0のとき自動スキップ
+  function autoAdvanceIfStuck() {
+    if (!state.game) return
+    state.game = skipEmptyPlayerTurn(state.game)
+  }
+
+  // バッチ実行（スキップモード用）
+  function runCpuTurns() {
+    if (!state.game || state.game.phase !== 'placement') return
+    if (state.game.pendingAction) return  // 保留アクション中は実行しない
+    const current = state.game.players[state.game.currentPlayerIndex]
+    if (!current?.isCpu) return
+    state.game = processCpuTurns(state.game)
+  }
+
+  // 1ステップ実行（アニメーションあり）
+  function cpuStepAction() {
+    if (!state.game || state.game.phase !== 'placement') return
+    if (state.game.pendingAction) return  // 保留アクション中は実行しない
+    const current = state.game.players[state.game.currentPlayerIndex]
+    if (!current?.isCpu) return
+    state.game = cpuOneTurnStep(state.game)
   }
 
   const game = computed(() => state.game)
@@ -175,6 +204,16 @@ export function useGame() {
     state.game = pickRevealedCard(state.game, cardId)
   }
 
+  function clickHandLimitCard(cardId: string) {
+    if (!state.game) return
+    state.game = toggleHandLimitSelection(state.game, cardId)
+  }
+
+  function confirmHandLimitDiscardAction() {
+    if (!state.game) return
+    state.game = confirmHandLimitDiscard(state.game)
+  }
+
   return {
     game,
     humanPlayer,
@@ -191,6 +230,9 @@ export function useGame() {
     getBuildingDef,
     startGame,
     startDebugGame,
+    runCpuTurns,
+    cpuStepAction,
+    autoAdvanceIfStuck,
     clickPublicWorkplace,
     clickOwnedBuilding,
     clickBuildTarget,
@@ -204,5 +246,7 @@ export function useGame() {
     clickDiscardCard,
     confirmDiscardAction,
     clickRevealedCard,
+    clickHandLimitCard,
+    confirmHandLimitDiscardAction,
   }
 }
