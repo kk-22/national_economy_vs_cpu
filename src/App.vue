@@ -17,9 +17,16 @@ const {
 } = useGame()
 
 const showSetup = ref(false)
-const setupCpu = ref(3)   // 1〜3: 通常, 4: CPU4体（プレイヤーなし）
+const setupCpu = ref(3)          // 1〜3: 通常, 4: CPU4体（プレイヤーなし）
+const setupPlayerOrder = ref(1)  // 0=ランダム, 1〜4=手番
 const menuOpen = ref(false)
 const skipAnim = ref(false)
+
+watch(setupCpu, (newVal) => {
+  if (newVal === 4) return
+  const max = newVal + 1
+  if (setupPlayerOrder.value > max) setupPlayerOrder.value = max
+})
 
 // ---- アニメーション管理 ----
 const activatedIds = ref<string[]>([])   // 労働者が配置されたカード
@@ -181,7 +188,7 @@ function beginGame() {
   if (setupCpu.value === 4) {
     startGame({ humanName: '', cpuCount: 4, cpuOnly: true })
   } else {
-    startGame({ humanName: 'プレイヤー', cpuCount: setupCpu.value })
+    startGame({ humanName: 'プレイヤー', cpuCount: setupCpu.value, playerOrder: setupPlayerOrder.value })
   }
   showSetup.value = false
 }
@@ -270,7 +277,7 @@ function cardTooltip(name: string): string {
     <div class="modal">
       <h2>ゲーム設定</h2>
       <div class="radio-group-label">CPU数</div>
-      <div class="radio-group">
+      <div class="radio-group radio-group--horizontal">
         <label class="radio-item">
           <input type="radio" v-model.number="setupCpu" :value="1" />
           <span>1人</span>
@@ -288,14 +295,30 @@ function cardTooltip(name: string): string {
           <span>4人（プレイヤーなし）</span>
         </label>
       </div>
-      <label class="check-item">
-        <input type="checkbox" v-model="skipAnim" />
-        <span>アニメーションをスキップ</span>
-      </label>
+
+      <template v-if="setupCpu !== 4">
+        <div class="radio-group-label">プレイヤーの手番</div>
+        <div class="radio-group radio-group--horizontal">
+          <label class="radio-item">
+            <input type="radio" v-model.number="setupPlayerOrder" :value="0" />
+            <span>ランダム</span>
+          </label>
+          <label v-for="n in setupCpu + 1" :key="n" class="radio-item">
+            <input type="radio" v-model.number="setupPlayerOrder" :value="n" />
+            <span>{{ n }}番目</span>
+          </label>
+        </div>
+      </template>
       <div class="modal-actions">
         <button class="btn-primary" @click="beginGame">ゲーム開始</button>
-        <button class="btn-debug" @click="beginDebugGame">デバッグスタート</button>
         <button v-if="game" class="btn-secondary" @click="showSetup = false">キャンセル</button>
+        <div class="debug-group">
+          <label class="check-item">
+            <input type="checkbox" v-model="skipAnim" />
+            <span>アニメーションをスキップ</span>
+          </label>
+          <button class="btn-debug" @click="beginDebugGame">デバッグスタート</button>
+        </div>
       </div>
     </div>
   </div>
@@ -525,7 +548,6 @@ function cardTooltip(name: string): string {
             <!-- Normal view (no pending) -->
             <div v-else class="player-content">
               <div v-if="humanPlayer?.ownedBuildings.length" class="player-subsection">
-                <div class="subsection-label">建設済み {{ humanPlayer.ownedBuildings.length }}棟</div>
                 <div class="bld-scroll">
                   <div class="card-wrap">
                     <div v-for="b in humanPlayer.ownedBuildings" :key="b.id"
@@ -679,14 +701,15 @@ function cardTooltip(name: string): string {
 
 /* ===== Responsive ===== */
 @media (max-width: 640px) {
-  .mobile-header { display: flex; }
+  .mobile-header { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
   .log-panel { display: none; }
   /* スマホ: 各行の高さ固定なし・ページ全体でスクロール */
-  .game { height: auto; overflow: visible; }
+  .game { height: auto; overflow: visible; padding-top: 44px; }
   .game-body { overflow: visible; height: auto; }
   .game-main { overflow: visible; height: auto; }
   .game-col { height: auto !important; overflow: visible; flex-shrink: 1; }
   .col-divider { display: none; }
+  .player-area { flex: none; overflow-y: visible; }
   .cpu-cards-scroll, .wp-cards-scroll, .bld-scroll, .hand-scroll {
     overflow: visible;
   }
@@ -770,6 +793,7 @@ function cardTooltip(name: string): string {
     grid-auto-columns: 1fr;
     grid-auto-rows: unset;
   }
+  .player-area { margin-bottom: 8px; }
 }
 .cpu-col {
   background: #fff;
@@ -940,6 +964,7 @@ function cardTooltip(name: string): string {
 .player-area {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
   background: #f0fdf4;
   border: 1px solid #86efac;
   border-radius: 10px;
@@ -1044,6 +1069,8 @@ function cardTooltip(name: string): string {
 .check-item input[type="checkbox"] { accent-color: #3b82f6; width: 14px; height: 14px; cursor: pointer; }
 .radio-group-label { font-size: 13px; color: #475569; font-weight: 600; margin-bottom: 6px; }
 .radio-group { display: flex; flex-direction: column; gap: 6px; }
+.radio-group--horizontal { flex-direction: row; flex-wrap: wrap; }
+.debug-group { display: flex; flex-direction: column; gap: 6px; margin-top: 48px; }
 .radio-item {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px; color: #374151; cursor: pointer;
@@ -1056,17 +1083,17 @@ function cardTooltip(name: string): string {
 .modal-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
 .btn-primary {
   background: #3b82f6; color: #fff; border: none; border-radius: 7px;
-  padding: 9px 20px; font-weight: 700; cursor: pointer; font-size: 13px;
+  padding: 18px 20px; font-weight: 700; cursor: pointer; font-size: 13px;
 }
 .btn-primary:hover { background: #2563eb; }
 .btn-debug {
   background: #374151; color: #9ca3af; border: none; border-radius: 7px;
-  padding: 7px 20px; cursor: pointer; font-size: 12px;
+  padding: 14px 20px; cursor: pointer; font-size: 12px;
 }
 .btn-debug:hover { background: #1f2937; color: #d1d5db; }
 .btn-secondary {
   background: #fff; color: #64748b; border: 1px solid #e2e8f0; border-radius: 7px;
-  padding: 7px 14px; cursor: pointer; font-size: 13px; text-align: center;
+  padding: 14px 14px; cursor: pointer; font-size: 13px; text-align: center;
 }
 .btn-secondary:hover { background: #f8fafc; }
 

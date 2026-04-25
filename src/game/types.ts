@@ -113,7 +113,8 @@ export interface GameState {
 export interface GameConfig {
   humanName: string
   cpuCount: number
-  cpuOnly?: boolean   // true = 全員CPU（プレイヤーなし）
+  cpuOnly?: boolean      // true = 全員CPU（プレイヤーなし）
+  playerOrder?: number   // 0=ランダム, 1〜4=手番順（1番目が先手）
 }
 
 export interface ScoreResult {

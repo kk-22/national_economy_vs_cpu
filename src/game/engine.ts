@@ -177,6 +177,18 @@ export function createGame(config: GameConfig): GameState {
     state = drawCards(state, p.id, 3)
   }
 
+  // Determine starting player so human ends up at the desired turn position
+  // Human is always at index 0; formula: startIdx = (playerCount - (N-1)) % playerCount
+  const rawOrder = config.playerOrder ?? 1
+  let startIdx: number
+  if (rawOrder === 0) {
+    startIdx = Math.floor(Math.random() * playerCount)
+  } else {
+    const n = Math.min(rawOrder, playerCount)
+    startIdx = (playerCount - (n - 1)) % playerCount
+  }
+  state = { ...state, currentPlayerIndex: startIdx, startPlayerIndex: startIdx }
+
   // Flip round 1 card and add workplaces
   state = flipRoundCard(state, 1, playerCount)
   state = addLog(state, 'ゲーム開始！')
