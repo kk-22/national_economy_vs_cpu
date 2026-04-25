@@ -1150,23 +1150,15 @@ function startNextRound(state: GameState, noCpu: boolean): GameState {
     }
   }
 
-  // Reset workers
+  // Reset workers and owned buildings
   s = {
     ...s,
     players: s.players.map(p => ({
       ...p,
       workers: p.workers.map(w => ({ ...w, isTraining: false, placedAt: null })),
-    })),
-    publicWorkplaces: s.publicWorkplaces.map(wp => ({ ...wp, workerIds: [] })),
-  }
-
-  // Also reset owned buildings' workers
-  s = {
-    ...s,
-    players: s.players.map(p => ({
-      ...p,
       ownedBuildings: p.ownedBuildings.map(b => ({ ...b, workerHereId: null })),
     })),
+    publicWorkplaces: s.publicWorkplaces.map(wp => ({ ...wp, workerIds: [] })),
   }
 
   s = { ...s, round: nextRound }

@@ -15,7 +15,6 @@ import {
   cancelBuildChoice,
   cancelBuildPayment,
   cancelDiscardChoice,
-  cancelRevealedChoice,
   selectDoubleFirst,
   selectDoubleSecond,
   cancelDoubleSecond,
@@ -76,6 +75,7 @@ export function useGame() {
   const isHumanTurn = computed(() => currentPlayer.value?.isCpu === false)
   const currentWage = computed(() => state.game ? ROUND_CARDS[state.game.round - 1].wage : 0)
 
+
   const availablePublicWorkplaces = computed(() => {
     if (!state.game || !isHumanTurn.value) return []
     return getAvailablePublicWorkplaces(state.game, humanPlayer.value!.id)
@@ -89,13 +89,6 @@ export function useGame() {
   const scores = computed(() => state.game?.phase === 'game-over' ? calculateScores(state.game) : null)
 
   const pendingAction = computed(() => state.game?.pendingAction ?? null)
-
-  const buildDef = computed(() => {
-    const pa = pendingAction.value
-    if (!pa) return null
-    if (pa.kind === 'choose-build-payment') return { name: pa.targetName, cost: pa.cost }
-    return null
-  })
 
   function getBuildingDef(name: string) {
     return BUILDING_CARDS[name]
@@ -167,11 +160,6 @@ export function useGame() {
     state.game = cancelDiscardChoice(state.game)
   }
 
-  function clickCancelRevealedChoice() {
-    if (!state.game) return
-    state.game = cancelRevealedChoice(state.game)
-  }
-
   function clickCancelBuildPayment() {
     if (!state.game) return
     paymentSelectedIds.value = []
@@ -217,13 +205,11 @@ export function useGame() {
   return {
     game,
     humanPlayer,
-    currentPlayer,
     isHumanTurn,
     currentWage,
     availablePublicWorkplaces,
     availableOwnedBuildings,
     pendingAction,
-    buildDef,
     paymentSelected,
     buildableCards,
     scores,
@@ -240,7 +226,6 @@ export function useGame() {
     clickCancelBuildChoice,
     clickCancelBuildPayment,
     clickCancelDiscardChoice,
-    clickCancelRevealedChoice,
     clickCancelDoubleSecond,
     clickCancelDoublePayment,
     clickDiscardCard,
