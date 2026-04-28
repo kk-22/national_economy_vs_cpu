@@ -108,6 +108,8 @@ export interface GameState {
   pendingAction: PendingAction | null
   log: string[]
   _nextId: number
+  _rngSeed: number   // ゲーム開始時のシード（不変・保存用）
+  _rngState: number  // 現在のRNG状態（スナップショットに含まれ再現可能）
 }
 
 export interface GameConfig {

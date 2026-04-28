@@ -14,6 +14,7 @@ const {
   clickDiscardCard, confirmDiscardAction, clickCancelDiscardChoice,
   clickRevealedCard,
   clickHandLimitCard, confirmHandLimitDiscardAction,
+  undo, redo, canUndo, canRedo, isUndoRedo,
 } = useGame()
 
 const showSetup = ref(false)
@@ -74,6 +75,10 @@ const canPlayerAct = computed(() =>
 // カードアニメーション・ラウンドアニメーション・CPUステップを統合管理
 watch(game, (newGame, oldGame) => {
   if (!newGame || !oldGame) return
+  if (isUndoRedo.value) {
+    isUndoRedo.value = false
+    return
+  }
 
   const hasRoundChange = newGame.round === oldGame.round + 1
 
@@ -345,6 +350,7 @@ function cardTooltip(name: string): string {
       <div class="gameover-actions">
         <button class="btn-primary" @click="replayGame">もう一度</button>
         <button class="btn-secondary" @click="openSetup">設定を変更</button>
+        <button class="btn-secondary" :disabled="!canUndo" @click="undo">◀ 戻る</button>
       </div>
     </div>
   </div>
@@ -591,6 +597,10 @@ function cardTooltip(name: string): string {
           <span class="hbadge">賃金 ${{ currentWage }}</span>
           <span class="hbadge">家計 ${{ game.household }}</span>
           <button class="btn-restart" @click="openSetup">作り直す</button>
+        </div>
+        <div class="log-undo-bar">
+          <button class="btn-undo" :disabled="!canUndo" @click="undo">◀ 戻る</button>
+          <button class="btn-redo" :disabled="!canRedo" @click="redo">進む ▶</button>
         </div>
         <div class="log-label">ログ</div>
         <div v-for="(msg, i) in [...game.log].reverse().slice(0, 80)" :key="i" class="log-line">{{ msg }}</div>
@@ -1031,6 +1041,33 @@ function cardTooltip(name: string): string {
   background: #fff;
   border-left: 1px solid #e2e8f0;
   padding: 10px 8px;
+}
+.log-undo-bar {
+  display: flex;
+  gap: 4px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.btn-undo, .btn-redo {
+  flex: 1;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  padding: 4px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-undo:hover:not(:disabled), .btn-redo:hover:not(:disabled) {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+.btn-undo:disabled, .btn-redo:disabled {
+  opacity: 0.38;
+  cursor: default;
 }
 .log-label {
   font-size: 11px;

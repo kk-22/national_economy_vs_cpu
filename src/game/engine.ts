@@ -1,4 +1,5 @@
 import { BUILDING_CARDS, ROUND_CARDS, MAX_WORKERS_PER_PLAYER } from './constants'
+import { SeededRandom, makeSeed } from './random'
 import type {
   GameState, GameConfig, Player, Worker, HandCard, BuildingCard,
   OwnedBuilding, PublicWorkplace, GameEffect, ScoreResult
@@ -16,15 +17,26 @@ function genId(state: GameState, prefix = ''): [GameState, string] {
   return [{ ...state, _nextId: state._nextId + 1 }, id]
 }
 
+// ---- RNG utilities ----
+
+function rngNext(state: GameState): [GameState, number] {
+  const rng = new SeededRandom(state._rngState)
+  const value = rng.next()
+  return [{ ...state, _rngState: rng.getState() }, value]
+}
+
 // ---- Deck utilities ----
 
-function shuffle<T>(arr: T[]): T[] {
+function shuffle<T>(state: GameState, arr: T[]): [GameState, T[]] {
   const a = [...arr]
+  let s = state
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    let r: number
+    ;[s, r] = rngNext(s)
+    const j = Math.floor(r * (i + 1))
     ;[a[i], a[j]] = [a[j], a[i]]
   }
-  return a
+  return [s, a]
 }
 
 function buildDeck(state: GameState): [GameState, BuildingCard[]] {
@@ -37,7 +49,9 @@ function buildDeck(state: GameState): [GameState, BuildingCard[]] {
       cards.push({ id, name: def.name })
     }
   }
-  return [s, shuffle(cards)]
+  let deck: BuildingCard[]
+  ;[s, deck] = shuffle(s, cards)
+  return [s, deck]
 }
 
 function makeConsumption(state: GameState): [GameState, HandCard] {
@@ -62,7 +76,9 @@ function drawCards(state: GameState, playerId: number, n: number): GameState {
         drawn++
         continue
       }
-      s = { ...s, buildingDeck: shuffle(s.discardPile), discardPile: [] }
+      let shuffled: BuildingCard[]
+      ;[s, shuffled] = shuffle(s, s.discardPile)
+      s = { ...s, buildingDeck: shuffled, discardPile: [] }
       s = addLog(s, '山札が切れたため捨て札を切り直しました')
     }
     const [card, ...rest] = s.buildingDeck
@@ -124,6 +140,7 @@ function getMaxWorkers(player: Player): number {
 
 export function createGame(config: GameConfig): GameState {
   const playerCount = config.cpuOnly ? config.cpuCount : 1 + config.cpuCount
+  const seed = makeSeed()
 
   let state: GameState = {
     round: 1,
@@ -138,6 +155,8 @@ export function createGame(config: GameConfig): GameState {
     pendingAction: null,
     log: [],
     _nextId: 0,
+    _rngSeed: seed,
+    _rngState: seed,
   }
 
   // Build deck
@@ -182,7 +201,9 @@ export function createGame(config: GameConfig): GameState {
   const rawOrder = config.playerOrder ?? 1
   let startIdx: number
   if (rawOrder === 0) {
-    startIdx = Math.floor(Math.random() * playerCount)
+    let r: number
+    ;[state, r] = rngNext(state)
+    startIdx = Math.floor(r * playerCount)
   } else {
     const n = Math.min(rawOrder, playerCount)
     startIdx = (playerCount - (n - 1)) % playerCount
@@ -376,7 +397,9 @@ function applyEffect(state: GameState, playerId: number, effect: GameEffect, isC
       for (let i = 0; i < effect.n; i++) {
         if (s.buildingDeck.length === 0) {
           if (s.discardPile.length > 0) {
-            s = { ...s, buildingDeck: shuffle(s.discardPile), discardPile: [] }
+            let shuffled: BuildingCard[]
+            ;[s, shuffled] = shuffle(s, s.discardPile)
+            s = { ...s, buildingDeck: shuffled, discardPile: [] }
           } else break
         }
         const [card, ...rest] = s.buildingDeck
@@ -787,15 +810,20 @@ function cpuRevealPick(state: GameState, playerId: number, n: number): GameState
   let s = state
   for (let i = 0; i < n; i++) {
     if (s.buildingDeck.length === 0) {
-      if (s.discardPile.length > 0) s = { ...s, buildingDeck: shuffle(s.discardPile), discardPile: [] }
-      else break
+      if (s.discardPile.length > 0) {
+        let shuffled: BuildingCard[]
+        ;[s, shuffled] = shuffle(s, s.discardPile)
+        s = { ...s, buildingDeck: shuffled, discardPile: [] }
+      } else break
     }
     const [card, ...rest] = s.buildingDeck
     s = { ...s, buildingDeck: rest }
     revealed.push({ kind: 'building', ...card })
   }
   if (revealed.length === 0) return s
-  const pick = revealed[Math.floor(Math.random() * revealed.length)]
+  let r: number
+  ;[s, r] = rngNext(s)
+  const pick = revealed[Math.floor(r * revealed.length)]
   const others = revealed.filter(c => c.id !== pick.id)
   const discarded = others.filter(c => c.kind === 'building') as BuildingCard[]
   s = updatePlayer(s, playerId, p => ({ ...p, hand: [...p.hand, pick] }))
@@ -833,7 +861,10 @@ function cpuBuild(state: GameState, playerId: number, discount: number, drawAfte
 
   if (buildable.length === 0) return state
 
-  const target = buildable[Math.floor(Math.random() * buildable.length)]
+  let s = state
+  let r: number
+  ;[s, r] = rngNext(s)
+  const target = buildable[Math.floor(r * buildable.length)]
   const def = BUILDING_CARDS[target.name]!
   const cost = Math.max(0, def.cost - discount)
 
@@ -842,8 +873,7 @@ function cpuBuild(state: GameState, playerId: number, discount: number, drawAfte
     .slice(0, cost)
     .map(c => c.id)
 
-  let s: GameState
-  ;[s] = constructBuilding(state, playerId, target.id, payment, drawAfter)
+  ;[s] = constructBuilding(s, playerId, target.id, payment, drawAfter)
   return s
 }
 
@@ -854,9 +884,11 @@ function cpuBuildFarmFree(state: GameState, playerId: number): GameState {
     return BUILDING_CARDS[c.name]?.tags.includes('farm') ?? false
   })
   if (farmCards.length === 0) return state
-  const target = farmCards[Math.floor(Math.random() * farmCards.length)]
-  let s: GameState
-  ;[s] = constructBuilding(state, playerId, target.id, [], 0)
+  let s = state
+  let r: number
+  ;[s, r] = rngNext(s)
+  const target = farmCards[Math.floor(r * farmCards.length)]
+  ;[s] = constructBuilding(s, playerId, target.id, [], 0)
   return s
 }
 
@@ -864,7 +896,6 @@ function cpuBuildDouble(state: GameState, playerId: number): GameState {
   const player = getPlayer(state, playerId)
   const buildings = player.hand.filter(c => c.kind === 'building') as (BuildingCard & { kind: 'building' })[]
 
-  // Find a cost that appears at least twice
   const costGroups: Record<number, typeof buildings> = {}
   for (const c of buildings) {
     const cost = BUILDING_CARDS[c.name]?.cost ?? 0
@@ -873,13 +904,15 @@ function cpuBuildDouble(state: GameState, playerId: number): GameState {
   const validCosts = Object.entries(costGroups).filter(([, cards]) => cards.length >= 2)
   if (validCosts.length === 0) return state
 
-  const [, sameCostCards] = validCosts[Math.floor(Math.random() * validCosts.length)]
+  let s = state
+  let r: number
+  ;[s, r] = rngNext(s)
+  const [, sameCostCards] = validCosts[Math.floor(r * validCosts.length)]
   const first = sameCostCards[0]
   const second = sameCostCards[1]
   const cost = BUILDING_CARDS[first.name]?.cost ?? 0
 
   const payment = buildings.filter(c => c.id !== first.id && c.id !== second.id).slice(0, cost).map(c => c.id)
-  let s = state
   ;[s] = constructBuilding(s, playerId, first.id, payment, 0)
   ;[s] = constructBuilding(s, playerId, second.id, [], 0)
   return s
@@ -970,19 +1003,25 @@ function cpuTakeTurn(state: GameState, playerId: number): GameState {
   const bldOptions = getAvailableOwnedBuildings(state, playerId)
 
   if (pubOptions.length === 0 && bldOptions.length === 0) {
-    // Skip - no valid moves
     return afterAction(state)
   }
 
-  const usePub = pubOptions.length > 0 && (bldOptions.length === 0 || Math.random() < 0.5)
+  let s = state
+  let r: number
+  ;[s, r] = rngNext(s)
+  const usePub = pubOptions.length > 0 && (bldOptions.length === 0 || r < 0.5)
   if (usePub && pubOptions.length > 0) {
-    const wp = pubOptions[Math.floor(Math.random() * pubOptions.length)]
-    return placeWorkerOnPublic(state, playerId, wp.id)
+    let r2: number
+    ;[s, r2] = rngNext(s)
+    const wp = pubOptions[Math.floor(r2 * pubOptions.length)]
+    return placeWorkerOnPublic(s, playerId, wp.id)
   } else if (bldOptions.length > 0) {
-    const b = bldOptions[Math.floor(Math.random() * bldOptions.length)]
-    return placeWorkerOnBuilding(state, playerId, b.id)
+    let r2: number
+    ;[s, r2] = rngNext(s)
+    const b = bldOptions[Math.floor(r2 * bldOptions.length)]
+    return placeWorkerOnBuilding(s, playerId, b.id)
   }
-  return afterAction(state)
+  return afterAction(s)
 }
 
 // 1アクションだけ実行するCPUターン（アニメーションステップ用）
@@ -994,15 +1033,22 @@ function cpuTakeTurnNoAuto(state: GameState, playerId: number): GameState {
     return afterHumanAction(state)
   }
 
-  const usePub = pubOptions.length > 0 && (bldOptions.length === 0 || Math.random() < 0.5)
+  let s = state
+  let r: number
+  ;[s, r] = rngNext(s)
+  const usePub = pubOptions.length > 0 && (bldOptions.length === 0 || r < 0.5)
   if (usePub && pubOptions.length > 0) {
-    const wp = pubOptions[Math.floor(Math.random() * pubOptions.length)]
-    return placeWorkerOnPublic(state, playerId, wp.id, true)  // forceHumanPath
+    let r2: number
+    ;[s, r2] = rngNext(s)
+    const wp = pubOptions[Math.floor(r2 * pubOptions.length)]
+    return placeWorkerOnPublic(s, playerId, wp.id, true)
   } else if (bldOptions.length > 0) {
-    const b = bldOptions[Math.floor(Math.random() * bldOptions.length)]
-    return placeWorkerOnBuilding(state, playerId, b.id, true)  // forceHumanPath
+    let r2: number
+    ;[s, r2] = rngNext(s)
+    const b = bldOptions[Math.floor(r2 * bldOptions.length)]
+    return placeWorkerOnBuilding(s, playerId, b.id, true)
   }
-  return afterHumanAction(state)
+  return afterHumanAction(s)
 }
 
 // UIから1ステップずつ呼ばれるCPUアクション
@@ -1278,6 +1324,7 @@ export function createDebugGame(cpuCount: number = 3): GameState {
   const cpuN = Math.min(Math.max(1, cpuCount), 3)
   const playerCount = 1 + cpuN
   const playerNames = ['プレイヤー', 'CPU 1', 'CPU 2', 'CPU 3']
+  const seed = makeSeed()
 
   let state: GameState = {
     round: 8,
@@ -1292,6 +1339,8 @@ export function createDebugGame(cpuCount: number = 3): GameState {
     pendingAction: null,
     log: ['【デバッグ】ラウンド8スタート'],
     _nextId: 0,
+    _rngSeed: seed,
+    _rngState: seed,
   }
 
   let deck: BuildingCard[]

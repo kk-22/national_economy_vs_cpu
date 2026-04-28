@@ -1,4 +1,4 @@
-import { reactive, computed, ref } from 'vue'
+import { shallowReactive, computed, ref, toRaw } from 'vue'
 import type { GameConfig, GameState } from '../game/types'
 import {
   createGame,
@@ -33,16 +33,29 @@ import {
   confirmHandLimitDiscard,
 } from '../game/engine'
 import { BUILDING_CARDS, ROUND_CARDS } from '../game/constants'
+import { GameHistory } from '../game/history'
+import type { HistoryEntry } from '../game/history'
 
-const state = reactive<{ game: GameState | null }>({ game: null })
+const state = shallowReactive<{ game: GameState | null }>({ game: null })
+let history = new GameHistory(1)
+let pendingEntry: HistoryEntry | null = null
+const isUndoRedo = ref(false)
+const historyVersion = ref(0)  // incremented after each history mutation to drive canUndo/canRedo reactivity
 
 export function useGame() {
+
   function startGame(config: GameConfig) {
     state.game = createGame(config)
+    history = new GameHistory(state.game._rngSeed)
+    pendingEntry = null
+    historyVersion.value++
   }
 
   function startDebugGame(cpuCount: number = 3) {
     state.game = createDebugGame(cpuCount)
+    history = new GameHistory(state.game._rngSeed)
+    pendingEntry = null
+    historyVersion.value++
   }
 
   // 安全策: プレイヤーのターンなのにワーカーが0のとき自動スキップ
@@ -75,7 +88,6 @@ export function useGame() {
   const isHumanTurn = computed(() => currentPlayer.value?.isCpu === false)
   const currentWage = computed(() => state.game ? ROUND_CARDS[state.game.round - 1].wage : 0)
 
-
   const availablePublicWorkplaces = computed(() => {
     if (!state.game || !isHumanTurn.value) return []
     return getAvailablePublicWorkplaces(state.game, humanPlayer.value!.id)
@@ -90,6 +102,9 @@ export function useGame() {
 
   const pendingAction = computed(() => state.game?.pendingAction ?? null)
 
+  const canUndo = computed(() => { historyVersion.value; return history.canUndo })
+  const canRedo = computed(() => { historyVersion.value; return history.canRedo })
+
   function getBuildingDef(name: string) {
     return BUILDING_CARDS[name]
   }
@@ -97,11 +112,36 @@ export function useGame() {
   // Actions
   function clickPublicWorkplace(id: string) {
     if (!state.game || !isHumanTurn.value) return
+    const rawGame = toRaw(state.game)
+    const wp = rawGame.publicWorkplaces.find(w => w.id === id)
+    if (!wp) return
+    const entry: HistoryEntry = {
+      playerId: humanPlayer.value!.id,
+      targetId: id,
+      targetName: wp.name,
+      timestamp: Date.now(),
+    }
+    history.push(rawGame, entry)
+    historyVersion.value++
+    pendingEntry = entry
     state.game = placeWorkerOnPublic(state.game, humanPlayer.value!.id, id)
   }
 
   function clickOwnedBuilding(id: string) {
     if (!state.game || !isHumanTurn.value) return
+    const rawGame = toRaw(state.game)
+    const player = rawGame.players.find(p => !p.isCpu)
+    const building = player?.ownedBuildings.find(b => b.id === id)
+    if (!building) return
+    const entry: HistoryEntry = {
+      playerId: humanPlayer.value!.id,
+      targetId: id,
+      targetName: building.name,
+      timestamp: Date.now(),
+    }
+    history.push(rawGame, entry)
+    historyVersion.value++
+    pendingEntry = entry
     state.game = placeWorkerOnBuilding(state.game, humanPlayer.value!.id, id)
   }
 
@@ -127,8 +167,31 @@ export function useGame() {
     if (paymentSelectedIds.value.length === pa.cost) {
       const ids = [...paymentSelectedIds.value]
       paymentSelectedIds.value = []
-      if (pa.kind === 'choose-build-payment') state.game = confirmBuildPayment(state.game, ids)
-      else state.game = confirmDoublePayment(state.game, ids)
+      if (pa.kind === 'choose-build-payment') {
+        if (pendingEntry) {
+          pendingEntry.builtCard = { id: pa.targetId, name: pa.targetName }
+          pendingEntry.paymentCards = ids.map(pid => {
+            const card = state.game!.players.find(p => p.id === pa.playerId)?.hand.find(c => c.id === pid)
+            return { id: pid, name: card?.kind === 'building' ? card.name : '消費財' }
+          })
+        }
+        state.game = confirmBuildPayment(state.game, ids)
+      } else {
+        if (pendingEntry) {
+          const player = state.game!.players.find(p => p.id === pa.playerId)
+          const findName = (id: string) => {
+            const c = player?.hand.find(h => h.id === id)
+            return c?.kind === 'building' ? c.name : id
+          }
+          pendingEntry.builtCard = { id: pa.firstId, name: findName(pa.firstId) }
+          pendingEntry.secondBuiltCard = { id: pa.secondId, name: findName(pa.secondId) }
+          pendingEntry.paymentCards = ids.map(pid => {
+            const card = player?.hand.find(c => c.id === pid)
+            return { id: pid, name: card?.kind === 'building' ? card.name : '消費財' }
+          })
+        }
+        state.game = confirmDoublePayment(state.game, ids)
+      }
     }
   }
 
@@ -143,6 +206,12 @@ export function useGame() {
     if (!state.game) return
     const pa = state.game.pendingAction
     if (!pa || pa.kind !== 'choose-discard') return
+    if (pendingEntry) {
+      pendingEntry.discardedCards = pa.selected.map(sid => {
+        const card = state.game!.players.find(p => p.id === pa.playerId)?.hand.find(c => c.id === sid)
+        return { id: sid, name: card?.kind === 'building' ? card.name : '消費財' }
+      })
+    }
     if (pa.gainAmount === -1) {
       state.game = confirmDiscardDraw(state.game, pa.drawCount ?? 4)
     } else {
@@ -189,6 +258,13 @@ export function useGame() {
 
   function clickRevealedCard(cardId: string) {
     if (!state.game) return
+    if (pendingEntry) {
+      const pa = state.game.pendingAction
+      if (pa?.kind === 'choose-from-revealed') {
+        const card = pa.revealed.find(c => c.id === cardId)
+        if (card) pendingEntry.pickedCard = { id: cardId, name: card.kind === 'building' ? card.name : '消費財' }
+      }
+    }
     state.game = pickRevealedCard(state.game, cardId)
   }
 
@@ -202,6 +278,28 @@ export function useGame() {
     state.game = confirmHandLimitDiscard(state.game)
   }
 
+  function undo() {
+    if (!state.game) return
+    const prev = history.undo(toRaw(state.game))
+    if (!prev) return
+    isUndoRedo.value = true
+    historyVersion.value++
+    pendingEntry = null
+    paymentSelectedIds.value = []
+    state.game = prev
+  }
+
+  function redo() {
+    if (!state.game) return
+    const next = history.redo(toRaw(state.game))
+    if (!next) return
+    isUndoRedo.value = true
+    historyVersion.value++
+    pendingEntry = null
+    paymentSelectedIds.value = []
+    state.game = next
+  }
+
   return {
     game,
     humanPlayer,
@@ -213,6 +311,9 @@ export function useGame() {
     paymentSelected,
     buildableCards,
     scores,
+    canUndo,
+    canRedo,
+    isUndoRedo,
     getBuildingDef,
     startGame,
     startDebugGame,
@@ -233,5 +334,7 @@ export function useGame() {
     clickRevealedCard,
     clickHandLimitCard,
     confirmHandLimitDiscardAction,
+    undo,
+    redo,
   }
 }
