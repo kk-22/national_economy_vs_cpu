@@ -1,37 +1,20 @@
 import { shallowReactive, computed, ref, toRaw } from 'vue'
 import type { GameConfig, GameState } from '../game/types'
+import { createGame, createDebugGame } from '../game/init'
+import { calculateScores } from '../game/round'
+import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from '../game/availability'
 import {
-  createGame,
-  createDebugGame,
-  processCpuTurns,
-  cpuOneTurnStep,
-  getAvailablePublicWorkplaces,
-  getAvailableOwnedBuildings,
-  placeWorkerOnPublic,
-  placeWorkerOnBuilding,
-  selectBuildTarget,
-  selectFarmBuildTarget,
-  confirmBuildPayment,
-  cancelBuildChoice,
-  cancelBuildPayment,
-  cancelDiscardChoice,
-  selectDoubleFirst,
-  selectDoubleSecond,
-  cancelDoubleSecond,
-  confirmDoublePayment,
-  cancelDoublePayment,
-  toggleDiscardSelection,
-  confirmDiscard,
-  confirmDiscardDraw,
-  pickRevealedCard,
-  calculateScores,
-  getBuildableCards,
-  getFarmBuildableCards,
-  getDoubleBuildableFirstCards,
-  skipEmptyPlayerTurn,
-  toggleHandLimitSelection,
-  confirmHandLimitDiscard,
-} from '../game/engine'
+  placeWorkerOnPublic, placeWorkerOnBuilding,
+  processCpuTurns, cpuOneTurnStep, skipEmptyPlayerTurn,
+  selectFarmBuildTarget, confirmBuildPayment, confirmDoublePayment,
+  confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard,
+} from '../game/turns'
+import {
+  selectBuildTarget, selectDoubleFirst, selectDoubleSecond,
+  cancelBuildChoice, cancelBuildPayment, cancelDoubleSecond, cancelDoublePayment,
+  getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards,
+} from '../game/build'
+import { toggleDiscardSelection, cancelDiscardChoice, toggleHandLimitSelection } from '../game/resolution'
 import { BUILDING_CARDS, ROUND_CARDS } from '../game/constants'
 import { GameHistory } from '../game/history'
 import type { HistoryEntry } from '../game/history'
