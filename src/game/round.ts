@@ -57,6 +57,7 @@ export function processRoundEnd(state: GameState, noCpu = false): GameState {
       s = updatePlayer(s, player.id, p => ({ ...p, money: 0 }))
       s = { ...s, household: s.household + playerMoney }
 
+      const soldIds = new Set<string>()
       const sellable = getPlayer(s, player.id).ownedBuildings
         .filter(b => BUILDING_CARDS[b.name]?.canSell)
         .sort((a, b) => (BUILDING_CARDS[b.name]?.assetValue ?? 0) - (BUILDING_CARDS[a.name]?.assetValue ?? 0))
@@ -65,7 +66,11 @@ export function processRoundEnd(state: GameState, noCpu = false): GameState {
         if (remaining <= 0) break
         const def = BUILDING_CARDS[b.name]!
         const value = def.assetValue
-        if (value <= remaining || sellable.filter(sb => sb.id !== b.id).reduce((sum, sb) => sum + (BUILDING_CARDS[sb.name]?.assetValue ?? 0), 0) < remaining) {
+        const othersTotal = sellable
+          .filter(sb => sb.id !== b.id && !soldIds.has(sb.id))
+          .reduce((sum, sb) => sum + (BUILDING_CARDS[sb.name]?.assetValue ?? 0), 0)
+        if (value <= remaining || othersTotal < remaining) {
+          soldIds.add(b.id)
           s = updatePlayer(s, player.id, p => ({
             ...p,
             money: p.money + value,
@@ -78,7 +83,6 @@ export function processRoundEnd(state: GameState, noCpu = false): GameState {
             s = { ...s, publicWorkplaces: [...s.publicWorkplaces, wp] }
           }
           s = addLog(s, `${player.name} が ${b.name} を $${value} で売却`)
-          remaining -= value
           const newMoney = getPlayer(s, player.id).money
           if (newMoney >= remaining) {
             s = updatePlayer(s, player.id, p => ({ ...p, money: p.money - remaining }))

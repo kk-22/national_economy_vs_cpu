@@ -386,6 +386,7 @@ function cardTooltip(name: string): string {
                   <span class="worker-badge">労働者{{ workerStatus(cpu.workers) }}</span>
                   <span class="cpu-money">${{ cpu.money }}</span>
                   <span class="hand-count">手札{{ cpu.hand.length }}</span>
+                  <span v-if="game.startPlayerIndex === cpu.id" class="sp-badge">🚩SP</span>
                 </div>
                 <div class="cpu-cards-scroll">
                   <div class="card-wrap">
@@ -445,6 +446,7 @@ function cardTooltip(name: string): string {
               <span class="worker-badge">労働者{{ humanPlayer ? workerStatus(humanPlayer.workers) : '' }}</span>
               <span class="player-money">${{ humanPlayer?.money }}</span>
               <span class="hand-count">手札{{ humanPlayer?.hand.length }}</span>
+              <span v-if="game.startPlayerIndex === humanPlayer?.id" class="sp-badge">🚩SP</span>
             </div>
 
             <!-- Pending action -->
