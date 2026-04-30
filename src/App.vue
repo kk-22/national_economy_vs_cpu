@@ -12,9 +12,9 @@ const {
   clickPublicWorkplace, clickOwnedBuilding,
   clickBuildTarget, clickPaymentCard, clickCancelBuildChoice, clickCancelBuildPayment,
   clickCancelDoubleSecond, clickCancelDoublePayment,
-  clickDiscardCard, confirmDiscardAction, clickCancelDiscardChoice,
+  clickDiscardCard,
   clickRevealedCard,
-  clickHandLimitCard, confirmHandLimitDiscardAction,
+  clickHandLimitCard,
   undo, redo, canUndo, canRedo, isUndoRedo,
 } = useGame()
 
@@ -516,8 +516,6 @@ function cardTooltip(name: string): string {
                     <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                   </button>
                 </div>
-                <button v-if="pendingAction.selected.length === pendingAction.count" class="btn-confirm" @click="confirmDiscardAction">確定</button>
-                <button class="btn-cancel" @click="clickCancelDiscardChoice">キャンセル</button>
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-from-revealed'">
@@ -549,8 +547,6 @@ function cardTooltip(name: string): string {
                     <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                   </button>
                 </div>
-                <button v-if="pendingAction.selected.length === pendingAction.count"
-                  class="btn-confirm" @click="confirmHandLimitDiscardAction()">確定</button>
               </template>
             </div>
 

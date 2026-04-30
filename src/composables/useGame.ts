@@ -183,12 +183,9 @@ export function useGame() {
   function clickDiscardCard(cardId: string) {
     if (!state.game) return
     state.game = toggleDiscardSelection(state.game, cardId)
-  }
-
-  function confirmDiscardAction() {
-    if (!state.game) return
     const pa = state.game.pendingAction
     if (!pa || pa.kind !== 'choose-discard') return
+    if (pa.selected.length < pa.count) return
     if (pendingEntry) {
       pendingEntry.discardedCards = pa.selected.map(sid => {
         const card = state.game!.players.find(p => p.id === pa.playerId)?.hand.find(c => c.id === sid)
@@ -254,11 +251,11 @@ export function useGame() {
   function clickHandLimitCard(cardId: string) {
     if (!state.game) return
     state.game = toggleHandLimitSelection(state.game, cardId)
-  }
-
-  function confirmHandLimitDiscardAction() {
-    if (!state.game) return
-    state.game = confirmHandLimitDiscard(state.game)
+    const pa = state.game.pendingAction
+    if (!pa || pa.kind !== 'choose-hand-limit') return
+    if (pa.selected.length >= pa.count) {
+      state.game = confirmHandLimitDiscard(state.game)
+    }
   }
 
   function undo() {
@@ -313,10 +310,8 @@ export function useGame() {
     clickCancelDoubleSecond,
     clickCancelDoublePayment,
     clickDiscardCard,
-    confirmDiscardAction,
     clickRevealedCard,
     clickHandLimitCard,
-    confirmHandLimitDiscardAction,
     undo,
     redo,
   }

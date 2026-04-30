@@ -13,6 +13,7 @@ export function flipRoundCard(state: GameState, round: number, playerCount: numb
 
   for (const wp of roundCard.workplaces) {
     const count = wp.count(playerCount)
+    const allowMultiple = typeof wp.allowMultiple === 'function' ? wp.allowMultiple(playerCount) : wp.allowMultiple
     for (let i = 0; i < count; i++) {
       let id: string
       ;[s, id] = genId(s, `wp-`)
@@ -20,7 +21,7 @@ export function flipRoundCard(state: GameState, round: number, playerCount: numb
         id,
         name: wp.name,
         effect: wp.effect,
-        allowMultiple: wp.allowMultiple,
+        allowMultiple,
         workerIds: [],
       })
     }

@@ -152,13 +152,14 @@ export function createDebugGame(cpuCount: number = 3): GameState {
         seen.add(wp.name)
         let wpId: string
         ;[state, wpId] = genId(state, 'wp-dbg-')
+        const allowMultiple = typeof wp.allowMultiple === 'function' ? wp.allowMultiple(playerCount) : wp.allowMultiple
         state = {
           ...state,
           publicWorkplaces: [...state.publicWorkplaces, {
             id: wpId,
             name: wp.name,
             effect: wp.effect,
-            allowMultiple: wp.allowMultiple,
+            allowMultiple,
             workerIds: [],
           }],
         }

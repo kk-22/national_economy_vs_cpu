@@ -32,7 +32,7 @@ export interface RoundCard {
   workplaces: {
     name: string
     effect: import('./types').GameEffect
-    allowMultiple: boolean
+    allowMultiple: boolean | ((playerCount: number) => boolean)
     count: (playerCount: number) => number
   }[]
 }
@@ -49,11 +49,11 @@ export const ROUND_CARDS: RoundCard[] = [
   },
   {
     wage: 2,
-    workplaces: [{ name: '露店', effect: { kind: 'discard-gain', discard: 1, gain: 6 }, allowMultiple: false, count: () => 1 }],
+    workplaces: [{ name: '露店', effect: { kind: 'discard-gain', discard: 1, gain: 6 }, allowMultiple: (n) => n >= 3, count: () => 1 }],
   },
   {
     wage: 3,
-    workplaces: [{ name: '市場', effect: { kind: 'discard-gain', discard: 2, gain: 12 }, allowMultiple: false, count: () => 1 }],
+    workplaces: [{ name: '市場', effect: { kind: 'discard-gain', discard: 2, gain: 12 }, allowMultiple: (n) => n >= 3, count: () => 1 }],
   },
   {
     wage: 3,
@@ -61,7 +61,7 @@ export const ROUND_CARDS: RoundCard[] = [
   },
   {
     wage: 3,
-    workplaces: [{ name: 'スーパーマーケット', effect: { kind: 'discard-gain', discard: 3, gain: 18 }, allowMultiple: false, count: () => 1 }],
+    workplaces: [{ name: 'スーパーマーケット', effect: { kind: 'discard-gain', discard: 3, gain: 18 }, allowMultiple: (n) => n >= 3, count: () => 1 }],
   },
   {
     wage: 4,
@@ -69,7 +69,7 @@ export const ROUND_CARDS: RoundCard[] = [
   },
   {
     wage: 4,
-    workplaces: [{ name: '百貨店', effect: { kind: 'discard-gain', discard: 4, gain: 24 }, allowMultiple: false, count: () => 1 }],
+    workplaces: [{ name: '百貨店', effect: { kind: 'discard-gain', discard: 4, gain: 24 }, allowMultiple: (n) => n >= 3, count: () => 1 }],
   },
   {
     wage: 5,
@@ -77,7 +77,7 @@ export const ROUND_CARDS: RoundCard[] = [
   },
   {
     wage: 5,
-    workplaces: [{ name: '万博', effect: { kind: 'discard-gain', discard: 5, gain: 30 }, allowMultiple: false, count: () => 1 }],
+    workplaces: [{ name: '万博', effect: { kind: 'discard-gain', discard: 5, gain: 30 }, allowMultiple: (n) => n >= 3, count: () => 1 }],
   },
 ]
 
