@@ -209,8 +209,9 @@ export function calculateScores(state: GameState): ScoreResult[] {
       }
     }
 
-    const hasForgive = player.ownedBuildings.some(b => BUILDING_CARDS[b.name]?.effect.kind === 'p-forgive-wages')
-    const forgivenWages = hasForgive ? Math.min(player.unpaidWages, 5) : 0
+    const forgiveBuilding = player.ownedBuildings.find(b => BUILDING_CARDS[b.name]?.effect.kind === 'p-forgive-wages')
+    const forgiveMax = forgiveBuilding ? (BUILDING_CARDS[forgiveBuilding.name].effect as { kind: 'p-forgive-wages'; max: number }).max : 0
+    const forgivenWages = Math.min(player.unpaidWages, forgiveMax)
     const unpaidPenalty = (player.unpaidWages - forgivenWages) * 3
 
     return {
