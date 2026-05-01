@@ -31,6 +31,7 @@ export function createGame(config: GameConfig): GameState {
   state = { ...state, buildingDeck: deck }
 
   const players: Player[] = []
+  let cpuIndex = 0
   for (let i = 0; i < playerCount; i++) {
     const isCpu = config.cpuOnly ? true : i > 0
     const name = isCpu ? `CPU ${config.cpuOnly ? i + 1 : i}` : config.humanName
@@ -39,10 +40,14 @@ export function createGame(config: GameConfig): GameState {
     ;[state, w1Id] = nextId(state)
     ;[state, w2Id] = nextId(state)
 
+    const cpuStrategy = isCpu ? (config.cpuStrategies?.[cpuIndex] ?? 'random') : 'random'
+    if (isCpu) cpuIndex++
+
     players.push({
       id: i,
       name,
       isCpu,
+      cpuStrategy,
       money: 5 + i,
       hand: [],
       ownedBuildings: [],
@@ -116,6 +121,7 @@ export function createDebugGame(cpuCount: number = 3): GameState {
       id: i,
       name: playerNames[i],
       isCpu,
+      cpuStrategy: 'random' as const,
       money: 20,
       hand: [],
       ownedBuildings: [],

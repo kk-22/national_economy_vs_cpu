@@ -1,9 +1,9 @@
 import { getPlayer, addLog, drawCards, drawConsumption, shuffle, nextId, updatePlayer, workerCount, getMaxWorkers } from './primitives'
 import { getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards } from './build'
 import { cpuRevealPick, cpuDiscardDraw, cpuDiscardGain, cpuBuild, cpuBuildFarmFree, cpuBuildDouble } from './cpu'
-import type { GameState, GameEffect, Worker, HandCard, BuildingCard } from './types'
+import type { GameState, GameEffect, Worker, HandCard, BuildingCard, CpuStrategy } from './types'
 
-export function applyEffect(state: GameState, playerId: number, effect: GameEffect, isCpu: boolean): GameState {
+export function applyEffect(state: GameState, playerId: number, effect: GameEffect, isCpu: boolean, strategy: CpuStrategy = 'random'): GameState {
   const player = getPlayer(state, playerId)
 
   switch (effect.kind) {
@@ -34,7 +34,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'reveal-pick': {
-      if (isCpu) return cpuRevealPick(state, playerId, effect.n)
+      if (isCpu) return cpuRevealPick(state, playerId, effect.n, strategy)
       const revealed: HandCard[] = []
       let s = state
       for (let i = 0; i < effect.n; i++) {
@@ -54,7 +54,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'discard-draw': {
-      if (isCpu) return cpuDiscardDraw(state, playerId, effect.discard, effect.draw)
+      if (isCpu) return cpuDiscardDraw(state, playerId, effect.discard, effect.draw, strategy)
       return {
         ...state,
         pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: -1, selected: [], drawCount: effect.draw },
@@ -62,14 +62,14 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'build': {
-      if (isCpu) return cpuBuild(state, playerId, effect.discount, effect.drawAfter)
+      if (isCpu) return cpuBuild(state, playerId, effect.discount, effect.drawAfter, strategy)
       if (getBuildableCards(state, playerId, effect.discount).length === 0)
         return addLog(state, `${player.name} は建設できる建物がないためスキップ`)
       return { ...state, pendingAction: { kind: 'choose-build-target', playerId, discount: effect.discount, drawAfter: effect.drawAfter } }
     }
 
     case 'build-farm-free': {
-      if (isCpu) return cpuBuildFarmFree(state, playerId)
+      if (isCpu) return cpuBuildFarmFree(state, playerId, strategy)
       if (getFarmBuildableCards(state, playerId).length === 0)
         return addLog(state, `${player.name} は建設できる農場がないためスキップ`)
       return { ...state, pendingAction: { kind: 'choose-farm-build', playerId } }
@@ -87,7 +87,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'discard-gain': {
-      if (isCpu) return cpuDiscardGain(state, playerId, effect.discard, effect.gain)
+      if (isCpu) return cpuDiscardGain(state, playerId, effect.discard, effect.gain, strategy)
       return {
         ...state,
         pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: [] },
@@ -125,7 +125,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'build-double': {
-      if (isCpu) return cpuBuildDouble(state, playerId)
+      if (isCpu) return cpuBuildDouble(state, playerId, strategy)
       if (getDoubleBuildableFirstCards(state, playerId).length === 0)
         return addLog(state, `${player.name} は同コストの建物ペアがないためスキップ`)
       return { ...state, pendingAction: { kind: 'choose-double-first', playerId } }

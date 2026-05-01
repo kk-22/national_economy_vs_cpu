@@ -2,7 +2,7 @@
 import './App.css'
 import { ref, onMounted, computed, watch } from 'vue'
 import { useGame } from './composables/useGame'
-import type { GameEffect, Worker } from './game/types'
+import type { GameEffect, Worker, CpuStrategy } from './game/types'
 
 const {
   game, humanPlayer, isHumanTurn, currentWage,
@@ -21,6 +21,7 @@ const {
 const showSetup = ref(false)
 const setupCpu = ref(3)          // 1〜3: 通常, 4: CPU4体（プレイヤーなし）
 const setupPlayerOrder = ref(1)  // 0=ランダム, 1〜4=手番
+const setupCpuStrategies = ref<CpuStrategy[]>(['random', 'random', 'random', 'random'])
 const menuOpen = ref(false)
 const skipAnim = ref(false)
 
@@ -192,9 +193,14 @@ onMounted(() => {
 function openSetup() { showSetup.value = true }
 function beginGame() {
   if (setupCpu.value === 4) {
-    startGame({ humanName: '', cpuCount: 4, cpuOnly: true })
+    startGame({ humanName: '', cpuCount: 4, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, 4) })
   } else {
-    startGame({ humanName: 'プレイヤー', cpuCount: setupCpu.value, playerOrder: setupPlayerOrder.value })
+    startGame({
+      humanName: 'プレイヤー',
+      cpuCount: setupCpu.value,
+      playerOrder: setupPlayerOrder.value,
+      cpuStrategies: setupCpuStrategies.value.slice(0, setupCpu.value),
+    })
   }
   showSetup.value = false
 }
@@ -204,12 +210,14 @@ function beginDebugGame() {
   showSetup.value = false
 }
 function replayGame() {
-  const cpuCount = game.value!.players.filter(p => p.isCpu).length
+  const cpuPlayers = game.value!.players.filter(p => p.isCpu)
+  const cpuCount = cpuPlayers.length
+  const cpuStrategies = cpuPlayers.map(p => p.cpuStrategy)
   const isAllCpu = !game.value!.players.some(p => !p.isCpu)
   if (isAllCpu) {
-    startGame({ humanName: '', cpuCount, cpuOnly: true })
+    startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies })
   } else {
-    startGame({ humanName: humanPlayer.value?.name ?? 'プレイヤー', cpuCount })
+    startGame({ humanName: humanPlayer.value?.name ?? 'プレイヤー', cpuCount, cpuStrategies })
   }
 }
 
@@ -315,6 +323,28 @@ function cardTooltip(name: string): string {
           </label>
         </div>
       </template>
+      <div class="radio-group-label">CPUの戦略</div>
+      <div v-for="i in (setupCpu === 4 ? 4 : setupCpu)" :key="i" class="cpu-strategy-row">
+        <span class="cpu-strategy-label">CPU {{ i }}：</span>
+        <div class="radio-group radio-group--horizontal">
+          <label class="radio-item">
+            <input type="radio" v-model="setupCpuStrategies[i - 1]" value="random" />
+            <span>ランダム</span>
+          </label>
+          <label class="radio-item">
+            <input type="radio" v-model="setupCpuStrategies[i - 1]" value="greedy" />
+            <span>貪欲法</span>
+          </label>
+          <label class="radio-item">
+            <input type="radio" v-model="setupCpuStrategies[i - 1]" value="mcts" />
+            <span>モンテカルロ</span>
+          </label>
+          <label class="radio-item">
+            <input type="radio" v-model="setupCpuStrategies[i - 1]" value="disruptive" />
+            <span>邪魔</span>
+          </label>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn-primary" @click="beginGame">ゲーム開始</button>
         <button v-if="game" class="btn-secondary" @click="showSetup = false">キャンセル</button>

@@ -1,5 +1,7 @@
 export type Tag = 'farm' | 'factory'
 
+export type CpuStrategy = 'random' | 'greedy' | 'mcts' | 'disruptive'
+
 export interface BuildingCardDef {
   name: string
   cost: number        // cards to discard when building
@@ -75,6 +77,7 @@ export interface Player {
   id: number
   name: string
   isCpu: boolean
+  cpuStrategy: CpuStrategy
   money: number
   hand: HandCard[]
   ownedBuildings: OwnedBuilding[]
@@ -117,6 +120,7 @@ export interface GameConfig {
   cpuCount: number
   cpuOnly?: boolean      // true = 全員CPU（プレイヤーなし）
   playerOrder?: number   // 0=ランダム, 1〜4=手番順（1番目が先手）
+  cpuStrategies?: CpuStrategy[]  // CPU番号順（0=CPU1, 1=CPU2, ...）
 }
 
 export interface ScoreResult {

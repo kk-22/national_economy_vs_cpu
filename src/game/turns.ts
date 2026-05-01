@@ -1,10 +1,11 @@
-import { BUILDING_CARDS } from './constants'
+import { BUILDING_CARDS, ROUND_CARDS } from './constants'
 import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, rngNext } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { constructBuilding } from './build'
 import { applyEffect } from './effects'
-import { processRoundEnd, startNextRound } from './round'
-import type { GameState, BuildingCard } from './types'
+import { processRoundEnd, startNextRound, calculateScores } from './round'
+import { MCTS_SIMULATIONS } from './cpu'
+import type { GameState, BuildingCard, PublicWorkplace, OwnedBuilding, GameEffect, Player } from './types'
 
 // ---- Worker placement ----
 
@@ -26,7 +27,7 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
   }
   s = addLog(s, `${player.name} が ${workplace.name} に労働者を配置`)
 
-  s = applyEffect(s, playerId, workplace.effect, player.isCpu)
+  s = applyEffect(s, playerId, workplace.effect, player.isCpu, player.cpuStrategy)
   if (s.pendingAction) return s
 
   return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
@@ -46,7 +47,7 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
   }))
   s = addLog(s, `${player.name} が ${building.name} に労働者を配置`)
 
-  s = applyEffect(s, playerId, def.effect, player.isCpu)
+  s = applyEffect(s, playerId, def.effect, player.isCpu, player.cpuStrategy)
   if (s.pendingAction) return s
 
   return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
@@ -116,16 +117,39 @@ export function processCpuTurns(state: GameState): GameState {
   }
 }
 
+// ---- Strategy dispatch ----
+
 function cpuTakeTurn(state: GameState, playerId: number): GameState {
+  const player = getPlayer(state, playerId)
+  switch (player.cpuStrategy) {
+    case 'greedy':     return cpuTakeTurnGreedy(state, playerId)
+    case 'mcts':       return cpuTakeTurnMCTS(state, playerId)
+    case 'disruptive': return cpuTakeTurnDisruptive(state, playerId)
+    default:           return cpuTakeTurnRandom(state, playerId)
+  }
+}
+
+function cpuTakeTurnNoAuto(state: GameState, playerId: number): GameState {
+  const player = getPlayer(state, playerId)
+  switch (player.cpuStrategy) {
+    case 'greedy':     return cpuTakeTurnGreedyNoAuto(state, playerId)
+    case 'mcts':       return cpuTakeTurnMCTSNoAuto(state, playerId)
+    case 'disruptive': return cpuTakeTurnDisruptiveNoAuto(state, playerId)
+    default:           return cpuTakeTurnRandomNoAuto(state, playerId)
+  }
+}
+
+// ---- Random strategy ----
+
+function cpuTakeTurnRandom(state: GameState, playerId: number): GameState {
   const pubOptions = getAvailablePublicWorkplaces(state, playerId)
   const bldOptions = getAvailableOwnedBuildings(state, playerId)
   if (pubOptions.length === 0 && bldOptions.length === 0) return afterAction(state)
 
-  let s = state
-  let r: number
+  let s = state, r: number
   ;[s, r] = rngNext(s)
   const usePub = pubOptions.length > 0 && (bldOptions.length === 0 || r < 0.5)
-  if (usePub && pubOptions.length > 0) {
+  if (usePub) {
     let r2: number
     ;[s, r2] = rngNext(s)
     return placeWorkerOnPublic(s, playerId, pubOptions[Math.floor(r2 * pubOptions.length)].id)
@@ -137,16 +161,15 @@ function cpuTakeTurn(state: GameState, playerId: number): GameState {
   return afterAction(s)
 }
 
-function cpuTakeTurnNoAuto(state: GameState, playerId: number): GameState {
+function cpuTakeTurnRandomNoAuto(state: GameState, playerId: number): GameState {
   const pubOptions = getAvailablePublicWorkplaces(state, playerId)
   const bldOptions = getAvailableOwnedBuildings(state, playerId)
   if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
 
-  let s = state
-  let r: number
+  let s = state, r: number
   ;[s, r] = rngNext(s)
   const usePub = pubOptions.length > 0 && (bldOptions.length === 0 || r < 0.5)
-  if (usePub && pubOptions.length > 0) {
+  if (usePub) {
     let r2: number
     ;[s, r2] = rngNext(s)
     return placeWorkerOnPublic(s, playerId, pubOptions[Math.floor(r2 * pubOptions.length)].id, true)
@@ -156,6 +179,283 @@ function cpuTakeTurnNoAuto(state: GameState, playerId: number): GameState {
     return placeWorkerOnBuilding(s, playerId, bldOptions[Math.floor(r2 * bldOptions.length)].id, true)
   }
   return afterHumanAction(s)
+}
+
+// ---- Greedy strategy ----
+
+function scoreEffect(effect: GameEffect, player: Player, household: number, round: number): number {
+  const workerCount = player.workers.length
+  const wage = ROUND_CARDS[round - 1]?.wage ?? 0
+  const expectedWage = workerCount * wage
+
+  switch (effect.kind) {
+    case 'build-double': return 110
+    case 'build': {
+      const maxCost = player.hand
+        .filter(c => c.kind === 'building')
+        .reduce((max, c) => {
+          const def = BUILDING_CARDS[(c as BuildingCard).name]
+          const cost = Math.max(0, (def?.cost ?? 0) - effect.discount)
+          return player.hand.length - 1 >= cost ? Math.max(max, def?.cost ?? 0) : max
+        }, -1)
+      if (maxCost < 0) return -Infinity
+      const base = 85 + maxCost * 3
+      // 賃金不足時は優先度を大幅に下げる
+      return player.money < expectedWage ? base * 0.3 : base
+    }
+    case 'build-farm-free': return 70
+    case 'fill-workers': {
+      if (workerCount >= effect.target) return -Infinity
+      return effect.target >= 5 ? 100 : 80
+    }
+    case 'add-worker': {
+      const maxWorkers = 2 + player.ownedBuildings.filter(b => BUILDING_CARDS[b.name]?.effect.kind === 'p-worker-limit').length
+      if (workerCount >= maxWorkers) return -Infinity
+      if (!effect.immediate) return workerCount <= 2 ? 90 : 50
+      return 70
+    }
+    case 'reveal-pick': return player.hand.length < 3 ? 70 : 55
+    case 'discard-draw': {
+      if (player.hand.length < effect.discard) return -Infinity
+      return effect.draw * 10
+    }
+    case 'discard-gain': {
+      if (player.hand.length < effect.discard || household < effect.gain) return -Infinity
+      const base = effect.gain * 2.5
+      return player.money < expectedWage * 1.5 ? base * 1.8 : base
+    }
+    case 'gain-supply':
+      if (household < effect.n) return -Infinity
+      return effect.n * 3
+    case 'draw': return effect.n * 12
+    case 'draw-if-empty': return player.hand.length === 0 ? effect.empty * 12 : effect.normal * 12
+    case 'draw-become-start': return 30
+    case 'slash-burn': return 25
+    case 'draw-consumption': return effect.n * 4
+    case 'draw-consumption-to':
+      return player.hand.length >= effect.target ? -Infinity : (effect.target - player.hand.length) * 4
+    case 'none': return 5
+    default: return 10
+  }
+}
+
+function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState {
+  const pubOptions = getAvailablePublicWorkplaces(state, playerId)
+  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+  if (pubOptions.length === 0 && bldOptions.length === 0) return afterAction(state)
+
+  const player = getPlayer(state, playerId)
+
+  let bestScore = -Infinity
+  let bestPub: PublicWorkplace | null = null
+  let bestBld: OwnedBuilding | null = null
+
+  for (const wp of pubOptions) {
+    const sc = scoreEffect(wp.effect, player, state.household, state.round)
+    if (sc > bestScore) { bestScore = sc; bestPub = wp; bestBld = null }
+  }
+  for (const bld of bldOptions) {
+    const def = BUILDING_CARDS[bld.name]
+    if (!def) continue
+    const sc = scoreEffect(def.effect, player, state.household, state.round)
+    if (sc > bestScore) { bestScore = sc; bestBld = bld; bestPub = null }
+  }
+
+  // すべて -Infinity ならランダム
+  if (bestScore === -Infinity) return cpuTakeTurnRandom(state, playerId)
+
+  if (bestPub) return placeWorkerOnPublic(state, playerId, bestPub.id)
+  if (bestBld) return placeWorkerOnBuilding(state, playerId, bestBld.id)
+  return afterAction(state)
+}
+
+function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): GameState {
+  const pubOptions = getAvailablePublicWorkplaces(state, playerId)
+  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+  if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
+
+  const player = getPlayer(state, playerId)
+
+  let bestScore = -Infinity
+  let bestPub: PublicWorkplace | null = null
+  let bestBld: OwnedBuilding | null = null
+
+  for (const wp of pubOptions) {
+    const sc = scoreEffect(wp.effect, player, state.household, state.round)
+    if (sc > bestScore) { bestScore = sc; bestPub = wp; bestBld = null }
+  }
+  for (const bld of bldOptions) {
+    const def = BUILDING_CARDS[bld.name]
+    if (!def) continue
+    const sc = scoreEffect(def.effect, player, state.household, state.round)
+    if (sc > bestScore) { bestScore = sc; bestBld = bld; bestPub = null }
+  }
+
+  if (bestScore === -Infinity) return cpuTakeTurnRandomNoAuto(state, playerId)
+
+  if (bestPub) return placeWorkerOnPublic(state, playerId, bestPub.id, true)
+  if (bestBld) return placeWorkerOnBuilding(state, playerId, bestBld.id, true)
+  return afterHumanAction(state)
+}
+
+// ---- MCTS strategy ----
+
+function cpuTakeTurnMCTS(state: GameState, playerId: number): GameState {
+  const pubOptions = getAvailablePublicWorkplaces(state, playerId)
+  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+  if (pubOptions.length === 0 && bldOptions.length === 0) return afterAction(state)
+
+  const options: Array<{ type: 'pub'; id: string } | { type: 'bld'; id: string }> = [
+    ...pubOptions.map(w => ({ type: 'pub' as const, id: w.id })),
+    ...bldOptions.map(b => ({ type: 'bld' as const, id: b.id })),
+  ]
+
+  // N個のシード事前生成
+  const seeds: number[] = []
+  let seedGen = state
+  for (let i = 0; i < MCTS_SIMULATIONS; i++) {
+    let r: number
+    ;[seedGen, r] = rngNext(seedGen)
+    seeds.push(Math.floor(r * 0xFFFFFFFF))
+  }
+
+  // 全プレイヤーをランダムCPUにした simState を作る
+  const makeSimState = (seed: number): GameState => ({
+    ...state,
+    _rngState: seed,
+    players: state.players.map(p => ({ ...p, isCpu: true, cpuStrategy: 'random' as const })),
+  })
+
+  let bestScore = -Infinity
+  let bestOption = options[0]
+
+  for (const opt of options) {
+    let totalScore = 0
+    for (const seed of seeds) {
+      let sim = makeSimState(seed)
+      if (opt.type === 'pub') {
+        sim = placeWorkerOnPublic(sim, playerId, opt.id)
+      } else {
+        sim = placeWorkerOnBuilding(sim, playerId, opt.id)
+      }
+      // isCpu=true の cascade により game-over まで自動完走
+      const scores = calculateScores(sim)
+      totalScore += scores.find(sc => sc.playerId === playerId)?.total ?? 0
+    }
+    const avg = totalScore / MCTS_SIMULATIONS
+    if (avg > bestScore) { bestScore = avg; bestOption = opt }
+  }
+
+  // 実際の state で適用
+  if (bestOption.type === 'pub') return placeWorkerOnPublic(state, playerId, bestOption.id)
+  return placeWorkerOnBuilding(state, playerId, bestOption.id)
+}
+
+function cpuTakeTurnMCTSNoAuto(state: GameState, playerId: number): GameState {
+  const pubOptions = getAvailablePublicWorkplaces(state, playerId)
+  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+  if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
+
+  const options: Array<{ type: 'pub'; id: string } | { type: 'bld'; id: string }> = [
+    ...pubOptions.map(w => ({ type: 'pub' as const, id: w.id })),
+    ...bldOptions.map(b => ({ type: 'bld' as const, id: b.id })),
+  ]
+
+  const seeds: number[] = []
+  let seedGen = state
+  for (let i = 0; i < MCTS_SIMULATIONS; i++) {
+    let r: number
+    ;[seedGen, r] = rngNext(seedGen)
+    seeds.push(Math.floor(r * 0xFFFFFFFF))
+  }
+
+  const makeSimState = (seed: number): GameState => ({
+    ...state,
+    _rngState: seed,
+    players: state.players.map(p => ({ ...p, isCpu: true, cpuStrategy: 'random' as const })),
+  })
+
+  let bestScore = -Infinity
+  let bestOption = options[0]
+
+  for (const opt of options) {
+    let totalScore = 0
+    for (const seed of seeds) {
+      let sim = makeSimState(seed)
+      if (opt.type === 'pub') {
+        sim = placeWorkerOnPublic(sim, playerId, opt.id)
+      } else {
+        sim = placeWorkerOnBuilding(sim, playerId, opt.id)
+      }
+      const scores = calculateScores(sim)
+      totalScore += scores.find(sc => sc.playerId === playerId)?.total ?? 0
+    }
+    const avg = totalScore / MCTS_SIMULATIONS
+    if (avg > bestScore) { bestScore = avg; bestOption = opt }
+  }
+
+  if (bestOption.type === 'pub') return placeWorkerOnPublic(state, playerId, bestOption.id, true)
+  return placeWorkerOnBuilding(state, playerId, bestOption.id, true)
+}
+
+// ---- Disruptive strategy ----
+
+function cpuTakeTurnDisruptive(state: GameState, playerId: number): GameState {
+  const chosen = pickDisruptive(state, playerId)
+  if (!chosen) return afterAction(state)
+  if (chosen.type === 'pub') return placeWorkerOnPublic(state, playerId, chosen.id)
+  return placeWorkerOnBuilding(state, playerId, chosen.id)
+}
+
+function cpuTakeTurnDisruptiveNoAuto(state: GameState, playerId: number): GameState {
+  const chosen = pickDisruptive(state, playerId)
+  if (!chosen) return afterHumanAction(state)
+  if (chosen.type === 'pub') return placeWorkerOnPublic(state, playerId, chosen.id, true)
+  return placeWorkerOnBuilding(state, playerId, chosen.id, true)
+}
+
+function pickDisruptive(state: GameState, playerId: number): { type: 'pub' | 'bld'; id: string } | null {
+  const pubOptions = getAvailablePublicWorkplaces(state, playerId)
+  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+  if (pubOptions.length === 0 && bldOptions.length === 0) return null
+
+  // 1. 売られた建物（上位2コストグループ）
+  const soldOptions = pubOptions.filter(wp => wp.id.startsWith('wp-sold-'))
+  if (soldOptions.length > 0) {
+    const uniqueCosts = [...new Set(
+      soldOptions.map(wp => BUILDING_CARDS[wp.name]?.cost ?? 0)
+    )].sort((a, b) => b - a).slice(0, 2)
+
+    const topGroup = soldOptions.filter(wp => uniqueCosts.includes(BUILDING_CARDS[wp.name]?.cost ?? -1))
+    if (topGroup.length > 0) {
+      const best = topGroup.reduce((a, b) =>
+        (BUILDING_CARDS[a.name]?.assetValue ?? 0) >= (BUILDING_CARDS[b.name]?.assetValue ?? 0) ? a : b
+      )
+      return { type: 'pub', id: best.id }
+    }
+  }
+
+  // 2. 今ラウンドの新施設
+  const currentRoundNames = new Set(ROUND_CARDS[state.round - 1]?.workplaces.map(w => w.name) ?? [])
+  const roundOptions = pubOptions.filter(wp => currentRoundNames.has(wp.name))
+  if (roundOptions.length > 0) {
+    // discard-gain の gain 最大を優先
+    const best = roundOptions.reduce((a, b) => {
+      const aGain = a.effect.kind === 'discard-gain' ? a.effect.gain : 0
+      const bGain = b.effect.kind === 'discard-gain' ? b.effect.gain : 0
+      return aGain >= bGain ? a : b
+    })
+    return { type: 'pub', id: best.id }
+  }
+
+  // 3. ランダム（pub/bldから）
+  const allOptions: Array<{ type: 'pub' | 'bld'; id: string }> = [
+    ...pubOptions.map(w => ({ type: 'pub' as const, id: w.id })),
+    ...bldOptions.map(b => ({ type: 'bld' as const, id: b.id })),
+  ]
+  if (allOptions.length === 0) return null
+  // 疑似ランダム（RNG使わず先頭）
+  return allOptions[0]
 }
 
 export function cpuOneTurnStep(state: GameState): GameState {
