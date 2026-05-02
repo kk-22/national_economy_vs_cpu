@@ -505,6 +505,7 @@
 .gameover-card tr.winner td { background: #eff6ff; font-weight: 700; }
 .winner-msg { font-size: 16px; font-weight: 700; color: #1d4ed8; margin-bottom: 16px; }
 .gameover-actions { display: flex; gap: 8px; }
+.result-strategy { font-size: 10px; font-weight: 400; color: #94a3b8; }
 
 /* ===== Mobile drawer ===== */
 .drawer-overlay {

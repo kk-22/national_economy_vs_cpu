@@ -111,9 +111,16 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
   let target: BuildingCard & { kind: 'building' }
   let s = state
   if (strategy === 'greedy') {
-    target = buildable.reduce((best, c) =>
-      (BUILDING_CARDS[c.name]?.cost ?? 0) >= (BUILDING_CARDS[best.name]?.cost ?? 0) ? c : best
-    )
+    // ラウンド8-9は残りラウンドが少なくコスト効果より得点価値が重要
+    if (state.round >= 8) {
+      target = buildable.reduce((best, c) =>
+        (BUILDING_CARDS[c.name]?.assetValue ?? 0) >= (BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
+      )
+    } else {
+      target = buildable.reduce((best, c) =>
+        (BUILDING_CARDS[c.name]?.cost ?? 0) >= (BUILDING_CARDS[best.name]?.cost ?? 0) ? c : best
+      )
+    }
   } else if (strategy === 'disruptive') {
     target = buildable.reduce((best, c) =>
       (BUILDING_CARDS[c.name]?.cost ?? 0) <= (BUILDING_CARDS[best.name]?.cost ?? 0) ? c : best

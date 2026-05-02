@@ -206,12 +206,18 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
     case 'build-farm-free': return 70
     case 'fill-workers': {
       if (workerCount >= effect.target) return -Infinity
-      return effect.target >= 5 ? 100 : 80
+      if (round >= 7) return -Infinity
+      const fillBase = effect.target >= 5 ? 100 : 80
+      return fillBase * (1 - (round - 1) / 9)
     }
     case 'add-worker': {
       const maxWorkers = 2 + player.ownedBuildings.filter(b => BUILDING_CARDS[b.name]?.effect.kind === 'p-worker-limit').length
       if (workerCount >= maxWorkers) return -Infinity
-      if (!effect.immediate) return workerCount <= 2 ? 90 : 50
+      if (!effect.immediate) {
+        if (round >= 7) return -Infinity
+        const addBase = workerCount <= 2 ? 90 : 50
+        return addBase * (1 - (round - 1) / 9)
+      }
       return 70
     }
     case 'reveal-pick': return player.hand.length < 3 ? 70 : 55
@@ -319,11 +325,15 @@ function cpuTakeTurnMCTS(state: GameState, playerId: number): GameState {
     seeds.push(Math.floor(r * 0xFFFFFFFF))
   }
 
-  // 全プレイヤーをランダムCPUにした simState を作る
+  // シミュレーション用: MCTS→greedy にキャップ、人間→greedy に変換
   const makeSimState = (seed: number): GameState => ({
     ...state,
     _rngState: seed,
-    players: state.players.map(p => ({ ...p, isCpu: true, cpuStrategy: 'random' as const })),
+    players: state.players.map(p => ({
+      ...p,
+      isCpu: true,
+      cpuStrategy: (p.cpuStrategy === 'mcts' || !p.isCpu) ? 'greedy' as const : p.cpuStrategy,
+    })),
   })
 
   let bestScore = -Infinity
@@ -372,7 +382,11 @@ function cpuTakeTurnMCTSNoAuto(state: GameState, playerId: number): GameState {
   const makeSimState = (seed: number): GameState => ({
     ...state,
     _rngState: seed,
-    players: state.players.map(p => ({ ...p, isCpu: true, cpuStrategy: 'random' as const })),
+    players: state.players.map(p => ({
+      ...p,
+      isCpu: true,
+      cpuStrategy: (p.cpuStrategy === 'mcts' || !p.isCpu) ? 'greedy' as const : p.cpuStrategy,
+    })),
   })
 
   let bestScore = -Infinity

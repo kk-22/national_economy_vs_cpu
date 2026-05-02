@@ -223,6 +223,15 @@ function replayGame() {
 
 const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
 
+function strategyLabel(strategy: CpuStrategy): string {
+  switch (strategy) {
+    case 'random':     return 'ランダム'
+    case 'greedy':     return '効率重視'
+    case 'mcts':       return 'モンテカルロ'
+    case 'disruptive': return 'お邪魔'
+  }
+}
+
 function cardLabel(card: { kind: string; name?: string }) {
   return card.kind === 'building' ? card.name! : '消費財'
 }
@@ -333,7 +342,7 @@ function cardTooltip(name: string): string {
           </label>
           <label class="radio-item">
             <input type="radio" v-model="setupCpuStrategies[i - 1]" value="greedy" />
-            <span>貪欲法</span>
+            <span>効率重視</span>
           </label>
           <label class="radio-item">
             <input type="radio" v-model="setupCpuStrategies[i - 1]" value="mcts" />
@@ -341,7 +350,7 @@ function cardTooltip(name: string): string {
           </label>
           <label class="radio-item">
             <input type="radio" v-model="setupCpuStrategies[i - 1]" value="disruptive" />
-            <span>邪魔</span>
+            <span>お邪魔</span>
           </label>
         </div>
       </div>
@@ -368,7 +377,12 @@ function cardTooltip(name: string): string {
         <tbody>
           <tr v-for="sc in scores" :key="sc.playerId"
             :class="{ winner: sc.playerId === scores!.reduce((a,b) => a.total > b.total ? a : b).playerId }">
-            <td>{{ game!.players[sc.playerId].name }}</td>
+            <td>
+              {{ game!.players[sc.playerId].name }}
+              <template v-if="game!.players[sc.playerId].isCpu">
+                <br /><span class="result-strategy">{{ strategyLabel(game!.players[sc.playerId].cpuStrategy) }}</span>
+              </template>
+            </td>
             <td>${{ sc.buildingValue }}</td>
             <td>${{ sc.money }}</td>
             <td>+{{ sc.bonuses }}</td>
