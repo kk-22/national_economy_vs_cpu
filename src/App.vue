@@ -223,6 +223,20 @@ function replayGame() {
 
 const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
 
+const bulkStrategy = computed({
+  get(): CpuStrategy | '' {
+    const count = setupCpu.value === 4 ? 4 : setupCpu.value
+    const strategies = setupCpuStrategies.value.slice(0, count)
+    const first = strategies[0]
+    return strategies.every(s => s === first) ? first : ''
+  },
+  set(val: CpuStrategy | '') {
+    if (!val) return
+    const count = setupCpu.value === 4 ? 4 : setupCpu.value
+    for (let i = 0; i < count; i++) setupCpuStrategies.value[i] = val
+  },
+})
+
 function strategyLabel(strategy: CpuStrategy): string {
   switch (strategy) {
     case 'random':     return 'ランダム'
@@ -333,6 +347,27 @@ function cardTooltip(name: string): string {
         </div>
       </template>
       <div class="radio-group-label">CPUの戦略</div>
+      <div class="cpu-strategy-row">
+        <span class="cpu-strategy-label">一括：</span>
+        <div class="radio-group radio-group--horizontal">
+          <label class="radio-item">
+            <input type="radio" v-model="bulkStrategy" value="random" />
+            <span>ランダム</span>
+          </label>
+          <label class="radio-item">
+            <input type="radio" v-model="bulkStrategy" value="greedy" />
+            <span>効率重視</span>
+          </label>
+          <label class="radio-item">
+            <input type="radio" v-model="bulkStrategy" value="mcts" />
+            <span>モンテカルロ</span>
+          </label>
+          <label class="radio-item">
+            <input type="radio" v-model="bulkStrategy" value="disruptive" />
+            <span>お邪魔</span>
+          </label>
+        </div>
+      </div>
       <div v-for="i in (setupCpu === 4 ? 4 : setupCpu)" :key="i" class="cpu-strategy-row">
         <span class="cpu-strategy-label">CPU {{ i }}：</span>
         <div class="radio-group radio-group--horizontal">

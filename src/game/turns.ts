@@ -1,5 +1,5 @@
 import { BUILDING_CARDS, ROUND_CARDS } from './constants'
-import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, rngNext } from './primitives'
+import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, rngNext, getMaxWorkers } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { constructBuilding } from './build'
 import { applyEffect } from './effects'
@@ -191,39 +191,53 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
   switch (effect.kind) {
     case 'build-double': return 110
     case 'build': {
-      const maxCost = player.hand
-        .filter(c => c.kind === 'building')
-        .reduce((max, c) => {
-          const def = BUILDING_CARDS[(c as BuildingCard).name]
-          const cost = Math.max(0, (def?.cost ?? 0) - effect.discount)
-          return player.hand.length - 1 >= cost ? Math.max(max, def?.cost ?? 0) : max
-        }, -1)
+      // 賃金不足なら cpuBuild がスキップするため選択しない
+      if (player.money < expectedWage) return -Infinity
+      const availableAfterBuild = player.workers.filter(w => !w.isTraining && w.placedAt === null).length - 1
+      // cpuBuild の greedy フィルタと同じ条件で建設可能カードを探す
+      let maxCost = -1
+      for (const c of player.hand) {
+        if (c.kind !== 'building') continue
+        const def = BUILDING_CARDS[(c as BuildingCard).name]
+        if (!def) continue
+        const discountedCost = Math.max(0, def.cost - effect.discount)
+        if (player.hand.length - 1 < discountedCost) continue
+        if (def.effect.kind.startsWith('p-')) {
+          if (round < 8 || def.assetValue <= 0) continue
+        } else if (availableAfterBuild < 1) {
+          if (def.assetValue <= (discountedCost + 1) * 6) continue
+        }
+        maxCost = Math.max(maxCost, def.cost)
+      }
       if (maxCost < 0) return -Infinity
-      const base = 85 + maxCost * 3
-      // 賃金不足時は優先度を大幅に下げる
-      return player.money < expectedWage ? base * 0.3 : base
+      return 85 + maxCost * 3
     }
     case 'build-farm-free': return 70
     case 'fill-workers': {
       if (workerCount >= effect.target) return -Infinity
       if (round >= 7) return -Infinity
-      const fillBase = effect.target >= 5 ? 100 : 80
+      // 労働者が少ないほど増員価値が高い（2人時は最優先・pubBonus込みでビルド系に勝つ）
+      const fillBase = workerCount <= 2 ? 135 : (workerCount <= 3 ? 100 : 80)
       return fillBase * (1 - (round - 1) / 9)
     }
     case 'add-worker': {
-      const maxWorkers = 2 + player.ownedBuildings.filter(b => BUILDING_CARDS[b.name]?.effect.kind === 'p-worker-limit').length
-      if (workerCount >= maxWorkers) return -Infinity
+      if (workerCount >= getMaxWorkers(player)) return -Infinity
       if (!effect.immediate) {
         if (round >= 7) return -Infinity
-        const addBase = workerCount <= 2 ? 90 : 50
+        // 2人→3人は最優先、4人・5人は段階的に下げる
+        const addBase = workerCount <= 2 ? 130 : (workerCount <= 3 ? 40 : 18)
         return addBase * (1 - (round - 1) / 9)
       }
       return 70
     }
-    case 'reveal-pick': return player.hand.length < 3 ? 70 : 55
+    case 'reveal-pick': {
+      if (round <= 3) return player.hand.length < 5 ? 85 : 65
+      return player.hand.length < 3 ? 70 : 55
+    }
     case 'discard-draw': {
       if (player.hand.length < effect.discard) return -Infinity
-      return effect.draw * 10
+      const ddWorkerBonus = (player.workers.length - 1) * 2
+      return effect.draw * (8 + ddWorkerBonus)
     }
     case 'discard-gain': {
       if (player.hand.length < effect.discard || household < effect.gain) return -Infinity
@@ -233,8 +247,19 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
     case 'gain-supply':
       if (household < effect.n) return -Infinity
       return effect.n * 3
-    case 'draw': return effect.n * 12
-    case 'draw-if-empty': return player.hand.length === 0 ? effect.empty * 12 : effect.normal * 12
+    case 'draw': {
+      const drawWorkerBonus = (player.workers.length - 1) * 2
+      const drawBase = effect.n * (7 + drawWorkerBonus)
+      const availableNow = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
+      const hasDrawFactory = player.ownedBuildings.some(b => BUILDING_CARDS[b.name]?.effect.kind === 'discard-draw')
+      return (hasDrawFactory && availableNow >= 3) ? drawBase * 1.4 : drawBase
+    }
+    case 'draw-if-empty': {
+      const diWorkerBonus = (player.workers.length - 1) * 2
+      return player.hand.length === 0
+        ? effect.empty * (10 + diWorkerBonus)
+        : effect.normal * (10 + diWorkerBonus)
+    }
     case 'draw-become-start': return 30
     case 'slash-burn': return 25
     case 'draw-consumption': return effect.n * 4
@@ -251,13 +276,15 @@ function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState {
   if (pubOptions.length === 0 && bldOptions.length === 0) return afterAction(state)
 
   const player = getPlayer(state, playerId)
+  const availableWorkers = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
+  const pubBonus = availableWorkers >= 2 ? 1.3 : 1.0
 
   let bestScore = -Infinity
   let bestPub: PublicWorkplace | null = null
   let bestBld: OwnedBuilding | null = null
 
   for (const wp of pubOptions) {
-    const sc = scoreEffect(wp.effect, player, state.household, state.round)
+    const sc = scoreEffect(wp.effect, player, state.household, state.round) * pubBonus
     if (sc > bestScore) { bestScore = sc; bestPub = wp; bestBld = null }
   }
   for (const bld of bldOptions) {
@@ -281,13 +308,15 @@ function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): GameState 
   if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
 
   const player = getPlayer(state, playerId)
+  const availableWorkers = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
+  const pubBonus = availableWorkers >= 2 ? 1.3 : 1.0
 
   let bestScore = -Infinity
   let bestPub: PublicWorkplace | null = null
   let bestBld: OwnedBuilding | null = null
 
   for (const wp of pubOptions) {
-    const sc = scoreEffect(wp.effect, player, state.household, state.round)
+    const sc = scoreEffect(wp.effect, player, state.household, state.round) * pubBonus
     if (sc > bestScore) { bestScore = sc; bestPub = wp; bestBld = null }
   }
   for (const bld of bldOptions) {

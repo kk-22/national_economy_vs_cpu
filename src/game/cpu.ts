@@ -92,7 +92,7 @@ export function cpuDiscardGain(state: GameState, playerId: number, discard: numb
 
 export function cpuBuild(state: GameState, playerId: number, discount: number, drawAfter: number, strategy: CpuStrategy = 'random'): GameState {
   const player = getPlayer(state, playerId)
-  const buildable = player.hand.filter(c => {
+  let buildable = player.hand.filter(c => {
     if (c.kind !== 'building') return false
     const def = BUILDING_CARDS[c.name]!
     const cost = Math.max(0, def.cost - discount)
@@ -101,11 +101,24 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
 
   if (buildable.length === 0) return state
 
-  // greedy: 賃金が払えない場合は建設をスキップ
   if (strategy === 'greedy') {
     const wage = ROUND_CARDS[state.round - 1]?.wage ?? 0
     const expectedWage = player.workers.length * wage
     if (player.money < expectedWage) return state
+    const availableAfter = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
+    // 建てて即売り損パターンを除外
+    buildable = buildable.filter(c => {
+      const def = BUILDING_CARDS[c.name]!
+      if (def.effect.kind.startsWith('p-')) {
+        // パッシブ効果: R8以降で得点があれば建設対象
+        return state.round >= 8 && def.assetValue > 0
+      }
+      // アクティブ効果: 使えるワーカーあり、または売却しても採算が取れる
+      if (availableAfter >= 1) return true
+      const cardCost = Math.max(0, def.cost - discount) + 1
+      return def.assetValue > cardCost * 6
+    })
+    if (buildable.length === 0) return state
   }
 
   let target: BuildingCard & { kind: 'building' }
