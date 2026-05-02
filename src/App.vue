@@ -24,11 +24,61 @@ const setupPlayerOrder = ref(1)  // 0=ランダム, 1〜4=手番
 const setupCpuStrategies = ref<CpuStrategy[]>(['random', 'random', 'random', 'random'])
 const menuOpen = ref(false)
 const skipAnim = ref(false)
+const lastStartedDebug = ref(false)
+
+const VALID_STRATEGIES: CpuStrategy[] = ['random', 'greedy', 'mcts', 'disruptive']
+
+onMounted(() => {
+  const cpu = Number(localStorage.getItem('ne-setup-cpu'))
+  if ([1, 2, 3, 4].includes(cpu)) setupCpu.value = cpu
+
+  const order = Number(localStorage.getItem('ne-setup-order'))
+  if (order >= 0 && order <= 4) setupPlayerOrder.value = order
+
+  try {
+    const raw = localStorage.getItem('ne-setup-strategies')
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length === 4 && parsed.every((s: unknown) => VALID_STRATEGIES.includes(s as CpuStrategy)))
+        setupCpuStrategies.value = parsed
+    }
+  } catch { /* ignore */ }
+
+  skipAnim.value = localStorage.getItem('ne-setup-skip-anim') === 'true'
+  lastStartedDebug.value = localStorage.getItem('ne-setup-debug') === 'true'
+
+  // 読み込んだ設定でゲームを開始
+  if (lastStartedDebug.value) {
+    startDebugGame(Math.min(setupCpu.value, 3))
+  } else if (setupCpu.value === 4) {
+    startGame({ humanName: '', cpuCount: 4, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, 4) })
+  } else {
+    startGame({
+      humanName: 'プレイヤー',
+      cpuCount: setupCpu.value,
+      playerOrder: setupPlayerOrder.value,
+      cpuStrategies: setupCpuStrategies.value.slice(0, setupCpu.value),
+    })
+  }
+})
 
 watch(setupCpu, (newVal) => {
+  localStorage.setItem('ne-setup-cpu', String(newVal))
   if (newVal === 4) return
   const max = newVal + 1
   if (setupPlayerOrder.value > max) setupPlayerOrder.value = max
+})
+
+watch(setupPlayerOrder, (newVal) => {
+  localStorage.setItem('ne-setup-order', String(newVal))
+})
+
+watch(setupCpuStrategies, (newVal) => {
+  localStorage.setItem('ne-setup-strategies', JSON.stringify(newVal))
+}, { deep: true })
+
+watch(skipAnim, (newVal) => {
+  localStorage.setItem('ne-setup-skip-anim', String(newVal))
 })
 
 // ---- アニメーション管理 ----
@@ -186,12 +236,11 @@ function onTipLeave() {
   tooltipState.value = null
 }
 
-onMounted(() => {
-  startGame({ humanName: 'プレイヤー', cpuCount: 3 })
-})
 
 function openSetup() { showSetup.value = true }
 function beginGame() {
+  localStorage.setItem('ne-setup-debug', 'false')
+  lastStartedDebug.value = false
   if (setupCpu.value === 4) {
     startGame({ humanName: '', cpuCount: 4, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, 4) })
   } else {
@@ -205,7 +254,8 @@ function beginGame() {
   showSetup.value = false
 }
 function beginDebugGame() {
-  // デバッグは常にプレイヤーあり（CPU最大3人）
+  localStorage.setItem('ne-setup-debug', 'true')
+  lastStartedDebug.value = true
   startDebugGame(Math.min(setupCpu.value, 3))
   showSetup.value = false
 }
