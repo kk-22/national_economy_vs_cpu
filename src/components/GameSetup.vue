@@ -57,7 +57,10 @@ function strategyLabel(strategy: CpuStrategy): string {
 <template>
   <div class="modal-overlay">
     <div class="modal">
-      <h2>ゲーム設定</h2>
+      <div class="modal-header">
+        <h2>ゲーム設定</h2>
+        <button v-if="hasGame" class="modal-close-btn" @click="emit('cancel')">✕</button>
+      </div>
 
       <div class="radio-group-label">人数</div>
       <div class="radio-group radio-group--horizontal">
@@ -112,8 +115,7 @@ function strategyLabel(strategy: CpuStrategy): string {
       </div>
 
       <div class="modal-actions">
-        <button class="btn-primary" @click="emit('begin')">ゲーム開始</button>
-        <button v-if="hasGame" class="btn-secondary" @click="emit('cancel')">キャンセル</button>
+        <button class="btn-primary" @click="emit('begin')">新しく始める</button>
         <div class="debug-group">
           <label class="check-item">
             <input type="checkbox" :checked="skipAnim" @change="emit('update:skipAnim', ($event.target as HTMLInputElement).checked)" />

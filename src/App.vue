@@ -21,6 +21,7 @@ const setupHasPlayer = ref(true) // 人間プレイヤーあり
 const setupPlayerOrder = ref(1)
 const setupCpuStrategies = ref<CpuStrategy[]>(['random', 'random', 'random', 'random'])
 const menuOpen = ref(false)
+const showSummary = ref(false)
 const skipAnim = ref(false)
 const lastStartedDebug = ref(false)
 
@@ -190,7 +191,36 @@ function onTipEnter(e: MouseEvent, text: string) {
 function onTipLeave() { tooltipState.value = null }
 
 // ---- ゲーム操作 ----
-function openSetup() { showSetup.value = true }
+let setupSnapshot: {
+  total: number
+  hasPlayer: boolean
+  playerOrder: number
+  cpuStrategies: CpuStrategy[]
+  skipAnim: boolean
+} | null = null
+
+function openSetup() {
+  setupSnapshot = {
+    total: setupTotal.value,
+    hasPlayer: setupHasPlayer.value,
+    playerOrder: setupPlayerOrder.value,
+    cpuStrategies: [...setupCpuStrategies.value],
+    skipAnim: skipAnim.value,
+  }
+  showSetup.value = true
+}
+
+function cancelSetup() {
+  if (setupSnapshot) {
+    setupTotal.value = setupSnapshot.total
+    setupHasPlayer.value = setupSnapshot.hasPlayer
+    setupPlayerOrder.value = setupSnapshot.playerOrder
+    setupCpuStrategies.value = [...setupSnapshot.cpuStrategies]
+    skipAnim.value = setupSnapshot.skipAnim
+    setupSnapshot = null
+  }
+  showSetup.value = false
+}
 
 // cpuOnly ゲーム開始後、watch が old=null で early return するため手動で最初の CPU を起動する
 function scheduleInitialCpuRun() {
@@ -252,7 +282,7 @@ function replayGame() {
     :hasGame="!!game"
     @begin="beginGame"
     @beginDebug="beginDebugGame"
-    @cancel="showSetup = false"
+    @cancel="cancelSetup"
   />
 
   <template v-else-if="game">
@@ -264,6 +294,7 @@ function replayGame() {
       :tipLeave="onTipLeave"
       @menuOpen="menuOpen = true"
       @openSetup="openSetup"
+      @openSummary="showSummary = true"
     />
     <GameResult v-if="game.phase === 'game-over'"
       :game="game"
@@ -298,11 +329,37 @@ function replayGame() {
           <span class="hbadge">ラウンド {{ game.round }}/9</span>
           <span class="hbadge">賃金 ${{ currentWage }}</span>
           <span class="hbadge">家計 ${{ game.household }}</span>
-          <button class="btn-restart" @click="openSetup(); menuOpen = false">作り直す</button>
+          <button class="btn-restart" @click="openSetup(); menuOpen = false">ゲーム設定</button>
+          <button class="btn-restart" @click="showSummary = true; menuOpen = false">サマリー</button>
         </div>
         <div class="drawer-log-label">ログ</div>
         <div v-for="(msg, i) in [...game.log].reverse().slice(0, 80)" :key="i" class="drawer-log-line">{{ msg }}</div>
       </div>
     </template>
+
+    <div v-if="showSummary" class="modal-overlay" @click.self="showSummary = false">
+      <div class="modal summary-modal">
+        <div class="modal-header">
+          <h2>ラウンドサマリー</h2>
+          <button class="modal-close-btn" @click="showSummary = false">✕</button>
+        </div>
+        <table class="summary-table">
+          <thead>
+            <tr><th>ラウンド</th><th>賃金</th><th>建物</th><th>機能</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td>$2</td><td>-</td><td>-</td></tr>
+            <tr><td>2</td><td>$2</td><td>露店</td><td>1枚捨てて家計から$6獲得</td></tr>
+            <tr><td>3</td><td>$3</td><td>市場</td><td>2枚捨てて家計から$12獲得</td></tr>
+            <tr><td>4</td><td>$3</td><td>高等学校</td><td>労働者を4人に増やす</td></tr>
+            <tr><td>5</td><td>$3</td><td>スーパーマーケット</td><td>3枚捨てて家計から$18獲得</td></tr>
+            <tr><td>6</td><td>$4</td><td>大学</td><td>労働者を5人に増やす</td></tr>
+            <tr><td>7</td><td>$4</td><td>百貨店</td><td>4枚捨てて家計から$24獲得</td></tr>
+            <tr><td>8</td><td>$5</td><td>専門学校</td><td>すぐ使える労働者を1人追加</td></tr>
+            <tr><td>9</td><td>$5</td><td>万博</td><td>5枚捨てて家計から$30獲得</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </Teleport>
 </template>
