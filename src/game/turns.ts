@@ -191,7 +191,7 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
   switch (effect.kind) {
     case 'build-double': return 110
     case 'build': {
-      // 労働者が2人以上残っていれば賃金チェックを免除（建設を優先させる）
+      // 労働者1人しか残っておらず賃金も払えない場合のみ建設を諦める
       if (availWorkers < 2 && player.money < expectedWage) return -Infinity
       const availableAfterBuild = player.workers.filter(w => !w.isTraining && w.placedAt === null).length - 1
       // cpuBuild の greedy フィルタと同じ条件で建設可能カードを探す
@@ -210,12 +210,14 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
         maxCost = Math.max(maxCost, def.cost)
       }
       if (maxCost < 0) return -Infinity
-      return 85 + maxCost * 3
+      return (85 + maxCost * 3) * (availWorkers >= 2 ? 1.2 : 1.0)
     }
     case 'build-farm-free': return 70
     case 'fill-workers': {
       if (workerCount >= effect.target) return -Infinity
       if (round >= 7) return -Infinity
+      // 5人目になる場合のみ賃金持続性チェック
+      if (effect.target >= 5 && (player.unpaidWages > 0 || player.money < effect.target * wage)) return -Infinity
       // 労働者が少ないほど増員価値が高い（2人時は最優先・pubBonus込みでビルド系に勝つ）
       const fillBase = workerCount <= 2 ? 135 : (workerCount <= 3 ? 100 : 80)
       return fillBase * (1 - (round - 1) / 9)
@@ -224,10 +226,14 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
       if (workerCount >= getMaxWorkers(player)) return -Infinity
       if (!effect.immediate) {
         if (round >= 7) return -Infinity
+        // 5人目になる場合のみ賃金持続性チェック
+        if (workerCount + 1 >= 5 && (player.unpaidWages > 0 || player.money < (workerCount + 1) * wage)) return -Infinity
         // 2人→3人は最優先、4人・5人は段階的に下げる
         const addBase = workerCount <= 2 ? 130 : (workerCount <= 3 ? 40 : 18)
         return addBase * (1 - (round - 1) / 9)
       }
+      // immediate add-worker（専門学校）: 5人目の場合のみ賃金チェック
+      if (workerCount + 1 >= 5 && (player.unpaidWages > 0 || player.money < (workerCount + 1) * wage)) return -Infinity
       return 70
     }
     case 'reveal-pick': {

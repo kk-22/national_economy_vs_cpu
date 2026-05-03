@@ -1,4 +1,4 @@
-import { BUILDING_CARDS, ROUND_CARDS } from './constants'
+import { BUILDING_CARDS } from './constants'
 import { rngNext, shuffle, updatePlayer, getPlayer, drawCards } from './primitives'
 import { constructBuilding } from './build'
 import type { GameState, HandCard, BuildingCard, CpuStrategy } from './types'
@@ -102,9 +102,6 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
   if (buildable.length === 0) return state
 
   if (strategy === 'greedy') {
-    const wage = ROUND_CARDS[state.round - 1]?.wage ?? 0
-    const expectedWage = player.workers.length * wage
-    if (player.money < expectedWage) return state
     const availableAfter = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
     // 建てて即売り損パターンを除外
     buildable = buildable.filter(c => {
