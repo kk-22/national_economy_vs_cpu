@@ -78,7 +78,10 @@ export function createGame(config: GameConfig): GameState {
 
   state = flipRoundCard(state, 1, playerCount)
   state = addLog(state, 'ゲーム開始！')
-  state = processCpuTurns(state)
+  // cpuOnly の場合は watch/setTimeout 経由で CPU を動かすためここでは実行しない
+  if (!config.cpuOnly) {
+    state = processCpuTurns(state)
+  }
 
   return state
 }

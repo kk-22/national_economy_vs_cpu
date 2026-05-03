@@ -5,7 +5,7 @@ import { calculateScores } from '../game/round'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from '../game/availability'
 import {
   placeWorkerOnPublic, placeWorkerOnBuilding,
-  processCpuTurns, cpuOneTurnStep, skipEmptyPlayerTurn,
+  cpuOneTurnStep, skipEmptyPlayerTurn,
   selectFarmBuildTarget, confirmBuildPayment, confirmDoublePayment,
   confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard,
 } from '../game/turns'
@@ -15,6 +15,7 @@ import {
   getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards,
 } from '../game/build'
 import { toggleDiscardSelection, cancelDiscardChoice, toggleHandLimitSelection } from '../game/resolution'
+import { availableWorkers } from '../game/primitives'
 import { BUILDING_CARDS, ROUND_CARDS } from '../game/constants'
 import { GameHistory } from '../game/history'
 import type { HistoryEntry } from '../game/history'
@@ -47,13 +48,29 @@ export function useGame() {
     state.game = skipEmptyPlayerTurn(state.game)
   }
 
-  // バッチ実行（スキップモード用）
+  // バッチ実行（スキップモード用）— 1ステップずつ history に記録する
   function runCpuTurns() {
     if (!state.game || state.game.phase !== 'placement') return
-    if (state.game.pendingAction) return  // 保留アクション中は実行しない
-    const current = state.game.players[state.game.currentPlayerIndex]
-    if (!current?.isCpu) return
-    state.game = processCpuTurns(state.game)
+    if (state.game.pendingAction) return
+    const firstCurrent = state.game.players[state.game.currentPlayerIndex]
+    if (!firstCurrent?.isCpu) return
+
+    let maxSteps = 500  // 安全上限
+    while (maxSteps-- > 0) {
+      if (!state.game || state.game.phase !== 'placement' || state.game.pendingAction) break
+      const curr = state.game.players[state.game.currentPlayerIndex]
+      if (!curr?.isCpu) break
+
+      // ワーカーを置くステップのみ history に記録（turn advance は記録しない）
+      if (availableWorkers(curr).length > 0) {
+        history.push(toRaw(state.game), { playerId: curr.id, targetId: '__cpu__', targetName: curr.name, timestamp: Date.now() })
+        historyVersion.value++
+      }
+
+      const next = cpuOneTurnStep(state.game)
+      if (next === state.game) break  // 変化なし（安全策）
+      state.game = next
+    }
   }
 
   // 1ステップ実行（アニメーションあり）
@@ -62,6 +79,8 @@ export function useGame() {
     if (state.game.pendingAction) return  // 保留アクション中は実行しない
     const current = state.game.players[state.game.currentPlayerIndex]
     if (!current?.isCpu) return
+    history.push(toRaw(state.game), { playerId: current.id, targetId: '__cpu__', targetName: current.name, timestamp: Date.now() })
+    historyVersion.value++
     state.game = cpuOneTurnStep(state.game)
   }
 
@@ -259,8 +278,28 @@ export function useGame() {
   }
 
   function undo() {
-    if (!state.game) return
-    const prev = history.undo(toRaw(state.game))
+    if (!state.game || !history.canUndo) return
+    const hasHumanPlayer = state.game.players.some(p => !p.isCpu)
+
+    let prev: GameState | null = null
+    let currentForUndo = toRaw(state.game)
+
+    if (!hasHumanPlayer) {
+      // CPU-only: 1ステップだけ戻る
+      prev = history.undo(currentForUndo)
+    } else {
+      // 人間あり: CPU アクションをスキップしつつ、直前の人間アクション自体も undo する
+      while (history.canUndo) {
+        const entry = history.actionLog[history.actionLog.length - 1]
+        const p = history.undo(currentForUndo)
+        if (!p) break
+        prev = p
+        currentForUndo = p
+        // 人間アクションを undo したら停止
+        if (!entry || entry.targetId !== '__cpu__') break
+      }
+    }
+
     if (!prev) return
     isUndoRedo.value = true
     historyVersion.value++
@@ -270,8 +309,30 @@ export function useGame() {
   }
 
   function redo() {
-    if (!state.game) return
-    const next = history.redo(toRaw(state.game))
+    if (!state.game || !history.canRedo) return
+    const hasHumanPlayer = state.game.players.some(p => !p.isCpu)
+
+    let next: GameState | null = null
+    let currentForRedo = toRaw(state.game)
+
+    if (!hasHumanPlayer) {
+      // CPU-only: 1ステップずつ進む
+      next = history.redo(currentForRedo)
+    } else {
+      // 人間あり: CPU アクションをスキップして次の人間アクション直前まで進む
+      while (history.canRedo) {
+        const p = history.redo(currentForRedo)
+        if (!p) break
+        next = p
+        currentForRedo = p
+        // ゲーム終了 or これ以上 redo なし → 終了
+        if (!history.canRedo || p.phase !== 'placement') break
+        // 次に行動するのが人間なら停止、CPU なら続けて redo
+        const nextPlayer = p.players[p.currentPlayerIndex]
+        if (!nextPlayer?.isCpu) break
+      }
+    }
+
     if (!next) return
     isUndoRedo.value = true
     historyVersion.value++

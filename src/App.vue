@@ -48,6 +48,7 @@ onMounted(() => {
     startDebugGame(Math.min(setupCpu.value, 3))
   } else if (setupCpu.value === 4) {
     startGame({ humanName: '', cpuCount: 4, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, 4) })
+    scheduleInitialCpuRun()
   } else {
     startGame({
       humanName: 'プレイヤー',
@@ -80,6 +81,7 @@ const ROUND_ANIM_DURATION = 1200
 
 const isAnimating = ref(false)
 let animEndTimer: ReturnType<typeof setTimeout> | null = null
+let cpuRevision = 0  // undo/redo 時にインクリメントしてスケジュール済みの CPU タイムアウトを無効化
 
 function setAnimating(totalMs: number) {
   if (skipAnim.value) return
@@ -114,6 +116,7 @@ watch(game, (newGame, oldGame) => {
   if (!newGame || !oldGame) return
   if (isUndoRedo.value) {
     isUndoRedo.value = false
+    cpuRevision++
     return
   }
 
@@ -149,7 +152,8 @@ watch(game, (newGame, oldGame) => {
         const cpuDelay = hasRoundChange
           ? ANIM_DURATION + 50 + ROUND_ANIM_DURATION + 100
           : ANIM_DURATION + 50
-        setTimeout(() => cpuStepAction(), cpuDelay)
+        const rev = cpuRevision
+        setTimeout(() => { if (cpuRevision === rev) cpuStepAction() }, cpuDelay)
       }
     } else {
       if (!newGame.pendingAction) {
@@ -159,7 +163,9 @@ watch(game, (newGame, oldGame) => {
           const delay = hasRoundChange
             ? ANIM_DURATION + 50 + ROUND_ANIM_DURATION + 150
             : ANIM_DURATION + 100
+          const rev = cpuRevision
           setTimeout(() => {
+            if (cpuRevision !== rev) return
             if (game.value?.currentPlayerIndex === snapIndex && game.value.phase === 'placement') {
               autoAdvanceIfStuck()
             }
@@ -181,11 +187,23 @@ function onTipLeave() { tooltipState.value = null }
 // ---- ゲーム操作 ----
 function openSetup() { showSetup.value = true }
 
+// cpuOnly ゲーム開始後、watch が old=null で early return するため手動で最初の CPU を起動する
+function scheduleInitialCpuRun() {
+  if (!game.value || game.value.phase !== 'placement') return
+  if (skipAnim.value) {
+    runCpuTurns()
+  } else {
+    const rev = cpuRevision
+    setTimeout(() => { if (cpuRevision === rev) cpuStepAction() }, 100)
+  }
+}
+
 function beginGame() {
   localStorage.setItem('ne-setup-debug', 'false')
   lastStartedDebug.value = false
   if (setupCpu.value === 4) {
     startGame({ humanName: '', cpuCount: 4, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, 4) })
+    scheduleInitialCpuRun()
   } else {
     startGame({
       humanName: 'プレイヤー',
@@ -211,6 +229,7 @@ function replayGame() {
   const isAllCpu = !game.value!.players.some(p => !p.isCpu)
   if (isAllCpu) {
     startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies })
+    scheduleInitialCpuRun()
   } else {
     startGame({ humanName: humanPlayer.value?.name ?? 'プレイヤー', cpuCount, cpuStrategies })
   }
