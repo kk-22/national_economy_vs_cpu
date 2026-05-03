@@ -91,7 +91,7 @@ function strategyLabel(strategy: CpuStrategy): string {
       </template>
 
       <div class="radio-group-label">CPUの戦略</div>
-      <div class="cpu-strategy-row">
+      <div v-if="setupCpu !== 1" class="cpu-strategy-row">
         <span class="cpu-strategy-label">一括：</span>
         <div class="radio-group radio-group--horizontal">
           <label v-for="s in (['random', 'greedy', 'mcts', 'disruptive'] as CpuStrategy[])" :key="s" class="radio-item">
