@@ -183,7 +183,7 @@ function cpuTakeTurnRandomNoAuto(state: GameState, playerId: number): GameState 
 
 // ---- Greedy strategy ----
 
-function scoreEffect(effect: GameEffect, player: Player, household: number, round: number): number {
+function scoreEffect(effect: GameEffect, player: Player, household: number, round: number, availWorkers: number = 1): number {
   const workerCount = player.workers.length
   const wage = ROUND_CARDS[round - 1]?.wage ?? 0
   const expectedWage = workerCount * wage
@@ -191,8 +191,8 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
   switch (effect.kind) {
     case 'build-double': return 110
     case 'build': {
-      // 賃金不足なら cpuBuild がスキップするため選択しない
-      if (player.money < expectedWage) return -Infinity
+      // 労働者が2人以上残っていれば賃金チェックを免除（建設を優先させる）
+      if (availWorkers < 2 && player.money < expectedWage) return -Infinity
       const availableAfterBuild = player.workers.filter(w => !w.isTraining && w.placedAt === null).length - 1
       // cpuBuild の greedy フィルタと同じ条件で建設可能カードを探す
       let maxCost = -1
@@ -244,15 +244,20 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
       const base = effect.gain * 2.5
       return player.money < expectedWage * 1.5 ? base * 1.8 : base
     }
-    case 'gain-supply':
+    case 'gain-supply': {
       if (household < effect.n) return -Infinity
-      return effect.n * 3
+      const gsScore = effect.n * 3
+      // 労働者が2人以上残っているなら建設を優先させるためスコアを抑制
+      return availWorkers >= 2 ? gsScore * 0.5 : gsScore
+    }
     case 'draw': {
       const drawWorkerBonus = (player.workers.length - 1) * 2
       const drawBase = effect.n * (7 + drawWorkerBonus)
       const availableNow = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
       const hasDrawFactory = player.ownedBuildings.some(b => BUILDING_CARDS[b.name]?.effect.kind === 'discard-draw')
-      return (hasDrawFactory && availableNow >= 3) ? drawBase * 1.4 : drawBase
+      const drawScore = (hasDrawFactory && availableNow >= 3) ? drawBase * 1.4 : drawBase
+      // 労働者が2人以上残っているなら建設を優先させるためスコアを抑制
+      return availWorkers >= 2 ? drawScore * 0.5 : drawScore
     }
     case 'draw-if-empty': {
       const diWorkerBonus = (player.workers.length - 1) * 2
@@ -284,13 +289,13 @@ function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState {
   let bestBld: OwnedBuilding | null = null
 
   for (const wp of pubOptions) {
-    const sc = scoreEffect(wp.effect, player, state.household, state.round) * pubBonus
+    const sc = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers) * pubBonus
     if (sc > bestScore) { bestScore = sc; bestPub = wp; bestBld = null }
   }
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
     if (!def) continue
-    const sc = scoreEffect(def.effect, player, state.household, state.round)
+    const sc = scoreEffect(def.effect, player, state.household, state.round, availableWorkers)
     if (sc > bestScore) { bestScore = sc; bestBld = bld; bestPub = null }
   }
 
@@ -316,13 +321,13 @@ function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): GameState 
   let bestBld: OwnedBuilding | null = null
 
   for (const wp of pubOptions) {
-    const sc = scoreEffect(wp.effect, player, state.household, state.round) * pubBonus
+    const sc = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers) * pubBonus
     if (sc > bestScore) { bestScore = sc; bestPub = wp; bestBld = null }
   }
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
     if (!def) continue
-    const sc = scoreEffect(def.effect, player, state.household, state.round)
+    const sc = scoreEffect(def.effect, player, state.household, state.round, availableWorkers)
     if (sc > bestScore) { bestScore = sc; bestBld = bld; bestPub = null }
   }
 
