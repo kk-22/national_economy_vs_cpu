@@ -67,6 +67,7 @@
 @media (max-width: 640px) {
   .mobile-header { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
   .log-panel { display: none; }
+  .gameover { z-index: 200; }
   /* スマホ: 各行の高さ固定なし・ページ全体でスクロール */
   .game { height: auto; overflow: visible; padding-top: 44px; }
   .game-body { overflow: visible; height: auto; }
@@ -491,12 +492,17 @@
 
 /* ===== Game over ===== */
 .gameover {
-  min-height: 100vh; background: #f1f5f9;
+  position: fixed; left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
   display: flex; align-items: center; justify-content: center; padding: 24px;
+  z-index: 50;
+}
+@media (min-width: 641px) {
+  .gameover { right: 180px; }
 }
 .gameover-card {
-  background: #fff; border-radius: 12px; padding: 32px;
-  max-width: 600px; width: 100%; box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+  background: #fff; border-radius: 12px; padding: 28px;
+  max-width: 560px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
 }
 .gameover-card h1 { font-size: 22px; margin-bottom: 16px; }
 .gameover-card table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }

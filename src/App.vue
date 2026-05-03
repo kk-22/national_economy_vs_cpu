@@ -255,24 +255,25 @@ function replayGame() {
     @cancel="showSetup = false"
   />
 
-  <GameResult v-else-if="game?.phase === 'game-over'"
-    :game="game"
-    :scores="scores!"
-    :canUndo="canUndo"
-    @replay="replayGame"
-    @openSetup="openSetup"
-    @undo="undo"
-  />
-
-  <GameBoard v-else-if="game"
-    :activatedIds="activatedIds"
-    :builtIds="builtIds"
-    :canPlayerAct="canPlayerAct"
-    :tipEnter="onTipEnter"
-    :tipLeave="onTipLeave"
-    @menuOpen="menuOpen = true"
-    @openSetup="openSetup"
-  />
+  <template v-else-if="game">
+    <GameBoard
+      :activatedIds="activatedIds"
+      :builtIds="builtIds"
+      :canPlayerAct="canPlayerAct"
+      :tipEnter="onTipEnter"
+      :tipLeave="onTipLeave"
+      @menuOpen="menuOpen = true"
+      @openSetup="openSetup"
+    />
+    <GameResult v-if="game.phase === 'game-over'"
+      :game="game"
+      :scores="scores!"
+      :canUndo="canUndo"
+      @replay="replayGame"
+      @openSetup="openSetup"
+      @undo="undo"
+    />
+  </template>
 
   <Teleport to="body">
     <Transition name="round-fade">
