@@ -16,18 +16,24 @@ const {
 
 // ---- セットアップ状態 ----
 const showSetup = ref(false)
-const setupCpu = ref(3)
+const setupTotal = ref(4)       // 総プレイヤー数 (2-4)
+const setupHasPlayer = ref(true) // 人間プレイヤーあり
 const setupPlayerOrder = ref(1)
 const setupCpuStrategies = ref<CpuStrategy[]>(['random', 'random', 'random', 'random'])
 const menuOpen = ref(false)
 const skipAnim = ref(false)
 const lastStartedDebug = ref(false)
 
+const setupCpu = computed(() => setupHasPlayer.value ? setupTotal.value - 1 : setupTotal.value)
+
 const VALID_STRATEGIES: CpuStrategy[] = ['random', 'greedy', 'mcts', 'disruptive']
 
 onMounted(() => {
-  const cpu = Number(localStorage.getItem('ne-setup-cpu'))
-  if ([1, 2, 3, 4].includes(cpu)) setupCpu.value = cpu
+  const total = Number(localStorage.getItem('ne-setup-total'))
+  if ([2, 3, 4].includes(total)) setupTotal.value = total
+
+  const hasPlayerStr = localStorage.getItem('ne-setup-has-player')
+  if (hasPlayerStr !== null) setupHasPlayer.value = hasPlayerStr !== 'false'
 
   const order = Number(localStorage.getItem('ne-setup-order'))
   if (order >= 0 && order <= 4) setupPlayerOrder.value = order
@@ -46,8 +52,8 @@ onMounted(() => {
 
   if (lastStartedDebug.value) {
     startDebugGame(Math.min(setupCpu.value, 3))
-  } else if (setupCpu.value === 4) {
-    startGame({ humanName: '', cpuCount: 4, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, 4) })
+  } else if (!setupHasPlayer.value) {
+    startGame({ humanName: '', cpuCount: setupCpu.value, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, setupCpu.value) })
     scheduleInitialCpuRun()
   } else {
     startGame({
@@ -59,12 +65,11 @@ onMounted(() => {
   }
 })
 
-watch(setupCpu, (newVal) => {
-  localStorage.setItem('ne-setup-cpu', String(newVal))
-  if (newVal === 4) return
-  const max = newVal + 1
-  if (setupPlayerOrder.value > max) setupPlayerOrder.value = max
+watch(setupTotal, (newVal) => {
+  localStorage.setItem('ne-setup-total', String(newVal))
+  if (setupPlayerOrder.value > newVal) setupPlayerOrder.value = newVal
 })
+watch(setupHasPlayer, (newVal) => { localStorage.setItem('ne-setup-has-player', String(newVal)) })
 watch(setupPlayerOrder, (newVal) => { localStorage.setItem('ne-setup-order', String(newVal)) })
 watch(setupCpuStrategies, (newVal) => {
   localStorage.setItem('ne-setup-strategies', JSON.stringify(newVal))
@@ -201,15 +206,16 @@ function scheduleInitialCpuRun() {
 function beginGame() {
   localStorage.setItem('ne-setup-debug', 'false')
   lastStartedDebug.value = false
-  if (setupCpu.value === 4) {
-    startGame({ humanName: '', cpuCount: 4, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, 4) })
+  const cpuCount = setupCpu.value
+  if (!setupHasPlayer.value) {
+    startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, cpuCount) })
     scheduleInitialCpuRun()
   } else {
     startGame({
       humanName: 'プレイヤー',
-      cpuCount: setupCpu.value,
+      cpuCount,
       playerOrder: setupPlayerOrder.value,
-      cpuStrategies: setupCpuStrategies.value.slice(0, setupCpu.value),
+      cpuStrategies: setupCpuStrategies.value.slice(0, cpuCount),
     })
   }
   showSetup.value = false
@@ -238,7 +244,8 @@ function replayGame() {
 
 <template>
   <GameSetup v-if="showSetup"
-    v-model:setupCpu="setupCpu"
+    v-model:setupTotal="setupTotal"
+    v-model:setupHasPlayer="setupHasPlayer"
     v-model:setupPlayerOrder="setupPlayerOrder"
     v-model:setupCpuStrategies="setupCpuStrategies"
     v-model:skipAnim="skipAnim"

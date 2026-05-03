@@ -3,7 +3,8 @@ import { computed } from 'vue'
 import type { CpuStrategy } from '../game/types'
 
 const props = defineProps<{
-  setupCpu: number
+  setupTotal: number
+  setupHasPlayer: boolean
   setupPlayerOrder: number
   setupCpuStrategies: CpuStrategy[]
   skipAnim: boolean
@@ -11,7 +12,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'update:setupCpu': [v: number]
+  'update:setupTotal': [v: number]
+  'update:setupHasPlayer': [v: boolean]
   'update:setupPlayerOrder': [v: number]
   'update:setupCpuStrategies': [v: CpuStrategy[]]
   'update:skipAnim': [v: boolean]
@@ -20,18 +22,18 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
+const cpuCount = computed(() => props.setupHasPlayer ? props.setupTotal - 1 : props.setupTotal)
+
 const bulkStrategy = computed({
   get(): CpuStrategy | '' {
-    const count = props.setupCpu === 4 ? 4 : props.setupCpu
-    const strategies = props.setupCpuStrategies.slice(0, count)
+    const strategies = props.setupCpuStrategies.slice(0, cpuCount.value)
     const first = strategies[0]
     return strategies.every(s => s === first) ? first : ''
   },
   set(val: CpuStrategy | '') {
     if (!val) return
-    const count = props.setupCpu === 4 ? 4 : props.setupCpu
     const copy = [...props.setupCpuStrategies]
-    for (let i = 0; i < count; i++) copy[i] = val
+    for (let i = 0; i < cpuCount.value; i++) copy[i] = val
     emit('update:setupCpuStrategies', copy)
   },
 })
@@ -56,34 +58,33 @@ function strategyLabel(strategy: CpuStrategy): string {
   <div class="modal-overlay">
     <div class="modal">
       <h2>ゲーム設定</h2>
-      <div class="radio-group-label">CPU数</div>
+
+      <div class="radio-group-label">人数</div>
       <div class="radio-group radio-group--horizontal">
-        <label class="radio-item">
-          <input type="radio" :checked="setupCpu === 1" @change="emit('update:setupCpu', 1)" />
-          <span>1人</span>
-        </label>
-        <label class="radio-item">
-          <input type="radio" :checked="setupCpu === 2" @change="emit('update:setupCpu', 2)" />
-          <span>2人</span>
-        </label>
-        <label class="radio-item">
-          <input type="radio" :checked="setupCpu === 3" @change="emit('update:setupCpu', 3)" />
-          <span>3人</span>
-        </label>
-        <label class="radio-item">
-          <input type="radio" :checked="setupCpu === 4" @change="emit('update:setupCpu', 4)" />
-          <span>4人（プレイヤーなし）</span>
+        <label v-for="n in [2, 3, 4]" :key="n" class="radio-item">
+          <input type="radio" :checked="setupTotal === n" @change="emit('update:setupTotal', n)" />
+          <span>{{ n }}人</span>
         </label>
       </div>
 
-      <template v-if="setupCpu !== 4">
-        <div class="radio-group-label">プレイヤーの手番</div>
-        <div class="radio-group radio-group--horizontal">
+      <div class="radio-group-label">プレイヤー</div>
+      <div class="radio-group radio-group--horizontal">
+        <label class="radio-item">
+          <input type="radio" :checked="setupHasPlayer" @change="emit('update:setupHasPlayer', true)" />
+          <span>あり</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" :checked="!setupHasPlayer" @change="emit('update:setupHasPlayer', false)" />
+          <span>なし</span>
+        </label>
+      </div>
+      <template v-if="setupHasPlayer">
+        <div class="radio-group radio-group--horizontal" style="margin-top:6px">
           <label class="radio-item">
             <input type="radio" :checked="setupPlayerOrder === 0" @change="emit('update:setupPlayerOrder', 0)" />
-            <span>ランダム</span>
+            <span>手番ランダム</span>
           </label>
-          <label v-for="n in setupCpu + 1" :key="n" class="radio-item">
+          <label v-for="n in setupTotal" :key="n" class="radio-item">
             <input type="radio" :checked="setupPlayerOrder === n" @change="emit('update:setupPlayerOrder', n)" />
             <span>{{ n }}番目</span>
           </label>
@@ -91,7 +92,7 @@ function strategyLabel(strategy: CpuStrategy): string {
       </template>
 
       <div class="radio-group-label">CPUの戦略</div>
-      <div v-if="setupCpu !== 1" class="cpu-strategy-row">
+      <div v-if="cpuCount > 1" class="cpu-strategy-row">
         <span class="cpu-strategy-label">一括：</span>
         <div class="radio-group radio-group--horizontal">
           <label v-for="s in (['random', 'greedy', 'mcts', 'disruptive'] as CpuStrategy[])" :key="s" class="radio-item">
@@ -100,7 +101,7 @@ function strategyLabel(strategy: CpuStrategy): string {
           </label>
         </div>
       </div>
-      <div v-for="i in (setupCpu === 4 ? 4 : setupCpu)" :key="i" class="cpu-strategy-row">
+      <div v-for="i in cpuCount" :key="i" class="cpu-strategy-row">
         <span class="cpu-strategy-label">CPU {{ i }}：</span>
         <div class="radio-group radio-group--horizontal">
           <label v-for="s in (['random', 'greedy', 'mcts', 'disruptive'] as CpuStrategy[])" :key="s" class="radio-item">
