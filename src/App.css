@@ -446,13 +446,19 @@
 .modal-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.35);
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: center;
   z-index: 200;
+  overflow-y: auto;
+  padding: 16px;
+  box-sizing: border-box;
 }
 .modal {
   background: #fff; border-radius: 12px; padding: 28px 32px;
-  min-width: 260px; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  min-width: 260px; max-width: 100%; box-sizing: border-box;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
   display: flex; flex-direction: column; gap: 14px;
+  margin: auto;
+  flex-shrink: 0;
 }
 .modal-header { display: flex; align-items: center; justify-content: space-between; }
 .modal-header h2 { font-size: 18px; color: #1e293b; margin: 0; }
