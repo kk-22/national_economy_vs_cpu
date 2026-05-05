@@ -20,7 +20,6 @@ export function constructBuilding(state: GameState, playerId: number, cardId: st
   ;[s, bId] = genId(s, 'b-')
   const owned: OwnedBuilding = { id: bId, name: card.name, workerHereId: null }
   s = updatePlayer(s, playerId, p => ({ ...p, ownedBuildings: [...p.ownedBuildings, owned] }))
-  s = addLog(s, `${getPlayer(s, playerId).name} が ${card.name} を建設`)
 
   if (drawAfter > 0) s = drawCards(s, playerId, drawAfter)
 
@@ -112,6 +111,7 @@ export function selectBuildTarget(state: GameState, targetCardId: string): GameS
       cost,
       drawAfter: action.drawAfter,
       discount: action.discount,
+      sourceName: action.sourceName,
     },
   }
 }
@@ -125,7 +125,7 @@ export function selectDoubleFirst(state: GameState, cardId: string): GameState {
   const def = BUILDING_CARDS[card.name]!
   return {
     ...state,
-    pendingAction: { kind: 'choose-double-second', playerId: action.playerId, firstCost: def.cost, firstId: card.id },
+    pendingAction: { kind: 'choose-double-second', playerId: action.playerId, firstCost: def.cost, firstId: card.id, sourceName: action.sourceName },
   }
 }
 
@@ -140,7 +140,7 @@ export function selectDoubleSecond(state: GameState, cardId: string): GameState 
   if (card.id === action.firstId) return state
   return {
     ...state,
-    pendingAction: { kind: 'choose-double-payment', playerId: action.playerId, firstId: action.firstId, secondId: card.id, cost: action.firstCost, firstCost: action.firstCost },
+    pendingAction: { kind: 'choose-double-payment', playerId: action.playerId, firstId: action.firstId, secondId: card.id, cost: action.firstCost, firstCost: action.firstCost, sourceName: action.sourceName },
   }
 }
 
@@ -148,24 +148,25 @@ export function cancelBuildChoice(state: GameState): GameState {
   const pa = state.pendingAction
   if (!pa) return state
   if (pa.kind !== 'choose-build-target' && pa.kind !== 'choose-farm-build' && pa.kind !== 'choose-double-first') return state
+  const player = getPlayer(state, pa.playerId)
   let s = undoWorkerPlacement(state, pa.playerId, ['build', 'build-farm-free', 'build-double'])
-  return addLog(s, `${getPlayer(state, pa.playerId).name} が建設をキャンセル`)
+  return addLog(s, `${player.name}: ${pa.sourceName ?? ''} → キャンセル`)
 }
 
 export function cancelBuildPayment(state: GameState): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-build-payment') return state
-  return { ...state, pendingAction: { kind: 'choose-build-target', playerId: action.playerId, discount: action.discount, drawAfter: action.drawAfter } }
+  return { ...state, pendingAction: { kind: 'choose-build-target', playerId: action.playerId, discount: action.discount, drawAfter: action.drawAfter, sourceName: action.sourceName } }
 }
 
 export function cancelDoubleSecond(state: GameState): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-double-second') return state
-  return { ...state, pendingAction: { kind: 'choose-double-first', playerId: action.playerId } }
+  return { ...state, pendingAction: { kind: 'choose-double-first', playerId: action.playerId, sourceName: action.sourceName } }
 }
 
 export function cancelDoublePayment(state: GameState): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-double-payment') return state
-  return { ...state, pendingAction: { kind: 'choose-double-second', playerId: action.playerId, firstCost: action.firstCost, firstId: action.firstId } }
+  return { ...state, pendingAction: { kind: 'choose-double-second', playerId: action.playerId, firstCost: action.firstCost, firstId: action.firstId, sourceName: action.sourceName } }
 }

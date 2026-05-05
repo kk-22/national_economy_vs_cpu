@@ -112,6 +112,41 @@ export function addLog(state: GameState, msg: string): GameState {
   return { ...state, log: [...state.log, msg] }
 }
 
+export function handSummary(player: Player): string {
+  const total = player.hand.length
+  if (total === 0) return '手札0枚'
+  const buildings = player.hand.filter(c => c.kind === 'building').length
+  const consumptions = total - buildings
+  if (consumptions > 0) return `手札${total}枚(建物${buildings}+消費財${consumptions})`
+  return `手札${total}枚(建物${buildings})`
+}
+
+export function buildActionLog(
+  sourceName: string,
+  effectKind: string,
+  before: Player,
+  after: Player,
+  beforeSP: number,
+  afterSP: number,
+): string {
+  const parts: string[] = []
+  const newBuildings = after.ownedBuildings.filter(b => !before.ownedBuildings.some(ob => ob.id === b.id))
+  const didBuild = newBuildings.length > 0
+  if (didBuild) {
+    parts.push(`${newBuildings.map(b => b.name).join('・')} を建設`)
+  } else if (effectKind === 'build' || effectKind === 'build-farm-free' || effectKind === 'build-double') {
+    parts.push('建設スキップ')
+  }
+  if (after.money > before.money) parts.push(`$${after.money}`)
+  if (!didBuild && after.hand.length !== before.hand.length) parts.push(handSummary(after))
+  if (after.workers.length !== before.workers.length) parts.push(`労働者${after.workers.length}人`)
+  if (effectKind === 'draw-become-start') {
+    if (afterSP === after.id && beforeSP !== after.id) parts.push('SP獲得')
+    else if (afterSP === after.id) parts.push('SP保有済み')
+  }
+  return `${after.name}: ${sourceName}${parts.length > 0 ? ' → ' + parts.join('、') : ''}`
+}
+
 export function workerCount(player: Player): number {
   return player.workers.length
 }

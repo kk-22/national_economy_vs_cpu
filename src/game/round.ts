@@ -40,13 +40,11 @@ export function getHandLimit(player: Player): number {
 }
 
 export function processRoundEnd(state: GameState, noCpu = false): GameState {
-  let s = addLog(state, `--- ラウンド ${state.round} 終了 ---`)
   const wage = ROUND_CARDS[state.round - 1].wage
+  let s = addLog(state, `--- ラウンド ${state.round} 終了 (賃金 $${wage}) ---`)
 
   for (const player of s.players) {
     const totalWage = player.workers.length * wage
-    s = addLog(s, `${player.name}: 賃金 $${totalWage} (労働者${player.workers.length}人 × $${wage})`)
-
     let remaining = totalWage
     let playerMoney = getPlayer(s, player.id).money
 
@@ -99,9 +97,10 @@ export function processRoundEnd(state: GameState, noCpu = false): GameState {
 
       if (remaining > 0) {
         s = updatePlayer(s, player.id, p => ({ ...p, unpaidWages: p.unpaidWages + remaining }))
-        s = addLog(s, `${player.name} が未払い賃金 ${remaining} 枚受け取り`)
+        s = addLog(s, `${player.name} 未払い賃金 $${remaining}`)
       }
     }
+    s = addLog(s, `${player.name}: 労働者${player.workers.length}人の賃金 $${totalWage}→残り$${getPlayer(s, player.id).money}`)
   }
 
   // CPU players: auto-discard excess hand cards
@@ -121,7 +120,7 @@ export function processRoundEnd(state: GameState, noCpu = false): GameState {
     const discardedBuildings = toDiscard.filter(c => c.kind === 'building') as BuildingCard[]
     s = updatePlayer(s, player.id, pl => ({ ...pl, hand: pl.hand.filter(c => !discardSet.has(c.id)) }))
     s = { ...s, discardPile: [...s.discardPile, ...discardedBuildings] }
-    s = addLog(s, `${player.name} が手札上限（${limit}枚）超過のため ${excess} 枚捨て`)
+    s = addLog(s, `${player.name} が手札超過${p.hand.length}→${limit}枚`)
   }
 
   // Human player: prompt if needed

@@ -23,15 +23,17 @@ export function toggleHandLimitSelection(state: GameState, cardId: string): Game
 export function cancelDiscardChoice(state: GameState): GameState {
   const pa = state.pendingAction
   if (!pa || pa.kind !== 'choose-discard') return state
+  const player = getPlayer(state, pa.playerId)
   let s = undoWorkerPlacement(state, pa.playerId, ['discard-gain', 'discard-draw'])
-  return addLog(s, `${getPlayer(state, pa.playerId).name} がアクションをキャンセル`)
+  return addLog(s, `${player.name}: ${pa.sourceName ?? ''} → キャンセル`)
 }
 
 export function cancelRevealedChoice(state: GameState): GameState {
   const pa = state.pendingAction
   if (!pa || pa.kind !== 'choose-from-revealed') return state
+  const player = getPlayer(state, pa.playerId)
   const discarded = pa.revealed.filter(c => c.kind === 'building') as BuildingCard[]
   let s: GameState = { ...state, discardPile: [...state.discardPile, ...discarded] }
   s = undoWorkerPlacement(s, pa.playerId, ['reveal-pick'])
-  return addLog(s, `${getPlayer(state, pa.playerId).name} がアクションをキャンセル`)
+  return addLog(s, `${player.name}: ${pa.sourceName ?? ''} → キャンセル`)
 }

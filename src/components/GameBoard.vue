@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useGame } from '../composables/useGame'
-import type { Worker, GameEffect } from '../game/types'
+import type { Worker, GameEffect, HandCard } from '../game/types'
 
 const props = defineProps<{
   activatedIds: string[]
@@ -66,6 +66,15 @@ function stopResize() {
 
 function cardLabel(card: { kind: string; name?: string }) {
   return card.kind === 'building' ? card.name! : '消費財'
+}
+
+function handDisplay(hand: HandCard[]): string {
+  const total = hand.length
+  if (total === 0) return '0'
+  const buildings = hand.filter(c => c.kind === 'building').length
+  const consumptions = total - buildings
+  if (consumptions > 0) return `${total}(建物${buildings}+消費財${consumptions})`
+  return `${total}(建物${buildings})`
 }
 function workerNames(workerIds: string[]): string[] {
   if (!game.value) return []
@@ -153,7 +162,7 @@ function cardTooltip(name: string): string {
                   <span v-if="cpu.unpaidWages > 0" class="unpaid-badge">未払い{{ cpu.unpaidWages }}</span>
                   <span class="worker-badge">労働者{{ workerStatus(cpu.workers) }}</span>
                   <span class="cpu-money">${{ cpu.money }}</span>
-                  <span class="hand-count">手札{{ cpu.hand.length }}</span>
+                  <span class="hand-count">手札{{ handDisplay(cpu.hand) }}</span>
                   <span v-if="game.startPlayerIndex === cpu.id" class="sp-badge">🚩SP</span>
                 </div>
                 <div class="cpu-cards-scroll">
@@ -213,7 +222,7 @@ function cardTooltip(name: string): string {
               <span v-if="humanPlayer?.unpaidWages" class="unpaid-badge">未払い{{ humanPlayer.unpaidWages }}</span>
               <span class="worker-badge">労働者{{ humanPlayer ? workerStatus(humanPlayer.workers) : '' }}</span>
               <span class="player-money">${{ humanPlayer?.money }}</span>
-              <span class="hand-count">手札{{ humanPlayer?.hand.length }}</span>
+              <span class="hand-count">手札{{ handDisplay(humanPlayer?.hand ?? []) }}</span>
               <span v-if="game.startPlayerIndex === humanPlayer?.id" class="sp-badge">🚩SP</span>
             </div>
 
@@ -371,7 +380,7 @@ function cardTooltip(name: string): string {
           <button class="btn-redo" :disabled="!canRedo" @click="redo">進む ▶</button>
         </div>
         <div class="log-label">ログ</div>
-        <div v-for="(msg, i) in [...game.log].reverse().slice(0, 80)" :key="i" class="log-line">{{ msg }}</div>
+        <div v-for="(msg, i) in [...game.log].reverse()" :key="i" class="log-line">{{ msg }}</div>
       </div>
 
     </div><!-- /game-body -->

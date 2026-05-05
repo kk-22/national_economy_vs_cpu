@@ -1,5 +1,5 @@
 import { BUILDING_CARDS, ROUND_CARDS } from './constants'
-import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, rngNext, getMaxWorkers } from './primitives'
+import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, rngNext, getMaxWorkers, buildActionLog } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { constructBuilding } from './build'
 import { applyEffect } from './effects'
@@ -15,6 +15,9 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
   const worker = availableWorkers(player)[0]
   if (!worker) return state
 
+  const beforePlayer = player
+  const beforeSP = state.startPlayerIndex
+
   let s = updatePlayer(state, playerId, p => ({
     ...p,
     workers: p.workers.map(w => w.id === worker.id ? { ...w, placedAt: workplaceId } : w),
@@ -25,10 +28,16 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
       wp.id === workplaceId ? { ...wp, workerIds: [...wp.workerIds, worker.id] } : wp
     ),
   }
-  s = addLog(s, `${player.name} が ${workplace.name} に労働者を配置`)
 
   s = applyEffect(s, playerId, workplace.effect, player.isCpu, player.cpuStrategy)
-  if (s.pendingAction) return s
+
+  if (s.pendingAction) {
+    s = { ...s, pendingAction: { ...s.pendingAction, sourceName: workplace.name } }
+    return s
+  }
+
+  const afterPlayer = getPlayer(s, playerId)
+  s = addLog(s, buildActionLog(workplace.name, workplace.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex))
 
   return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
 }
@@ -40,15 +49,24 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
   const worker = availableWorkers(player)[0]
   if (!worker) return state
 
+  const beforePlayer = player
+  const beforeSP = state.startPlayerIndex
+
   let s = updatePlayer(state, playerId, p => ({
     ...p,
     workers: p.workers.map(w => w.id === worker.id ? { ...w, placedAt: buildingId } : w),
     ownedBuildings: p.ownedBuildings.map(b => b.id === buildingId ? { ...b, workerHereId: worker.id } : b),
   }))
-  s = addLog(s, `${player.name} が ${building.name} に労働者を配置`)
 
   s = applyEffect(s, playerId, def.effect, player.isCpu, player.cpuStrategy)
-  if (s.pendingAction) return s
+
+  if (s.pendingAction) {
+    s = { ...s, pendingAction: { ...s.pendingAction, sourceName: building.name } }
+    return s
+  }
+
+  const afterPlayer = getPlayer(s, playerId)
+  s = addLog(s, buildActionLog(building.name, def.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex))
 
   return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
 }
@@ -534,14 +552,16 @@ export function skipEmptyPlayerTurn(state: GameState): GameState {
 export function selectFarmBuildTarget(state: GameState, targetCardId: string): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-farm-build') return state
-  const player = getPlayer(state, action.playerId)
-  const card = player.hand.find(c => c.id === targetCardId)
+  const beforePlayer = getPlayer(state, action.playerId)
+  const card = beforePlayer.hand.find(c => c.id === targetCardId)
   if (!card || card.kind !== 'building') return state
   const def = BUILDING_CARDS[card.name]!
   if (!def.tags.includes('farm')) return state
   let s: GameState
   ;[s] = constructBuilding(state, action.playerId, card.id, [], 0)
   s = { ...s, pendingAction: null }
+  const afterPlayer = getPlayer(s, action.playerId)
+  s = addLog(s, buildActionLog(action.sourceName ?? '', 'build-farm-free', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
   return afterHumanAction(s)
 }
 
@@ -549,9 +569,12 @@ export function confirmBuildPayment(state: GameState, paymentIds: string[]): Gam
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-build-payment') return state
   if (paymentIds.length !== action.cost) return state
+  const beforePlayer = getPlayer(state, action.playerId)
   let s: GameState
   ;[s] = constructBuilding(state, action.playerId, action.targetId, paymentIds, action.drawAfter)
   s = { ...s, pendingAction: null }
+  const afterPlayer = getPlayer(s, action.playerId)
+  s = addLog(s, buildActionLog(action.sourceName ?? '', 'build', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
   return afterHumanAction(s)
 }
 
@@ -559,10 +582,13 @@ export function confirmDoublePayment(state: GameState, paymentIds: string[]): Ga
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-double-payment') return state
   if (paymentIds.length !== action.cost) return state
+  const beforePlayer = getPlayer(state, action.playerId)
   let s = state
   ;[s] = constructBuilding(s, action.playerId, action.firstId, paymentIds, 0)
   ;[s] = constructBuilding(s, action.playerId, action.secondId, [], 0)
   s = { ...s, pendingAction: null }
+  const afterPlayer = getPlayer(s, action.playerId)
+  s = addLog(s, buildActionLog(action.sourceName ?? '', 'build-double', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
   return afterHumanAction(s)
 }
 
@@ -571,8 +597,8 @@ export function confirmDiscard(state: GameState): GameState {
   if (!action || action.kind !== 'choose-discard') return state
   if (action.selected.length !== action.count) return state
 
-  const player = getPlayer(state, action.playerId)
-  const removed = player.hand.filter(c => action.selected.includes(c.id))
+  const beforePlayer = getPlayer(state, action.playerId)
+  const removed = beforePlayer.hand.filter(c => action.selected.includes(c.id))
   const discarded = removed.filter(c => c.kind === 'building') as BuildingCard[]
 
   let s = updatePlayer(state, action.playerId, p => ({
@@ -584,12 +610,11 @@ export function confirmDiscard(state: GameState): GameState {
   if (action.gainAmount > 0) {
     s = { ...s, household: s.household - action.gainAmount }
     s = updatePlayer(s, action.playerId, p => ({ ...p, money: p.money + action.gainAmount }))
-    s = addLog(s, `${player.name} がカードを${action.count}枚捨てて $${action.gainAmount} 獲得`)
-  } else {
-    s = addLog(s, `${player.name} がカードを${action.count}枚捨てました`)
   }
 
   s = { ...s, pendingAction: null }
+  const afterPlayer = getPlayer(s, action.playerId)
+  s = addLog(s, buildActionLog(action.sourceName ?? '', 'discard-gain', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
   return afterHumanAction(s)
 }
 
@@ -598,8 +623,8 @@ export function confirmDiscardDraw(state: GameState, drawCount: number): GameSta
   if (!action || action.kind !== 'choose-discard') return state
   if (action.selected.length !== action.count) return state
 
-  const player = getPlayer(state, action.playerId)
-  const removed = player.hand.filter(c => action.selected.includes(c.id))
+  const beforePlayer = getPlayer(state, action.playerId)
+  const removed = beforePlayer.hand.filter(c => action.selected.includes(c.id))
   const discarded = removed.filter(c => c.kind === 'building') as BuildingCard[]
 
   let s = updatePlayer(state, action.playerId, p => ({
@@ -608,9 +633,9 @@ export function confirmDiscardDraw(state: GameState, drawCount: number): GameSta
   }))
   s = { ...s, discardPile: [...s.discardPile, ...discarded] }
   s = drawCards(s, action.playerId, drawCount)
-  s = addLog(s, `${player.name} がカードを${action.count}枚捨てて${drawCount}枚引きました`)
-
   s = { ...s, pendingAction: null }
+  const afterPlayer = getPlayer(s, action.playerId)
+  s = addLog(s, buildActionLog(action.sourceName ?? '', 'discard-draw', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
   return afterHumanAction(s)
 }
 
@@ -618,6 +643,7 @@ export function pickRevealedCard(state: GameState, cardId: string): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-from-revealed') return state
 
+  const beforePlayer = getPlayer(state, action.playerId)
   const picked = action.revealed.find(c => c.id === cardId)
   if (!picked) return state
 
@@ -626,7 +652,8 @@ export function pickRevealedCard(state: GameState, cardId: string): GameState {
 
   let s = updatePlayer(state, action.playerId, p => ({ ...p, hand: [...p.hand, picked] }))
   s = { ...s, discardPile: [...s.discardPile, ...discarded], pendingAction: null }
-  s = addLog(s, `${getPlayer(s, action.playerId).name} が公開カードから ${picked.kind === 'building' ? (picked as any).name : '消費財'} を引きました`)
+  const afterPlayer = getPlayer(s, action.playerId)
+  s = addLog(s, buildActionLog(action.sourceName ?? '', 'reveal-pick', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
 
   return afterHumanAction(s)
 }
@@ -645,7 +672,7 @@ export function confirmHandLimitDiscard(state: GameState): GameState {
     hand: p.hand.filter(c => !pa.selected.includes(c.id)),
   }))
   s = { ...s, discardPile: [...s.discardPile, ...discardedBuildings], pendingAction: null }
-  s = addLog(s, `${player.name} が手札を${pa.limit}枚に整理しました`)
+  s = addLog(s, `${player.name} が手札超過${player.hand.length}→${pa.limit}枚`)
 
   return startNextRound(s, pa.noCpu)
 }

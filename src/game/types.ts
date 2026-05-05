@@ -86,15 +86,15 @@ export interface Player {
 }
 
 export type PendingAction =
-  | { kind: 'choose-build-target'; playerId: number; discount: number; drawAfter: number }
-  | { kind: 'choose-build-payment'; playerId: number; targetId: string; targetName: string; cost: number; drawAfter: number; discount: number }
-  | { kind: 'choose-discard'; playerId: number; count: number; gainAmount: number; selected: string[]; drawCount?: number }
-  | { kind: 'choose-from-revealed'; playerId: number; revealed: HandCard[] }
-  | { kind: 'choose-farm-build'; playerId: number }
-  | { kind: 'choose-double-first'; playerId: number }
-  | { kind: 'choose-double-second'; playerId: number; firstCost: number; firstId: string }
-  | { kind: 'choose-double-payment'; playerId: number; firstId: string; secondId: string; cost: number; firstCost: number }
-  | { kind: 'choose-hand-limit'; playerId: number; limit: number; count: number; selected: string[]; noCpu: boolean }
+  | { kind: 'choose-build-target'; playerId: number; discount: number; drawAfter: number; sourceName?: string }
+  | { kind: 'choose-build-payment'; playerId: number; targetId: string; targetName: string; cost: number; drawAfter: number; discount: number; sourceName?: string }
+  | { kind: 'choose-discard'; playerId: number; count: number; gainAmount: number; selected: string[]; drawCount?: number; sourceName?: string }
+  | { kind: 'choose-from-revealed'; playerId: number; revealed: HandCard[]; sourceName?: string }
+  | { kind: 'choose-farm-build'; playerId: number; sourceName?: string }
+  | { kind: 'choose-double-first'; playerId: number; sourceName?: string }
+  | { kind: 'choose-double-second'; playerId: number; firstCost: number; firstId: string; sourceName?: string }
+  | { kind: 'choose-double-payment'; playerId: number; firstId: string; secondId: string; cost: number; firstCost: number; sourceName?: string }
+  | { kind: 'choose-hand-limit'; playerId: number; limit: number; count: number; selected: string[]; noCpu: boolean; sourceName?: string }
 
 export type GamePhase = 'placement' | 'game-over'
 
