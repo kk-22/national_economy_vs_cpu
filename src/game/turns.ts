@@ -3,7 +3,7 @@ import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, rngNext, 
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { constructBuilding } from './build'
 import { applyEffect } from './effects'
-import { processRoundEnd, startNextRound, calculateScores } from './round'
+import { processRoundEnd, calculateScores, resolveAfterHandLimit } from './round'
 import { MCTS_SIMULATIONS } from './cpu'
 import type { GameState, BuildingCard, PublicWorkplace, OwnedBuilding, GameEffect, Player } from './types'
 
@@ -674,5 +674,5 @@ export function confirmHandLimitDiscard(state: GameState): GameState {
   s = { ...s, discardPile: [...s.discardPile, ...discardedBuildings], pendingAction: null }
   s = addLog(s, `${player.name} が手札超過${player.hand.length}→${pa.limit}枚`)
 
-  return startNextRound(s, pa.noCpu)
+  return resolveAfterHandLimit(s, pa.noCpu)
 }

@@ -1,7 +1,7 @@
 import { shallowReactive, computed, ref, toRaw } from 'vue'
 import type { GameConfig, GameState } from '../game/types'
 import { createGame, createDebugGame } from '../game/init'
-import { calculateScores } from '../game/round'
+import { calculateScores, confirmSellBuildings } from '../game/round'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from '../game/availability'
 import {
   placeWorkerOnPublic, placeWorkerOnBuilding,
@@ -267,6 +267,21 @@ export function useGame() {
     state.game = pickRevealedCard(state.game, cardId)
   }
 
+  function clickToggleSellBuilding(buildingId: string) {
+    if (!state.game) return
+    const pa = state.game.pendingAction
+    if (!pa || pa.kind !== 'choose-sell-buildings') return
+    const selected = pa.selected.includes(buildingId)
+      ? pa.selected.filter(id => id !== buildingId)
+      : [...pa.selected, buildingId]
+    state.game = { ...state.game, pendingAction: { ...pa, selected } }
+  }
+
+  function clickSellOption(selectedIds: string[]) {
+    if (!state.game) return
+    state.game = confirmSellBuildings(state.game, selectedIds)
+  }
+
   function clickHandLimitCard(cardId: string) {
     if (!state.game) return
     state.game = toggleHandLimitSelection(state.game, cardId)
@@ -373,6 +388,8 @@ export function useGame() {
     clickDiscardCard,
     clickRevealedCard,
     clickHandLimitCard,
+    clickToggleSellBuilding,
+    clickSellOption,
     undo,
     redo,
   }

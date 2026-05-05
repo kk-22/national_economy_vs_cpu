@@ -95,6 +95,7 @@ export type PendingAction =
   | { kind: 'choose-double-second'; playerId: number; firstCost: number; firstId: string; sourceName?: string }
   | { kind: 'choose-double-payment'; playerId: number; firstId: string; secondId: string; cost: number; firstCost: number; sourceName?: string }
   | { kind: 'choose-hand-limit'; playerId: number; limit: number; count: number; selected: string[]; noCpu: boolean; sourceName?: string }
+  | { kind: 'choose-sell-buildings'; playerId: number; deficit: number; sellableIds: string[]; selected: string[]; noCpu: boolean; sourceName?: string }
 
 export type GamePhase = 'placement' | 'game-over'
 
@@ -113,6 +114,7 @@ export interface GameState {
   _nextId: number
   _rngSeed: number   // ゲーム開始時のシード（不変・保存用）
   _rngState: number  // 現在のRNG状態（スナップショットに含まれ再現可能）
+  _pendingWageDeficit?: { playerId: number; deficit: number }  // 賃金不足の一時記録（手札上限処理後に建物売却へ）
 }
 
 export interface GameConfig {

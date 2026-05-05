@@ -1,6 +1,6 @@
 import { BUILDING_CARDS, ROUND_CARDS } from './constants'
 import { getPlayer, updatePlayer, addLog, genId } from './primitives'
-import type { GameState, BuildingCard, PublicWorkplace, Player, ScoreResult } from './types'
+import type { GameState, BuildingCard, PublicWorkplace, Player, ScoreResult, OwnedBuilding } from './types'
 
 // Circular dep with turns.ts (processCpuTurns calls processRoundEnd; processRoundEnd/startNextRound call processCpuTurns)
 // Safe: all are function defs, no top-level calls
@@ -39,14 +39,103 @@ export function getHandLimit(player: Player): number {
   return limit
 }
 
+// ---- 建物売却ヘルパー ----
+
+// 不足分を補える建物の最小充足部分集合をすべて列挙する
+function findSellOptions(sellable: OwnedBuilding[], deficit: number): string[][] {
+  const n = sellable.length
+  if (n === 0 || deficit <= 0) return []
+  const values = sellable.map(b => BUILDING_CARDS[b.name]?.assetValue ?? 0)
+  const totalAvailable = values.reduce((a, b) => a + b, 0)
+  if (totalAvailable < deficit) return [] // 全部売っても足りない
+
+  const minimal: string[][] = []
+  for (let mask = 1; mask < (1 << n); mask++) {
+    let sum = 0
+    for (let i = 0; i < n; i++) if ((mask >> i) & 1) sum += values[i]
+    if (sum < deficit) continue
+
+    // この部分集合の真部分集合が既に充足できるなら最小でない
+    let isMinimal = true
+    for (let sub = (mask - 1) & mask; sub > 0; sub = (sub - 1) & mask) {
+      let subSum = 0
+      for (let i = 0; i < n; i++) if ((sub >> i) & 1) subSum += values[i]
+      if (subSum >= deficit) { isMinimal = false; break }
+    }
+    if (isMinimal) minimal.push(sellable.filter((_, i) => (mask >> i) & 1).map(b => b.id))
+  }
+  return minimal
+}
+
+// CPU: 売却総額が最小、同値なら高価な建物を残す方を選ぶ
+function cpuBestSellOption(options: string[][], sellable: OwnedBuilding[]): string[] {
+  const valueMap = new Map(sellable.map(b => [b.id, BUILDING_CARDS[b.name]?.assetValue ?? 0]))
+  const allIds = sellable.map(b => b.id)
+  return options.reduce((best, opt) => {
+    const bestSold = best.reduce((s, id) => s + (valueMap.get(id) ?? 0), 0)
+    const optSold  = opt.reduce((s, id) => s + (valueMap.get(id) ?? 0), 0)
+    if (optSold < bestSold) return opt
+    if (optSold > bestSold) return best
+    // 売却額が同じ → 残す建物の価値が高い方を選ぶ
+    const kept = (ids: string[]) => allIds.filter(id => !ids.includes(id))
+                                         .map(id => valueMap.get(id) ?? 0)
+                                         .sort((a, b) => b - a)
+    const bk = kept(best), ok = kept(opt)
+    for (let i = 0; i < Math.max(bk.length, ok.length); i++) {
+      if ((ok[i] ?? 0) > (bk[i] ?? 0)) return opt
+      if ((ok[i] ?? 0) < (bk[i] ?? 0)) return best
+    }
+    return best
+  })
+}
+
+// 指定した建物IDを売却し、その収益で賃金を支払う
+function autoSellForWages(state: GameState, playerId: number, idsToSell: string[], remaining: number): GameState {
+  let s = state
+  const buildings = getPlayer(s, playerId).ownedBuildings.filter(b => idsToSell.includes(b.id))
+  for (const b of buildings) {
+    const def = BUILDING_CARDS[b.name]!
+    s = updatePlayer(s, playerId, p => ({
+      ...p, money: p.money + def.assetValue,
+      ownedBuildings: p.ownedBuildings.filter(ob => ob.id !== b.id),
+    }))
+    if (def.isWorkplace) {
+      let wpId: string
+      ;[s, wpId] = genId(s, 'wp-sold-')
+      s = { ...s, publicWorkplaces: [...s.publicWorkplaces, { id: wpId, name: b.name, effect: def.effect, allowMultiple: false, workerIds: [] }] }
+    }
+    s = addLog(s, `${getPlayer(s, playerId).name} が ${b.name} を $${def.assetValue} で売却`)
+  }
+  const canPay = Math.min(getPlayer(s, playerId).money, remaining)
+  s = updatePlayer(s, playerId, p => ({ ...p, money: p.money - canPay }))
+  s = { ...s, household: s.household + canPay }
+  const stillOwed = remaining - canPay
+  if (stillOwed > 0) {
+    s = updatePlayer(s, playerId, p => ({ ...p, unpaidWages: p.unpaidWages + stillOwed }))
+    s = addLog(s, `${getPlayer(s, playerId).name} 未払い賃金 $${stillOwed}`)
+  }
+  return s
+}
+
+// ---- ラウンド終了処理 ----
+
 export function processRoundEnd(state: GameState, noCpu = false): GameState {
   const wage = ROUND_CARDS[state.round - 1].wage
   let s = addLog(state, `--- ラウンド ${state.round} 終了 (賃金 $${wage}) ---`)
+  s = processWagesCash(s)
+  return finishRoundEnd(s, noCpu)
+}
+
+// 全プレイヤーの現金払い・CPU建物売却を行う（人間の建物売却は _pendingWageDeficit に記録して後回し）
+function processWagesCash(state: GameState): GameState {
+  const wage = ROUND_CARDS[state.round - 1].wage
+  let s = state
 
   for (const player of s.players) {
     const totalWage = player.workers.length * wage
     let remaining = totalWage
-    let playerMoney = getPlayer(s, player.id).money
+    const playerMoney = getPlayer(s, player.id).money
+    let deferred = false
 
     if (playerMoney >= remaining) {
       s = updatePlayer(s, player.id, p => ({ ...p, money: p.money - remaining }))
@@ -56,52 +145,41 @@ export function processRoundEnd(state: GameState, noCpu = false): GameState {
       s = updatePlayer(s, player.id, p => ({ ...p, money: 0 }))
       s = { ...s, household: s.household + playerMoney }
 
-      const soldIds = new Set<string>()
       const sellable = getPlayer(s, player.id).ownedBuildings
         .filter(b => BUILDING_CARDS[b.name]?.canSell)
-        .sort((a, b) => (BUILDING_CARDS[b.name]?.assetValue ?? 0) - (BUILDING_CARDS[a.name]?.assetValue ?? 0))
 
-      for (const b of sellable) {
-        if (remaining <= 0) break
-        const def = BUILDING_CARDS[b.name]!
-        const value = def.assetValue
-        const othersTotal = sellable
-          .filter(sb => sb.id !== b.id && !soldIds.has(sb.id))
-          .reduce((sum, sb) => sum + (BUILDING_CARDS[sb.name]?.assetValue ?? 0), 0)
-        if (value <= remaining || othersTotal < remaining) {
-          soldIds.add(b.id)
-          s = updatePlayer(s, player.id, p => ({
-            ...p,
-            money: p.money + value,
-            ownedBuildings: p.ownedBuildings.filter(ob => ob.id !== b.id),
-          }))
-          if (def.isWorkplace) {
-            let wpId: string
-            ;[s, wpId] = genId(s, 'wp-sold-')
-            const wp: PublicWorkplace = { id: wpId, name: b.name, effect: def.effect, allowMultiple: false, workerIds: [] }
-            s = { ...s, publicWorkplaces: [...s.publicWorkplaces, wp] }
-          }
-          s = addLog(s, `${player.name} が ${b.name} を $${value} で売却`)
-          const newMoney = getPlayer(s, player.id).money
-          if (newMoney >= remaining) {
-            s = updatePlayer(s, player.id, p => ({ ...p, money: p.money - remaining }))
-            s = { ...s, household: s.household + remaining }
-            remaining = 0
-          } else {
-            remaining -= newMoney
-            s = updatePlayer(s, player.id, p => ({ ...p, money: 0 }))
-            s = { ...s, household: s.household + newMoney }
-          }
+      if (!player.isCpu) {
+        const totalSellable = sellable.reduce((sum, b) => sum + (BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
+        if (totalSellable >= remaining) {
+          // 手札上限処理の後で建物売却を行うため記録
+          s = { ...s, _pendingWageDeficit: { playerId: player.id, deficit: remaining } }
+          deferred = true
+        } else {
+          s = autoSellForWages(s, player.id, sellable.map(b => b.id), remaining)
         }
-      }
-
-      if (remaining > 0) {
-        s = updatePlayer(s, player.id, p => ({ ...p, unpaidWages: p.unpaidWages + remaining }))
-        s = addLog(s, `${player.name} 未払い賃金 $${remaining}`)
+      } else {
+        const options = findSellOptions(sellable, remaining)
+        const idsToSell = options.length === 0
+          ? sellable.map(b => b.id)
+          : options.length === 1
+            ? options[0]
+            : cpuBestSellOption(options, sellable)
+        s = autoSellForWages(s, player.id, idsToSell, remaining)
       }
     }
-    s = addLog(s, `${player.name}: 労働者${player.workers.length}人の賃金 $${totalWage}→残り$${getPlayer(s, player.id).money}`)
+
+    if (!deferred) {
+      const p = getPlayer(s, player.id)
+      s = addLog(s, `${p.name}: 労働者${player.workers.length}人の賃金 $${totalWage}→残り$${p.money}`)
+    }
   }
+
+  return s
+}
+
+// 手札上限チェック → resolveAfterHandLimit の順に処理
+function finishRoundEnd(state: GameState, noCpu: boolean): GameState {
+  let s = state
 
   // CPU players: auto-discard excess hand cards
   for (const player of s.players) {
@@ -135,6 +213,40 @@ export function processRoundEnd(state: GameState, noCpu = false): GameState {
     return s
   }
 
+  return resolveAfterHandLimit(s, noCpu)
+}
+
+// 手札上限処理完了後（またはスキップ後）の建物売却チェック → 次ラウンド開始
+// turns.ts の confirmHandLimitDiscard からも呼ばれる
+export function resolveAfterHandLimit(state: GameState, noCpu: boolean): GameState {
+  let s = state
+  if (s._pendingWageDeficit) {
+    const { playerId, deficit } = s._pendingWageDeficit
+    s = { ...s, _pendingWageDeficit: undefined }
+    const sellable = getPlayer(s, playerId).ownedBuildings
+      .filter(b => BUILDING_CARDS[b.name]?.canSell)
+    const totalSellable = sellable.reduce((sum, b) => sum + (BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
+    if (totalSellable >= deficit) {
+      return {
+        ...s,
+        pendingAction: { kind: 'choose-sell-buildings', playerId, deficit, sellableIds: sellable.map(b => b.id), selected: [], noCpu },
+      }
+    }
+    s = autoSellForWages(s, playerId, sellable.map(b => b.id), deficit)
+  }
+  return startNextRound(s, noCpu)
+}
+
+// 人間プレイヤーが売却建物を選択・確定後に呼ばれる
+export function confirmSellBuildings(state: GameState, selectedIds: string[]): GameState {
+  const pa = state.pendingAction
+  if (!pa || pa.kind !== 'choose-sell-buildings') return state
+  const { playerId, deficit, noCpu } = pa
+  let s: GameState = { ...state, pendingAction: null }
+  s = autoSellForWages(s, playerId, selectedIds, deficit)
+  const wage = ROUND_CARDS[s.round - 1].wage
+  const p = getPlayer(s, playerId)
+  s = addLog(s, `${p.name}: 労働者${p.workers.length}人の賃金 $${p.workers.length * wage}→残り$${p.money}`)
   return startNextRound(s, noCpu)
 }
 

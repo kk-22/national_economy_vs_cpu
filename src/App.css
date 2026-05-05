@@ -43,6 +43,9 @@
   gap: 6px;
 }
 .mobile-info { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.mobile-undo-bar { display: none; gap: 4px; flex-shrink: 0; }
+.mobile-undo-bar .btn-undo,
+.mobile-undo-bar .btn-redo { flex: none; padding: 4px 10px; font-size: 13px; }
 .menu-btn {
   background: none;
   border: 1px solid #e2e8f0;
@@ -68,6 +71,7 @@
 /* ===== Responsive ===== */
 @media (max-width: 640px) {
   .mobile-header { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
+  .mobile-undo-bar { display: flex; }
   .log-panel { display: none; }
   .gameover { z-index: 200; }
   /* スマホ: 各行の高さ固定なし・ページ全体でスクロール */
@@ -370,6 +374,19 @@
   white-space: normal;
 }
 .no-options { font-size: 11px; color: #ef4444; }
+.sell-warning {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 3px 8px;
+  white-space: normal;
+}
+.sell-error {
+  font-size: 11px; color: #b91c1c;
+  background: #fef2f2; border: 1px solid #fecaca;
+  border-radius: 4px; padding: 2px 8px; margin-top: 2px;
+}
 .btn-confirm {
   background: #3b82f6; color: #fff; border: none; border-radius: 6px;
   padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 12px;

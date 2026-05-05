@@ -25,11 +25,36 @@ const {
   clickPublicWorkplace, clickOwnedBuilding,
   clickBuildTarget, clickPaymentCard, clickCancelBuildChoice, clickCancelBuildPayment,
   clickCancelDoubleSecond, clickCancelDoublePayment,
-  clickDiscardCard, clickRevealedCard, clickHandLimitCard,
+  clickDiscardCard, clickRevealedCard, clickHandLimitCard, clickToggleSellBuilding, clickSellOption,
   undo, redo, canUndo, canRedo,
 } = useGame()
 
 const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
+
+// ---- 建物売却選択 ----
+const sellBuildingError = ref<string | null>(null)
+function clickConfirmSellBuildings() {
+  const pa = game.value?.pendingAction
+  if (!pa || pa.kind !== 'choose-sell-buildings') return
+  const ownedBuildings = game.value?.players.find(p => !p.isCpu)?.ownedBuildings ?? []
+  const getValue = (id: string) => getBuildingDef(ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue ?? 0
+  const total = pa.selected.reduce((sum, id) => sum + getValue(id), 0)
+  if (total < pa.deficit) {
+    sellBuildingError.value = `合計 $${total} は不足分 $${pa.deficit} に足りません`
+    return
+  }
+  // 最小売却チェック: 各建物の価値 > (合計 − 不足分) でなければ不要な建物が含まれている
+  const slack = total - pa.deficit
+  for (const id of pa.selected) {
+    if (getValue(id) <= slack) {
+      const name = ownedBuildings.find(b => b.id === id)?.name ?? ''
+      sellBuildingError.value = `${name}（$${getValue(id)}）は不要です。最低限の売却のみ可能です`
+      return
+    }
+  }
+  sellBuildingError.value = null
+  clickSellOption(pa.selected)
+}
 
 // ---- 3行リサイズ（縦3分割） ----
 const gameMRef = ref<HTMLElement | null>(null)
@@ -142,6 +167,10 @@ function cardTooltip(name: string): string {
         <span class="hbadge">ラウンド {{ game.round }}/9</span>
         <span class="hbadge">賃金 ${{ currentWage }}</span>
         <span class="hbadge">家計 ${{ game.household }}</span>
+      </div>
+      <div class="mobile-undo-bar">
+        <button class="btn-undo" :disabled="!canUndo" @click="undo">◀</button>
+        <button class="btn-redo" :disabled="!canRedo" @click="redo">▶</button>
       </div>
       <button class="menu-btn" @click="emit('menuOpen')">☰</button>
     </div>
@@ -324,6 +353,26 @@ function cardTooltip(name: string): string {
                     <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                   </button>
                 </div>
+              </template>
+
+              <template v-else-if="pendingAction.kind === 'choose-sell-buildings'">
+                <span class="pending-title sell-warning">
+                  ⚠ 賃金不足 ${{ pendingAction.deficit }}：売却する建物を選択（合計 ${{ pendingAction.selected.reduce((s, id) => s + (getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue ?? 0), 0) }} / ${{ pendingAction.deficit }} 以上）
+                </span>
+                <div class="card-wrap">
+                  <button
+                    v-for="id in pendingAction.sellableIds" :key="id"
+                    :class="['bcard', 'selectable', { selected: pendingAction.selected.includes(id) }]"
+                    @mouseenter="tipEnter($event, cardTooltip(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? ''))"
+                    @mouseleave="tipLeave"
+                    @click="clickToggleSellBuilding(id)">
+                    <span class="bcard-cost">{{ getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.cost }}</span>
+                    <span class="bcard-name" :style="bcardNameStyle(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')">{{ humanPlayer!.ownedBuildings.find(b => b.id === id)?.name }}</span>
+                    <span class="bcard-asset">{{ getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue }}</span>
+                  </button>
+                </div>
+                <div v-if="sellBuildingError" class="sell-error">{{ sellBuildingError }}</div>
+                <button class="btn-confirm" :disabled="pendingAction.selected.length === 0" @click="clickConfirmSellBuildings">確定</button>
               </template>
             </div>
 

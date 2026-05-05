@@ -118,6 +118,8 @@ const canPlayerAct = computed(() =>
   isHumanTurn.value && !isAnimating.value && !pendingAction.value
 )
 
+watch(game, () => { tooltipState.value = null })
+
 watch(game, (newGame, oldGame) => {
   if (!newGame || !oldGame) return
   if (isUndoRedo.value) {
