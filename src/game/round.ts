@@ -208,7 +208,6 @@ function finishRoundEnd(state: GameState, noCpu: boolean): GameState {
     const limit = getHandLimit(p)
     if (p.hand.length <= limit) continue
     const excess = p.hand.length - limit
-    s = addLog(s, `${player.name} の手札が上限（${limit}枚）を超えています。${excess}枚捨ててください`)
     s = { ...s, pendingAction: { kind: 'choose-hand-limit', playerId: player.id, limit, count: excess, selected: [], noCpu } }
     return s
   }
