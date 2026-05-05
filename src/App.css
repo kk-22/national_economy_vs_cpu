@@ -660,13 +660,13 @@
 /* ===== Global tooltip ===== */
 .global-tooltip {
   position: fixed;
-  transform: translate(-50%, -100%);
   background: #1e293b;
   color: #f1f5f9;
   padding: 5px 9px;
   border-radius: 6px;
   font-size: 11px;
-  white-space: nowrap;
+  max-width: 260px;
+  white-space: pre-wrap;
   z-index: 9999;
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);

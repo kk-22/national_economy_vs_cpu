@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import './App.css'
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useGame } from './composables/useGame'
 import type { CpuStrategy } from './game/types'
 import GameSetup from './components/GameSetup.vue'
@@ -184,6 +184,22 @@ watch(game, (newGame, oldGame) => {
 
 // ---- ツールチップ ----
 const tooltipState = ref<{ text: string; x: number; y: number } | null>(null)
+const tooltipEl = ref<HTMLElement | null>(null)
+const tooltipStyle = ref({ left: '0px', top: '0px' })
+
+watch(tooltipState, async (state) => {
+  if (!state) return
+  await nextTick()
+  if (!tooltipEl.value) return
+  const rect = tooltipEl.value.getBoundingClientRect()
+  const MARGIN = 8
+  let left = state.x - rect.width / 2
+  let top = state.y - rect.height - 14
+  left = Math.max(MARGIN, Math.min(left, window.innerWidth - rect.width - MARGIN))
+  top = Math.max(MARGIN, Math.min(top, window.innerHeight - rect.height - MARGIN))
+  tooltipStyle.value = { left: `${left}px`, top: `${top}px` }
+})
+
 function onTipEnter(e: MouseEvent, text: string) {
   if (!text) return
   tooltipState.value = { text, x: e.clientX, y: e.clientY }
@@ -313,8 +329,7 @@ function replayGame() {
       </div>
     </Transition>
 
-    <div v-if="tooltipState" class="global-tooltip"
-      :style="{ left: tooltipState.x + 'px', top: (tooltipState.y - 14) + 'px' }">
+    <div v-if="tooltipState" ref="tooltipEl" class="global-tooltip" :style="tooltipStyle">
       {{ tooltipState.text }}
     </div>
 
