@@ -151,10 +151,34 @@ export function useGame() {
     if (!state.game) return
     const pa = state.game.pendingAction
     if (!pa) return
-    if (pa.kind === 'choose-build-target') state.game = selectBuildTarget(state.game, cardId)
+    if (pa.kind === 'choose-build-target') {
+      state.game = selectBuildTarget(state.game, cardId)
+      const newPa = state.game.pendingAction
+      if (newPa?.kind === 'choose-build-payment') {
+        if (newPa.cost === 0) {
+          state.game = confirmBuildPayment(state.game, [])
+        } else {
+          const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
+          paymentSelectedIds.value = hand
+            .filter(c => c.kind === 'consumption' && c.id !== newPa.targetId)
+            .slice(0, Math.max(0, newPa.cost - 1))
+            .map(c => c.id)
+        }
+      }
+    }
     else if (pa.kind === 'choose-farm-build') state.game = selectFarmBuildTarget(state.game, cardId)
     else if (pa.kind === 'choose-double-first') state.game = selectDoubleFirst(state.game, cardId)
-    else if (pa.kind === 'choose-double-second') state.game = selectDoubleSecond(state.game, cardId)
+    else if (pa.kind === 'choose-double-second') {
+      state.game = selectDoubleSecond(state.game, cardId)
+      const newPa = state.game.pendingAction
+      if (newPa?.kind === 'choose-double-payment') {
+        const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
+        paymentSelectedIds.value = hand
+          .filter(c => c.kind === 'consumption' && c.id !== newPa.firstId && c.id !== newPa.secondId)
+          .slice(0, Math.max(0, newPa.cost - 1))
+          .map(c => c.id)
+      }
+    }
   }
 
   const paymentSelectedIds = ref<string[]>([])

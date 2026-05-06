@@ -25,7 +25,7 @@ const {
   clickPublicWorkplace, clickOwnedBuilding,
   clickBuildTarget, clickPaymentCard, clickCancelBuildChoice, clickCancelBuildPayment,
   clickCancelDoubleSecond, clickCancelDoublePayment,
-  clickDiscardCard, clickRevealedCard, clickHandLimitCard, clickToggleSellBuilding, clickSellOption,
+  clickDiscardCard, clickCancelDiscardChoice, clickRevealedCard, clickHandLimitCard, clickToggleSellBuilding, clickSellOption,
   undo, redo, canUndo, canRedo,
 } = useGame()
 
@@ -48,7 +48,26 @@ function sortByCost<T extends { kind: string; name?: string }>(cards: T[]): T[] 
 
 const sortedHand = computed(() => {
   const hand = humanPlayer.value?.hand ?? []
-  return handSort.value === 'order' ? hand : sortByCost(hand)
+  const pa = pendingAction.value
+  const consumptions = hand.filter(c => c.kind === 'consumption')
+  const buildings = hand.filter(c => c.kind === 'building')
+  const sortedBuildings = handSort.value === 'cost' ? sortByCost(buildings) : buildings
+
+  const isDiscardScene = pa?.kind === 'choose-discard' ||
+    pa?.kind === 'choose-build-payment' ||
+    pa?.kind === 'choose-double-payment' ||
+    pa?.kind === 'choose-hand-limit'
+
+  if (isDiscardScene) {
+    const selectedIds = (pa?.kind === 'choose-discard' || pa?.kind === 'choose-hand-limit')
+      ? pa.selected
+      : paymentSelected.value
+    const selectedConsumptions = consumptions.filter(c => selectedIds.includes(c.id))
+    const unselectedConsumptions = consumptions.filter(c => !selectedIds.includes(c.id))
+    return [...selectedConsumptions, ...unselectedConsumptions, ...sortedBuildings]
+  }
+
+  return [...sortedBuildings, ...consumptions]
 })
 
 const sortedBuildableCards = computed(() =>
@@ -283,9 +302,9 @@ function cardTooltip(name: string): string {
               <template v-if="pendingAction.kind === 'choose-build-target' || pendingAction.kind === 'choose-farm-build' || pendingAction.kind === 'choose-double-first'">
                 <div class="pending-title-row">
                   <span class="pending-title">
-                    {{ pendingAction.kind === 'choose-farm-build' ? '農場を選択（無料）'
-                     : pendingAction.kind === 'choose-double-first' ? '1棟目を選択（同コスト2棟）'
-                     : '建設する建物を選択' }}
+                    {{ pendingAction.kind === 'choose-farm-build' ? `${pendingAction.sourceName}で農場を選択（無料）`
+                     : pendingAction.kind === 'choose-double-first' ? `${pendingAction.sourceName}で1棟目を選択（同コスト2棟）`
+                     : `${pendingAction.sourceName}で建設する建物を選択` }}
                   </span>
                   <select v-model="handSort" class="hand-sort-select">
                     <option value="order">入手順</option>
@@ -308,7 +327,9 @@ function cardTooltip(name: string): string {
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-double-second'">
-                <span class="pending-title">2棟目を選択（コスト{{ pendingAction.firstCost }}）</span>
+                <div class="pending-title-row">
+                  <span class="pending-title">{{ pendingAction.sourceName }}で2棟目を選択（コスト{{ pendingAction.firstCost }}）</span>
+                </div>
                 <div class="card-wrap">
                   <button
                     v-for="card in sortedHand.filter(c => c.kind === 'building' && getBuildingDef(c.name!)?.cost === (pendingAction as any).firstCost && c.id !== (pendingAction as any).firstId)"
@@ -325,7 +346,13 @@ function cardTooltip(name: string): string {
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-build-payment' || pendingAction.kind === 'choose-double-payment'">
-                <span class="pending-title">支払い {{ (pendingAction as any).cost }}枚選択 ({{ paymentSelected.length }}/{{ (pendingAction as any).cost }})</span>
+                <div class="pending-title-row">
+                  <span class="pending-title">
+                    {{ pendingAction.kind === 'choose-build-payment'
+                      ? pendingAction.targetName
+                      : `${(humanPlayer!.hand.find(c => c.id === (pendingAction as any).firstId) as any)?.name}と${(humanPlayer!.hand.find(c => c.id === (pendingAction as any).secondId) as any)?.name}` }}の建設コスト{{ (pendingAction as any).cost }}枚選択 ({{ paymentSelected.length }}/{{ (pendingAction as any).cost }})
+                  </span>
+                </div>
                 <div class="card-wrap">
                   <button
                     v-for="card in sortedHand.filter(c => c.id !== (pendingAction as any).targetId && c.id !== (pendingAction as any).firstId && c.id !== (pendingAction as any).secondId)"
@@ -342,7 +369,7 @@ function cardTooltip(name: string): string {
 
               <template v-else-if="pendingAction.kind === 'choose-discard'">
                 <div class="pending-title-row">
-                  <span class="pending-title">捨て札を選択 ({{ pendingAction.selected.length }}/{{ pendingAction.count }})</span>
+                  <span class="pending-title">{{ pendingAction.sourceName }}の捨て札を選択 ({{ pendingAction.selected.length }}/{{ pendingAction.count }})</span>
                   <select v-model="handSort" class="hand-sort-select">
                     <option value="order">入手順</option>
                     <option value="cost">コスト順</option>
@@ -357,10 +384,13 @@ function cardTooltip(name: string): string {
                     <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                   </button>
                 </div>
+                <button class="btn-cancel" @click="clickCancelDiscardChoice">キャンセル</button>
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-from-revealed'">
-                <span class="pending-title">1枚選択（残りは捨て札）</span>
+                <div class="pending-title-row">
+                  <span class="pending-title">{{ pendingAction.sourceName }}により1枚選択（残りは捨て札）</span>
+                </div>
                 <div class="card-wrap">
                   <button v-for="card in pendingAction.revealed" :key="card.id"
                     class="bcard selectable"
@@ -373,10 +403,12 @@ function cardTooltip(name: string): string {
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-hand-limit'">
-                <span class="pending-title hand-limit-title">
-                  ⚠ 手札上限超過（上限{{ pendingAction.limit }}枚）：{{ pendingAction.count }}枚捨ててください
-                  （{{ pendingAction.selected.length }}/{{ pendingAction.count }}）
-                </span>
+                <div class="pending-title-row">
+                  <span class="pending-title hand-limit-title">
+                    ⚠ 手札上限超過（上限{{ pendingAction.limit }}枚）：{{ pendingAction.count }}枚捨ててください
+                    （{{ pendingAction.selected.length }}/{{ pendingAction.count }}）
+                  </span>
+                </div>
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
                     :class="['hcard', 'selectable', { selected: pendingAction.selected.includes(card.id) }]"
@@ -391,9 +423,11 @@ function cardTooltip(name: string): string {
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-sell-buildings'">
-                <span class="pending-title sell-warning">
-                  ⚠ 賃金不足のため売却する建物を選択（選択中 ${{ pendingAction.selected.reduce((s, id) => s + (getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue ?? 0), 0) }} / 必要額 ${{ pendingAction.deficit }}）
-                </span>
+                <div class="pending-title-row">
+                  <span class="pending-title sell-warning">
+                    ⚠ 賃金不足のため売却する建物を選択（選択中 ${{ pendingAction.selected.reduce((s, id) => s + (getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue ?? 0), 0) }} / 必要額 ${{ pendingAction.deficit }}）
+                  </span>
+                </div>
                 <div class="card-wrap">
                   <button
                     v-for="id in pendingAction.sellableIds" :key="id"

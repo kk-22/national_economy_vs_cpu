@@ -208,7 +208,8 @@ function finishRoundEnd(state: GameState, noCpu: boolean): GameState {
     const limit = getHandLimit(p)
     if (p.hand.length <= limit) continue
     const excess = p.hand.length - limit
-    s = { ...s, pendingAction: { kind: 'choose-hand-limit', playerId: player.id, limit, count: excess, selected: [], noCpu } }
+    const preSelected = p.hand.filter(c => c.kind === 'consumption').slice(0, excess - 1).map(c => c.id)
+    s = { ...s, pendingAction: { kind: 'choose-hand-limit', playerId: player.id, limit, count: excess, selected: preSelected, noCpu } }
     return s
   }
 
