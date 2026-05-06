@@ -362,6 +362,12 @@
   gap: 7px;
   padding: 4px 0;
 }
+.pending-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
 .pending-title {
   font-weight: 700; color: #92400e; font-size: 12px; white-space: nowrap;
 }
@@ -688,6 +694,27 @@
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
+
+/* ===== Hand sort ===== */
+.hand-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.hand-label-row .subsection-label {
+  margin-bottom: 0;
+}
+.hand-sort-select {
+  font-size: 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 1px 4px;
+  color: #64748b;
+  background: #fff;
+  cursor: pointer;
+}
+.hand-sort-select:hover { border-color: #94a3b8; }
 
 /* ===== CPU strategy selector ===== */
 .cpu-strategy-row {

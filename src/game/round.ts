@@ -226,6 +226,14 @@ export function resolveAfterHandLimit(state: GameState, noCpu: boolean): GameSta
       .filter(b => BUILDING_CARDS[b.name]?.canSell)
     const totalSellable = sellable.reduce((sum, b) => sum + (BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
     if (totalSellable >= deficit) {
+      const options = findSellOptions(sellable, deficit)
+      if (options.length === 1) {
+        s = autoSellForWages(s, playerId, options[0], deficit)
+        const wage = ROUND_CARDS[s.round - 1].wage
+        const p = getPlayer(s, playerId)
+        s = addLog(s, `${p.name}: 労働者${p.workers.length}人の賃金 $${p.workers.length * wage}→残り$${p.money}`)
+        return startNextRound(s, noCpu)
+      }
       return {
         ...s,
         pendingAction: { kind: 'choose-sell-buildings', playerId, deficit, sellableIds: sellable.map(b => b.id), selected: [], noCpu },
