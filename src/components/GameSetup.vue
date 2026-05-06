@@ -24,6 +24,22 @@ const emit = defineEmits<{
 
 const cpuCount = computed(() => props.setupHasPlayer ? props.setupTotal - 1 : props.setupTotal)
 
+// -1 = プレイヤーなし, 0 = ランダム, n = n番手
+const playerMode = computed({
+  get(): number {
+    if (!props.setupHasPlayer) return -1
+    return props.setupPlayerOrder
+  },
+  set(val: number) {
+    if (val === -1) {
+      emit('update:setupHasPlayer', false)
+    } else {
+      emit('update:setupHasPlayer', true)
+      emit('update:setupPlayerOrder', val)
+    }
+  },
+})
+
 const bulkStrategy = computed({
   get(): CpuStrategy | '' {
     const strategies = props.setupCpuStrategies.slice(0, cpuCount.value)
@@ -73,26 +89,18 @@ function strategyLabel(strategy: CpuStrategy): string {
       <div class="radio-group-label">プレイヤー</div>
       <div class="radio-group radio-group--horizontal">
         <label class="radio-item">
-          <input type="radio" :checked="setupHasPlayer" @change="emit('update:setupHasPlayer', true)" />
-          <span>あり</span>
-        </label>
-        <label class="radio-item">
-          <input type="radio" :checked="!setupHasPlayer" @change="emit('update:setupHasPlayer', false)" />
+          <input type="radio" :checked="playerMode === -1" @change="playerMode = -1" />
           <span>なし</span>
         </label>
+        <label class="radio-item">
+          <input type="radio" :checked="playerMode === 0" @change="playerMode = 0" />
+          <span>手番ランダム</span>
+        </label>
+        <label v-for="n in setupTotal" :key="n" class="radio-item">
+          <input type="radio" :checked="playerMode === n" @change="playerMode = n" />
+          <span>手番{{ n }}番</span>
+        </label>
       </div>
-      <template v-if="setupHasPlayer">
-        <div class="radio-group radio-group--horizontal" style="margin-top:6px">
-          <label class="radio-item">
-            <input type="radio" :checked="setupPlayerOrder === 0" @change="emit('update:setupPlayerOrder', 0)" />
-            <span>手番ランダム</span>
-          </label>
-          <label v-for="n in setupTotal" :key="n" class="radio-item">
-            <input type="radio" :checked="setupPlayerOrder === n" @change="emit('update:setupPlayerOrder', n)" />
-            <span>{{ n }}番目</span>
-          </label>
-        </div>
-      </template>
 
       <div class="radio-group-label">CPUの戦略</div>
       <div v-if="cpuCount > 1" class="cpu-strategy-row">
