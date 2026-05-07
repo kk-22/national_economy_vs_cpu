@@ -20,6 +20,8 @@ import { BUILDING_CARDS, ROUND_CARDS } from '../game/constants'
 import { GameHistory } from '../game/history'
 import type { HistoryEntry } from '../game/history'
 
+const SAVE_KEY = 'ne-game-save'
+
 const state = shallowReactive<{ game: GameState | null }>({ game: null })
 let history = new GameHistory(1)
 let pendingEntry: HistoryEntry | null = null
@@ -28,7 +30,47 @@ const historyVersion = ref(0)  // incremented after each history mutation to dri
 
 export function useGame() {
 
+  function saveGameState(): void {
+    if (!state.game) return
+    try {
+      const data = { game: toRaw(state.game), history: history.toJSON() }
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data))
+    } catch { /* quota超過などは無視 */ }
+  }
+
+  function hasSavedGame(): boolean {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY)
+      if (!raw) return false
+      const data = JSON.parse(raw)
+      return !!data?.game
+    } catch { return false }
+  }
+
+  function restoreGame(): boolean {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY)
+      if (!raw) return false
+      const data = JSON.parse(raw)
+      if (!data?.game) return false
+      state.game = data.game as GameState
+      if (data.history) {
+        history = GameHistory.fromJSON(data.history)
+      } else {
+        history = new GameHistory(data.game._rngSeed)
+      }
+      historyVersion.value++
+      pendingEntry = null
+      return true
+    } catch { return false }
+  }
+
+  function clearSavedGame(): void {
+    localStorage.removeItem(SAVE_KEY)
+  }
+
   function startGame(config: GameConfig) {
+    clearSavedGame()
     state.game = createGame(config)
     history = new GameHistory(state.game._rngSeed)
     pendingEntry = null
@@ -36,6 +78,7 @@ export function useGame() {
   }
 
   function startDebugGame(cpuCount: number = 3) {
+    clearSavedGame()
     state.game = createDebugGame(cpuCount)
     history = new GameHistory(state.game._rngSeed)
     pendingEntry = null
@@ -395,6 +438,10 @@ export function useGame() {
     canRedo,
     isUndoRedo,
     getBuildingDef,
+    saveGameState,
+    hasSavedGame,
+    restoreGame,
+    clearSavedGame,
     startGame,
     startDebugGame,
     runCpuTurns,

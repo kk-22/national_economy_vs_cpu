@@ -11,6 +11,7 @@ const {
   game, humanPlayer, isHumanTurn, currentWage,
   pendingAction, scores,
   startGame, startDebugGame, runCpuTurns, cpuStepAction, autoAdvanceIfStuck,
+  saveGameState, hasSavedGame, restoreGame,
   undo, canUndo, isUndoRedo,
 } = useGame()
 
@@ -27,29 +28,33 @@ const lastStartedDebug = ref(false)
 
 const setupCpu = computed(() => setupHasPlayer.value ? setupTotal.value - 1 : setupTotal.value)
 
-const VALID_STRATEGIES: CpuStrategy[] = ['random', 'greedy', 'mcts', 'disruptive']
+function syncSetupFromGame(g: typeof game.value) {
+  if (!g) return
+  setupTotal.value = g.players.length
+  setupHasPlayer.value = g.players.some(p => !p.isCpu)
+  const cpuStrategies = g.players.filter(p => p.isCpu).map(p => p.cpuStrategy)
+  const next = [...setupCpuStrategies.value]
+  cpuStrategies.forEach((s, i) => { next[i] = s })
+  setupCpuStrategies.value = next
+}
 
 onMounted(() => {
-  const total = Number(localStorage.getItem('ne-setup-total'))
-  if ([2, 3, 4].includes(total)) setupTotal.value = total
-
-  const hasPlayerStr = localStorage.getItem('ne-setup-has-player')
-  if (hasPlayerStr !== null) setupHasPlayer.value = hasPlayerStr !== 'false'
-
   const order = Number(localStorage.getItem('ne-setup-order'))
   if (order >= 0 && order <= 4) setupPlayerOrder.value = order
 
-  try {
-    const raw = localStorage.getItem('ne-setup-strategies')
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length === 4 && parsed.every((s: unknown) => VALID_STRATEGIES.includes(s as CpuStrategy)))
-        setupCpuStrategies.value = parsed
-    }
-  } catch { /* ignore */ }
-
   skipAnim.value = localStorage.getItem('ne-setup-skip-anim') === 'true'
   lastStartedDebug.value = localStorage.getItem('ne-setup-debug') === 'true'
+
+  // デバッグモード以外でセーブデータがあれば続きから再開
+  if (!lastStartedDebug.value && hasSavedGame()) {
+    suppressHandAnim = true
+    const restored = restoreGame()
+    if (restored) {
+      syncSetupFromGame(game.value)
+      if (game.value?.phase === 'placement') scheduleInitialCpuRun()
+      return
+    }
+  }
 
   if (lastStartedDebug.value) {
     startDebugGame(Math.min(setupCpu.value, 3))
@@ -67,14 +72,9 @@ onMounted(() => {
 })
 
 watch(setupTotal, (newVal) => {
-  localStorage.setItem('ne-setup-total', String(newVal))
   if (setupPlayerOrder.value > newVal) setupPlayerOrder.value = newVal
 })
-watch(setupHasPlayer, (newVal) => { localStorage.setItem('ne-setup-has-player', String(newVal)) })
 watch(setupPlayerOrder, (newVal) => { localStorage.setItem('ne-setup-order', String(newVal)) })
-watch(setupCpuStrategies, (newVal) => {
-  localStorage.setItem('ne-setup-strategies', JSON.stringify(newVal))
-}, { deep: true })
 watch(skipAnim, (newVal) => { localStorage.setItem('ne-setup-skip-anim', String(newVal)) })
 
 // ---- アニメーション管理 ----
@@ -130,6 +130,8 @@ watch(game, () => { tooltipState.value = null })
 
 watch(game, (newGame, oldGame) => {
   if (!newGame || !oldGame) return
+  saveGameState()
+
   if (isUndoRedo.value) {
     isUndoRedo.value = false
     cpuRevision++
