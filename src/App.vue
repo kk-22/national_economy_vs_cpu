@@ -80,6 +80,7 @@ watch(skipAnim, (newVal) => { localStorage.setItem('ne-setup-skip-anim', String(
 // ---- アニメーション管理 ----
 const activatedIds = ref<string[]>([])
 const builtIds = ref<string[]>([])
+const drawnIds = ref<string[]>([])
 const roundAnimRound = ref<number | null>(null)
 
 const ANIM_DURATION = 900
@@ -88,6 +89,7 @@ const ROUND_ANIM_DURATION = 1200
 const isAnimating = ref(false)
 let animEndTimer: ReturnType<typeof setTimeout> | null = null
 let cpuRevision = 0  // undo/redo 時にインクリメントしてスケジュール済みの CPU タイムアウトを無効化
+let suppressHandAnim = false  // ゲーム開始直後の初期手札アニメーション抑制
 
 function setAnimating(totalMs: number) {
   if (skipAnim.value) return
@@ -107,6 +109,12 @@ function flashBuilt(id: string) {
   builtIds.value = [...builtIds.value, id]
   setAnimating(ANIM_DURATION + 100 + 50)
   setTimeout(() => { builtIds.value = builtIds.value.filter(x => x !== id) }, ANIM_DURATION + 100)
+}
+function flashDrawn(id: string) {
+  if (skipAnim.value || suppressHandAnim) return
+  drawnIds.value = [...drawnIds.value, id]
+  setAnimating(ANIM_DURATION + 50)
+  setTimeout(() => { drawnIds.value = drawnIds.value.filter(x => x !== id) }, ANIM_DURATION)
 }
 function triggerRoundAnim(round: number) {
   if (skipAnim.value) return
@@ -142,7 +150,14 @@ watch(game, (newGame, oldGame) => {
       if (!oldB) flashBuilt(newB.id)
       else if (newB.workerHereId !== null && oldB.workerHereId === null) flashActivated(newB.id)
     }
+    if (!suppressHandAnim) {
+      const oldHandIds = new Set(oldP.hand.map(c => c.id))
+      for (const card of newP.hand) {
+        if (!oldHandIds.has(card.id)) flashDrawn(card.id)
+      }
+    }
   }
+  suppressHandAnim = false
 
   if (hasRoundChange) {
     const roundDelay = skipAnim.value ? 0 : ANIM_DURATION + 50
@@ -254,6 +269,7 @@ function scheduleInitialCpuRun() {
 function beginGame() {
   localStorage.setItem('ne-setup-debug', 'false')
   lastStartedDebug.value = false
+  suppressHandAnim = true
   const cpuCount = setupCpu.value
   if (!setupHasPlayer.value) {
     startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, cpuCount) })
@@ -272,6 +288,7 @@ function beginGame() {
 function beginDebugGame() {
   localStorage.setItem('ne-setup-debug', 'true')
   lastStartedDebug.value = true
+  suppressHandAnim = true
   startDebugGame(Math.min(setupCpu.value, 3))
   showSetup.value = false
 }
@@ -281,6 +298,7 @@ function replayGame() {
   const cpuCount = cpuPlayers.length
   const cpuStrategies = cpuPlayers.map(p => p.cpuStrategy)
   const isAllCpu = !game.value!.players.some(p => !p.isCpu)
+  suppressHandAnim = true
   if (isAllCpu) {
     startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies })
     scheduleInitialCpuRun()
@@ -307,6 +325,7 @@ function replayGame() {
     <GameBoard
       :activatedIds="activatedIds"
       :builtIds="builtIds"
+      :drawnIds="drawnIds"
       :canPlayerAct="canPlayerAct"
       :tipEnter="onTipEnter"
       :tipLeave="onTipLeave"
