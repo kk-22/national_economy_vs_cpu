@@ -48,7 +48,7 @@ export function createGame(config: GameConfig): GameState {
       name,
       isCpu,
       cpuStrategy,
-      money: 5 + i,
+      money: 0,  // 手番順決定後に再割り当て
       hand: [],
       ownedBuildings: [],
       workers: [
@@ -75,6 +75,15 @@ export function createGame(config: GameConfig): GameState {
     startIdx = (playerCount - (n - 1)) % playerCount
   }
   state = { ...state, currentPlayerIndex: startIdx, startPlayerIndex: startIdx }
+
+  // 手番順（startIdx 起点）に応じて初期所持金を配る：1手目 $5、2手目 $6、…
+  state = {
+    ...state,
+    players: state.players.map((p, i) => {
+      const turnPosition = (i - startIdx + playerCount) % playerCount
+      return { ...p, money: 5 + turnPosition }
+    }),
+  }
 
   state = flipRoundCard(state, 1, playerCount)
   state = addLog(state, 'ゲーム開始！')
