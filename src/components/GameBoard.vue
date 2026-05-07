@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useGame } from '../composables/useGame'
 import type { Worker, GameEffect, HandCard } from '../game/types'
 
@@ -131,6 +131,11 @@ function stopResize() {
   window.removeEventListener('mousemove', onResizeMove)
   window.removeEventListener('mouseup', stopResize)
 }
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+})
 
 function cardLabel(card: { kind: string; name?: string }) {
   return card.kind === 'building' ? card.name! : '消費財'

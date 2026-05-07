@@ -29,7 +29,7 @@ export class GameHistory {
   }
 
   push(preState: GameState, entry: HistoryEntry): void {
-    this.snapshots.push(structuredClone(preState))
+    this.snapshots.push(preState)
     this.actionLog.push(entry)
     this.futureSnapshots = []
     this.futureLog = []
@@ -38,21 +38,21 @@ export class GameHistory {
   undo(currentState: GameState): GameState | null {
     if (this.snapshots.length === 0) return null
     if (!currentState.pendingAction) {
-      this.futureSnapshots.unshift(structuredClone(currentState))
+      this.futureSnapshots.unshift(currentState)
       this.futureLog.unshift(this.actionLog.pop()!)
     } else {
       this.futureSnapshots = []
       this.futureLog = []
       this.actionLog.pop()
     }
-    return structuredClone(this.snapshots.pop()!)
+    return this.snapshots.pop()!
   }
 
   redo(currentState: GameState): GameState | null {
     if (this.futureSnapshots.length === 0) return null
-    this.snapshots.push(structuredClone(currentState))
+    this.snapshots.push(currentState)
     this.actionLog.push(this.futureLog.shift()!)
-    return structuredClone(this.futureSnapshots.shift()!)
+    return this.futureSnapshots.shift()!
   }
 
   get canUndo(): boolean { return this.snapshots.length > 0 }
