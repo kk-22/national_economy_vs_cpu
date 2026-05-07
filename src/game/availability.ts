@@ -56,6 +56,6 @@ export function getAvailableOwnedBuildings(state: GameState, playerId: number): 
     const def = BUILDING_CARDS[b.name]
     if (!def || !def.isWorkplace) return false
     if (b.workerHereId !== null) return false
-    return canUseEffect(def.effect, player)
+    return canUseEffect(def.effect, player, state.household)
   })
 }

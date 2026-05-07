@@ -26,20 +26,26 @@ export function constructBuilding(state: GameState, playerId: number, cardId: st
   return [s]
 }
 
-export function undoWorkerPlacement(state: GameState, playerId: number, effectKinds: string[]): GameState {
+export function undoWorkerPlacement(state: GameState, playerId: number, effectKinds: string[], sourceId?: string): GameState {
   const player = getPlayer(state, playerId)
-  const effectSet = new Set(effectKinds)
 
-  const matchingIds = new Set<string>()
-  for (const wp of state.publicWorkplaces) {
-    if (effectSet.has(wp.effect.kind)) matchingIds.add(wp.id)
-  }
-  for (const b of player.ownedBuildings) {
-    const def = BUILDING_CARDS[b.name]
-    if (def && effectSet.has(def.effect.kind)) matchingIds.add(b.id)
+  let placedWorker: typeof player.workers[number] | undefined
+  if (sourceId) {
+    // sourceId が分かっている場合は直接特定する（複数 discard-gain 建物があっても正確）
+    placedWorker = player.workers.find(w => w.placedAt === sourceId)
+  } else {
+    const effectSet = new Set(effectKinds)
+    const matchingIds = new Set<string>()
+    for (const wp of state.publicWorkplaces) {
+      if (effectSet.has(wp.effect.kind)) matchingIds.add(wp.id)
+    }
+    for (const b of player.ownedBuildings) {
+      const def = BUILDING_CARDS[b.name]
+      if (def && effectSet.has(def.effect.kind)) matchingIds.add(b.id)
+    }
+    placedWorker = player.workers.find(w => w.placedAt !== null && matchingIds.has(w.placedAt!))
   }
 
-  const placedWorker = player.workers.find(w => w.placedAt !== null && matchingIds.has(w.placedAt!))
   if (!placedWorker || placedWorker.placedAt === null) return { ...state, pendingAction: null }
 
   const targetId = placedWorker.placedAt

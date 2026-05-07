@@ -88,8 +88,8 @@ export interface Player {
 export type PendingAction =
   | { kind: 'choose-build-target'; playerId: number; discount: number; drawAfter: number; sourceName?: string }
   | { kind: 'choose-build-payment'; playerId: number; targetId: string; targetName: string; cost: number; drawAfter: number; discount: number; sourceName?: string }
-  | { kind: 'choose-discard'; playerId: number; count: number; gainAmount: number; selected: string[]; drawCount?: number; sourceName?: string }
-  | { kind: 'choose-from-revealed'; playerId: number; revealed: HandCard[]; sourceName?: string }
+  | { kind: 'choose-discard'; playerId: number; count: number; gainAmount: number; selected: string[]; drawCount?: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-from-revealed'; playerId: number; revealed: HandCard[]; sourceName?: string; sourceId?: string }
   | { kind: 'choose-farm-build'; playerId: number; sourceName?: string }
   | { kind: 'choose-double-first'; playerId: number; sourceName?: string }
   | { kind: 'choose-double-second'; playerId: number; firstCost: number; firstId: string; sourceName?: string }

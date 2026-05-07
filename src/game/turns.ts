@@ -32,7 +32,11 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
   s = applyEffect(s, playerId, workplace.effect, player.isCpu, player.cpuStrategy)
 
   if (s.pendingAction) {
-    s = { ...s, pendingAction: { ...s.pendingAction, sourceName: workplace.name } }
+    const pa = s.pendingAction
+    const withSource = (pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed')
+      ? { ...pa, sourceName: workplace.name, sourceId: workplaceId }
+      : { ...pa, sourceName: workplace.name }
+    s = { ...s, pendingAction: withSource }
     return s
   }
 
@@ -61,7 +65,11 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
   s = applyEffect(s, playerId, def.effect, player.isCpu, player.cpuStrategy)
 
   if (s.pendingAction) {
-    s = { ...s, pendingAction: { ...s.pendingAction, sourceName: building.name } }
+    const pa = s.pendingAction
+    const withSource = (pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed')
+      ? { ...pa, sourceName: building.name, sourceId: buildingId }
+      : { ...pa, sourceName: building.name }
+    s = { ...s, pendingAction: withSource }
     return s
   }
 
