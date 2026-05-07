@@ -230,8 +230,12 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
         if (player.hand.length - 1 < discountedCost) continue
         if (def.effect.kind.startsWith('p-')) {
           if (round < 8 || def.assetValue <= 0) continue
-        } else if (availableAfterBuild < 1) {
-          if (def.assetValue <= (discountedCost + 1) * 6) continue
+        } else {
+          // 7ラウンド以下は職場として使えない建物（倉庫など）を建設対象から除外
+          if (round <= 7 && !def.isWorkplace) continue
+          if (availableAfterBuild < 1) {
+            if (def.assetValue <= (discountedCost + 1) * 6) continue
+          }
         }
         maxCost = Math.max(maxCost, def.cost)
       }
@@ -299,7 +303,9 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
     }
     case 'draw-become-start': return 30
     case 'slash-burn': return 25
-    case 'draw-consumption': return effect.n * 4
+    case 'draw-consumption':
+      // 手札3枚以下のときは消費財を確保できる価値が高い（採石場のpubBonusより優先されるよう係数を上げる）
+      return player.hand.length <= 3 ? effect.n * 16 : effect.n * 4
     case 'draw-consumption-to':
       return player.hand.length >= effect.target ? -Infinity : (effect.target - player.hand.length) * 4
     case 'none': return 5

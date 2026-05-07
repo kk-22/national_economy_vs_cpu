@@ -103,13 +103,15 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
 
   if (strategy === 'greedy') {
     const availableAfter = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
-    // 建てて即売り損パターンを除外
+    // 建てて即売り損パターンを除外、7ラウンド以下は配置不可建物（職場でない建物）を建てない
     buildable = buildable.filter(c => {
       const def = BUILDING_CARDS[c.name]!
       if (def.effect.kind.startsWith('p-')) {
         // パッシブ効果: R8以降で得点があれば建設対象
         return state.round >= 8 && def.assetValue > 0
       }
+      // 7ラウンド以下は職場として使えない建物（倉庫など）を建設対象から除外
+      if (state.round <= 7 && !def.isWorkplace) return false
       // アクティブ効果: 使えるワーカーあり、または売却しても採算が取れる
       if (availableAfter >= 1) return true
       const cardCost = Math.max(0, def.cost - discount) + 1
