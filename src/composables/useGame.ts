@@ -19,6 +19,7 @@ import { availableWorkers } from '../game/primitives'
 import { BUILDING_CARDS, ROUND_CARDS } from '../game/constants'
 import { GameHistory } from '../game/history'
 import type { HistoryEntry } from '../game/history'
+import { replayToIndex } from '../game/replay'
 
 const SAVE_KEY = 'ne-game-save'
 
@@ -26,6 +27,7 @@ const state = shallowReactive<{ game: GameState | null }>({ game: null })
 let history = new GameHistory(1)
 let pendingEntry: HistoryEntry | null = null
 const isUndoRedo = ref(false)
+const cpuPaused = ref(false)
 const historyVersion = ref(0)  // incremented after each history mutation to drive canUndo/canRedo reactivity
 
 export function useGame() {
@@ -61,6 +63,7 @@ export function useGame() {
       }
       historyVersion.value++
       pendingEntry = null
+      cpuPaused.value = false
       return true
     } catch { return false }
   }
@@ -73,7 +76,9 @@ export function useGame() {
     clearSavedGame()
     state.game = createGame(config)
     history = new GameHistory(state.game._rngSeed)
+    history.setInitialState(toRaw(state.game))
     pendingEntry = null
+    cpuPaused.value = false
     historyVersion.value++
   }
 
@@ -81,7 +86,9 @@ export function useGame() {
     clearSavedGame()
     state.game = createDebugGame(cpuCount)
     history = new GameHistory(state.game._rngSeed)
+    history.setInitialState(toRaw(state.game))
     pendingEntry = null
+    cpuPaused.value = false
     historyVersion.value++
   }
 
@@ -106,7 +113,7 @@ export function useGame() {
 
       // ワーカーを置くステップのみ history に記録（turn advance は記録しない）
       if (availableWorkers(curr).length > 0) {
-        history.push(toRaw(state.game), { playerId: curr.id, targetId: '__cpu__', targetName: curr.name, timestamp: Date.now() })
+        history.push({ playerId: curr.id, targetId: '__cpu__', targetName: curr.name, timestamp: Date.now() })
         historyVersion.value++
       }
 
@@ -122,7 +129,7 @@ export function useGame() {
     if (state.game.pendingAction) return  // 保留アクション中は実行しない
     const current = state.game.players[state.game.currentPlayerIndex]
     if (!current?.isCpu) return
-    history.push(toRaw(state.game), { playerId: current.id, targetId: '__cpu__', targetName: current.name, timestamp: Date.now() })
+    history.push({ playerId: current.id, targetId: '__cpu__', targetName: current.name, timestamp: Date.now() })
     historyVersion.value++
     state.game = cpuOneTurnStep(state.game)
   }
@@ -166,7 +173,7 @@ export function useGame() {
       targetName: wp.name,
       timestamp: Date.now(),
     }
-    history.push(rawGame, entry)
+    history.push(entry)
     historyVersion.value++
     pendingEntry = entry
     state.game = placeWorkerOnPublic(state.game, humanPlayer.value!.id, id)
@@ -184,7 +191,7 @@ export function useGame() {
       targetName: building.name,
       timestamp: Date.now(),
     }
-    history.push(rawGame, entry)
+    history.push(entry)
     historyVersion.value++
     pendingEntry = entry
     state.game = placeWorkerOnBuilding(state.game, humanPlayer.value!.id, id)
@@ -346,6 +353,7 @@ export function useGame() {
 
   function clickSellOption(selectedIds: string[]) {
     if (!state.game) return
+    if (pendingEntry) pendingEntry.soldBuildingIds = selectedIds
     state.game = confirmSellBuildings(state.game, selectedIds)
   }
 
@@ -355,72 +363,58 @@ export function useGame() {
     const pa = state.game.pendingAction
     if (!pa || pa.kind !== 'choose-hand-limit') return
     if (pa.selected.length >= pa.count) {
+      if (pendingEntry) pendingEntry.handLimitDiscarded = [...pa.selected]
       state.game = confirmHandLimitDiscard(state.game)
     }
   }
 
   function undo() {
-    if (!state.game || !history.canUndo) return
+    if (!state.game || !history.canUndo || !history.initialState) return
     const hasHumanPlayer = state.game.players.some(p => !p.isCpu)
+    const hasPending = !!state.game.pendingAction
 
-    let prev: GameState | null = null
-    let currentForUndo = toRaw(state.game)
-
-    if (!hasHumanPlayer) {
-      // CPU-only: 1ステップだけ戻る
-      prev = history.undo(currentForUndo)
+    if (hasPending) {
+      history.clearRedo()
+      history.popEntry(false)
+    } else if (!hasHumanPlayer) {
+      history.popEntry(true)
     } else {
-      // 人間あり: CPU アクションをスキップしつつ、直前の人間アクション自体も undo する
-      while (history.canUndo) {
-        const entry = history.actionLog[history.actionLog.length - 1]
-        const p = history.undo(currentForUndo)
-        if (!p) break
-        prev = p
-        currentForUndo = p
-        // 人間アクションを undo したら停止
-        if (!entry || entry.targetId !== '__cpu__') break
+      while (history.peekLastEntry()?.targetId === '__cpu__') {
+        history.popEntry(true)
       }
+      history.popEntry(true)
     }
 
-    if (!prev) return
     isUndoRedo.value = true
     historyVersion.value++
     pendingEntry = null
     paymentSelectedIds.value = []
-    state.game = prev
+    state.game = replayToIndex(history.initialState, history.actionLog)
+    if (!hasHumanPlayer) cpuPaused.value = true
+  }
+
+  function resumeCpu() {
+    cpuPaused.value = false
   }
 
   function redo() {
-    if (!state.game || !history.canRedo) return
+    if (!state.game || !history.canRedo || !history.initialState) return
     const hasHumanPlayer = state.game.players.some(p => !p.isCpu)
 
-    let next: GameState | null = null
-    let currentForRedo = toRaw(state.game)
-
     if (!hasHumanPlayer) {
-      // CPU-only: 1ステップずつ進む
-      next = history.redo(currentForRedo)
+      history.pushFromRedo()
     } else {
-      // 人間あり: CPU アクションをスキップして次の人間アクション直前まで進む
-      while (history.canRedo) {
-        const p = history.redo(currentForRedo)
-        if (!p) break
-        next = p
-        currentForRedo = p
-        // ゲーム終了 or これ以上 redo なし → 終了
-        if (!history.canRedo || p.phase !== 'placement') break
-        // 次に行動するのが人間なら停止、CPU なら続けて redo
-        const nextPlayer = p.players[p.currentPlayerIndex]
-        if (!nextPlayer?.isCpu) break
+      history.pushFromRedo()
+      while (history.peekNextRedo()?.targetId === '__cpu__') {
+        history.pushFromRedo()
       }
     }
 
-    if (!next) return
     isUndoRedo.value = true
     historyVersion.value++
     pendingEntry = null
     paymentSelectedIds.value = []
-    state.game = next
+    state.game = replayToIndex(history.initialState, history.actionLog)
   }
 
   return {
@@ -437,6 +431,8 @@ export function useGame() {
     canUndo,
     canRedo,
     isUndoRedo,
+    cpuPaused,
+    resumeCpu,
     getBuildingDef,
     saveGameState,
     hasSavedGame,

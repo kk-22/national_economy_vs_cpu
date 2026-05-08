@@ -12,7 +12,7 @@ const {
   pendingAction, scores,
   startGame, startDebugGame, runCpuTurns, cpuStepAction, autoAdvanceIfStuck,
   saveGameState, hasSavedGame, restoreGame,
-  undo, canUndo, isUndoRedo,
+  undo, canUndo, isUndoRedo, cpuPaused, resumeCpu,
 } = useGame()
 
 // ---- セットアップ状態 ----
@@ -135,6 +135,16 @@ watch(game, (newGame, oldGame) => {
   if (isUndoRedo.value) {
     isUndoRedo.value = false
     cpuRevision++
+    if (!cpuPaused.value && newGame.phase === 'placement') {
+      const current = newGame.players[newGame.currentPlayerIndex]
+      if (current?.isCpu) {
+        if (skipAnim.value) runCpuTurns()
+        else {
+          const rev = cpuRevision
+          setTimeout(() => { if (cpuRevision === rev) cpuStepAction() }, 100)
+        }
+      }
+    }
     return
   }
 
@@ -174,7 +184,7 @@ watch(game, (newGame, oldGame) => {
       if (skipAnim.value) {
         runCpuTurns()
       } else {
-        const cpuDelay = hasRoundChange
+          const cpuDelay = hasRoundChange
           ? ANIM_DURATION + 50 + ROUND_ANIM_DURATION + 100
           : ANIM_DURATION + 50
         const rev = cpuRevision
@@ -295,6 +305,20 @@ function beginDebugGame() {
   showSetup.value = false
 }
 
+function resumeAfterUndo() {
+  resumeCpu()
+  if (!game.value || game.value.phase !== 'placement') return
+  const current = game.value.players[game.value.currentPlayerIndex]
+  if (!current?.isCpu) return
+  cpuRevision++
+  if (skipAnim.value) {
+    runCpuTurns()
+  } else {
+    const rev = cpuRevision
+    setTimeout(() => { if (cpuRevision === rev) cpuStepAction() }, 100)
+  }
+}
+
 function replayGame() {
   const cpuPlayers = game.value!.players.filter(p => p.isCpu)
   const cpuCount = cpuPlayers.length
@@ -334,6 +358,7 @@ function replayGame() {
       @menuOpen="menuOpen = true"
       @openSetup="openSetup"
       @openSummary="showSummary = true"
+      @resume="resumeAfterUndo"
     />
     <GameResult v-if="game.phase === 'game-over'"
       :game="game"

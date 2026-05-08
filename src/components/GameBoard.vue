@@ -16,6 +16,7 @@ const emit = defineEmits<{
   menuOpen: []
   openSetup: []
   openSummary: []
+  resume: []
 }>()
 
 const {
@@ -27,7 +28,7 @@ const {
   clickBuildTarget, clickPaymentCard, clickCancelBuildChoice, clickCancelBuildPayment,
   clickCancelDoubleSecond, clickCancelDoublePayment,
   clickDiscardCard, clickCancelDiscardChoice, clickRevealedCard, clickHandLimitCard, clickToggleSellBuilding, clickSellOption,
-  undo, redo, canUndo, canRedo,
+  undo, redo, canUndo, canRedo, cpuPaused,
 } = useGame()
 
 const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
@@ -218,7 +219,8 @@ function cardTooltip(name: string): string {
       </div>
       <div class="mobile-undo-bar">
         <button class="btn-undo" :disabled="!canUndo" @click="undo">◀</button>
-        <button class="btn-redo" :disabled="!canRedo" @click="redo">▶</button>
+        <button v-if="cpuPaused" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
+        <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">▶</button>
       </div>
       <button class="menu-btn" @click="emit('menuOpen')">☰</button>
     </div>
@@ -507,7 +509,8 @@ function cardTooltip(name: string): string {
         </div>
         <div class="log-undo-bar">
           <button class="btn-undo" :disabled="!canUndo" @click="undo">◀ 戻る</button>
-          <button class="btn-redo" :disabled="!canRedo" @click="redo">進む ▶</button>
+          <button v-if="cpuPaused" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
+          <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">進む ▶</button>
         </div>
         <div class="log-label">ログ</div>
         <div v-for="(msg, i) in [...game.log].reverse()" :key="i" class="log-line">{{ msg }}</div>

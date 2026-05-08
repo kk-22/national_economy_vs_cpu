@@ -6,72 +6,87 @@ export interface CardRef {
 }
 
 export interface HistoryEntry {
-  playerId: number           // 0=プレイヤー, 1〜3=CPU
-  targetId: string           // 配置先ID（公共施設 or 所有建物）
-  targetName: string         // 配置先名
-  builtCard?: CardRef        // 建設したカード
-  secondBuiltCard?: CardRef  // 2棟目（二胡市建設）
-  paymentCards?: CardRef[]   // コストで払ったカード
-  discardedCards?: CardRef[] // 捨てたカード
-  pickedCard?: CardRef       // 選んだカード（設計事務所）
-  timestamp: number          // ミリ秒
+  playerId: number
+  targetId: string           // 配置先ID（公共施設 or 所有建物）。CPU は '__cpu__'
+  targetName: string
+  builtCard?: CardRef
+  secondBuiltCard?: CardRef
+  paymentCards?: CardRef[]
+  discardedCards?: CardRef[]
+  pickedCard?: CardRef
+  handLimitDiscarded?: string[]  // 手札上限超過で捨てたカードID
+  soldBuildingIds?: string[]     // 賃金不足で売却した建物ID
+  timestamp: number
 }
 
 export class GameHistory {
   readonly initialSeed: number
-  private snapshots: GameState[] = []
-  private futureSnapshots: GameState[] = []
+  private _initialState: GameState | null = null
   readonly actionLog: HistoryEntry[] = []
-  private futureLog: HistoryEntry[] = []
+  private _redoLog: HistoryEntry[] = []
 
   constructor(seed: number) {
     this.initialSeed = seed
   }
 
-  push(preState: GameState, entry: HistoryEntry): void {
-    this.snapshots.push(preState)
+  setInitialState(state: GameState): void {
+    this._initialState = state
+  }
+
+  get initialState(): GameState | null { return this._initialState }
+
+  push(entry: HistoryEntry): void {
     this.actionLog.push(entry)
-    this.futureSnapshots = []
-    this.futureLog = []
+    this._redoLog = []
   }
 
-  undo(currentState: GameState): GameState | null {
-    if (this.snapshots.length === 0) return null
-    if (!currentState.pendingAction) {
-      this.futureSnapshots.unshift(currentState)
-      this.futureLog.unshift(this.actionLog.pop()!)
-    } else {
-      this.futureSnapshots = []
-      this.futureLog = []
-      this.actionLog.pop()
-    }
-    return this.snapshots.pop()!
+  peekLastEntry(): HistoryEntry | null {
+    return this.actionLog[this.actionLog.length - 1] ?? null
   }
 
-  redo(currentState: GameState): GameState | null {
-    if (this.futureSnapshots.length === 0) return null
-    this.snapshots.push(currentState)
-    this.actionLog.push(this.futureLog.shift()!)
-    return this.futureSnapshots.shift()!
+  popEntry(addToRedo: boolean): HistoryEntry | null {
+    if (this.actionLog.length === 0) return null
+    const entry = this.actionLog.pop()!
+    if (addToRedo) this._redoLog.unshift(entry)
+    return entry
   }
 
-  get canUndo(): boolean { return this.snapshots.length > 0 }
-  get canRedo(): boolean { return this.futureSnapshots.length > 0 }
+  peekNextRedo(): HistoryEntry | null {
+    return this._redoLog[0] ?? null
+  }
+
+  pushFromRedo(): HistoryEntry | null {
+    if (this._redoLog.length === 0) return null
+    const entry = this._redoLog.shift()!
+    this.actionLog.push(entry)
+    return entry
+  }
+
+  clearRedo(): void {
+    this._redoLog = []
+  }
+
+  get canUndo(): boolean { return this.actionLog.length > 0 && this._initialState !== null }
+  get canRedo(): boolean { return this._redoLog.length > 0 }
 
   clear(): void {
-    this.snapshots = []
-    this.futureSnapshots = []
+    this._initialState = null
     this.actionLog.length = 0
-    this.futureLog = []
+    this._redoLog = []
   }
 
   toJSON(): string {
-    return JSON.stringify({ initialSeed: this.initialSeed, actionLog: this.actionLog })
+    return JSON.stringify({
+      initialSeed: this.initialSeed,
+      initialState: this._initialState,
+      actionLog: this.actionLog,
+    })
   }
 
   static fromJSON(json: string): GameHistory {
     const d = JSON.parse(json)
     const h = new GameHistory(d.initialSeed)
+    if (d.initialState) h._initialState = d.initialState
     h.actionLog.push(...d.actionLog)
     return h
   }
