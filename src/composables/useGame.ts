@@ -35,7 +35,7 @@ export function useGame() {
   function saveGameState(): void {
     if (!state.game) return
     try {
-      const data = { game: toRaw(state.game), history: history.toJSON() }
+      const data = { game: toRaw(state.game), history: history.toObject() }
       localStorage.setItem(SAVE_KEY, JSON.stringify(data))
     } catch { /* quota超過などは無視 */ }
   }
@@ -57,9 +57,12 @@ export function useGame() {
       if (!data?.game) return false
       state.game = data.game as GameState
       if (data.history) {
-        history = GameHistory.fromJSON(data.history)
+        history = GameHistory.fromObject(data.history)
       } else {
-        history = new GameHistory(data.game._rngSeed)
+        history = new GameHistory((data.game as GameState)._rngSeed)
+      }
+      if (!history.initialState) {
+        history.setInitialState(toRaw(state.game))
       }
       historyVersion.value++
       pendingEntry = null
@@ -353,7 +356,18 @@ export function useGame() {
 
   function clickSellOption(selectedIds: string[]) {
     if (!state.game) return
-    if (pendingEntry) pendingEntry.soldBuildingIds = selectedIds
+    const pa = state.game.pendingAction
+    if (pa?.kind === 'choose-sell-buildings') {
+      const entry: HistoryEntry = {
+        playerId: pa.playerId,
+        targetId: '__sell__',
+        targetName: 'sell',
+        soldBuildingIds: selectedIds,
+        timestamp: Date.now(),
+      }
+      history.push(entry)
+      historyVersion.value++
+    }
     state.game = confirmSellBuildings(state.game, selectedIds)
   }
 
@@ -363,10 +377,20 @@ export function useGame() {
     const pa = state.game.pendingAction
     if (!pa || pa.kind !== 'choose-hand-limit') return
     if (pa.selected.length >= pa.count) {
-      if (pendingEntry) pendingEntry.handLimitDiscarded = [...pa.selected]
+      const entry: HistoryEntry = {
+        playerId: pa.playerId,
+        targetId: '__hand-limit__',
+        targetName: 'hand-limit',
+        handLimitDiscarded: [...pa.selected],
+        timestamp: Date.now(),
+      }
+      history.push(entry)
+      historyVersion.value++
       state.game = confirmHandLimitDiscard(state.game)
     }
   }
+
+  const MANDATORY_IDS = new Set(['__hand-limit__', '__sell__'])
 
   function undo() {
     if (!state.game || !history.canUndo || !history.initialState) return
@@ -379,10 +403,13 @@ export function useGame() {
     } else if (!hasHumanPlayer) {
       history.popEntry(true)
     } else {
-      while (history.peekLastEntry()?.targetId === '__cpu__') {
+      // CPU・強制エントリ（__hand-limit__/__sell__）をまとめてundo対象外とし、
+      // 最後の人間エントリまでを1ブロックとして取り消す
+      while (history.peekLastEntry()) {
+        const entry = history.peekLastEntry()!
         history.popEntry(true)
+        if (entry.targetId !== '__cpu__' && !MANDATORY_IDS.has(entry.targetId)) break
       }
-      history.popEntry(true)
     }
 
     isUndoRedo.value = true
@@ -405,7 +432,8 @@ export function useGame() {
       history.pushFromRedo()
     } else {
       history.pushFromRedo()
-      while (history.peekNextRedo()?.targetId === '__cpu__') {
+      // CPU・強制エントリが続く限りまとめてredo（1ブロック分）
+      while (['__cpu__', ...[...MANDATORY_IDS]].includes(history.peekNextRedo()?.targetId ?? '')) {
         history.pushFromRedo()
       }
     }

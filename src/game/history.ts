@@ -75,19 +75,21 @@ export class GameHistory {
     this._redoLog = []
   }
 
-  toJSON(): string {
-    return JSON.stringify({
+  toObject(): object {
+    return {
       initialSeed: this.initialSeed,
       initialState: this._initialState,
       actionLog: this.actionLog,
-    })
+      redoLog: this._redoLog,
+    }
   }
 
-  static fromJSON(json: string): GameHistory {
-    const d = JSON.parse(json)
-    const h = new GameHistory(d.initialSeed)
-    if (d.initialState) h._initialState = d.initialState
-    h.actionLog.push(...d.actionLog)
+  static fromObject(data: unknown): GameHistory {
+    const d = data as Record<string, unknown>
+    const h = new GameHistory(d.initialSeed as number)
+    if (d.initialState) h._initialState = d.initialState as import('./types').GameState
+    h.actionLog.push(...((d.actionLog as HistoryEntry[]) ?? []))
+    h._redoLog = (d.redoLog as HistoryEntry[]) ?? []
     return h
   }
 }

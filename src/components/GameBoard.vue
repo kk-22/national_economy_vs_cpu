@@ -219,7 +219,7 @@ function cardTooltip(name: string): string {
       </div>
       <div class="mobile-undo-bar">
         <button class="btn-undo" :disabled="!canUndo" @click="undo">◀</button>
-        <button v-if="cpuPaused" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
+        <button v-if="cpuPaused && !canRedo && game?.phase !== 'game-over'" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
         <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">▶</button>
       </div>
       <button class="menu-btn" @click="emit('menuOpen')">☰</button>
@@ -509,7 +509,7 @@ function cardTooltip(name: string): string {
         </div>
         <div class="log-undo-bar">
           <button class="btn-undo" :disabled="!canUndo" @click="undo">◀ 戻る</button>
-          <button v-if="cpuPaused" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
+          <button v-if="cpuPaused && !canRedo && game?.phase !== 'game-over'" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
           <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">進む ▶</button>
         </div>
         <div class="log-label">ログ</div>

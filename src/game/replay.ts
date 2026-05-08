@@ -59,17 +59,6 @@ function resolvePending(state: GameState, entry: HistoryEntry): GameState {
         s = pickRevealedCard(s, entry.pickedCard.id)
         break
       }
-      case 'choose-hand-limit': {
-        const ids = entry.handLimitDiscarded ?? []
-        s = { ...s, pendingAction: { ...pa, selected: ids } }
-        s = confirmHandLimitDiscard(s)
-        break
-      }
-      case 'choose-sell-buildings': {
-        const ids = entry.soldBuildingIds ?? []
-        s = confirmSellBuildings(s, ids)
-        break
-      }
       default:
         return s
     }
@@ -113,6 +102,17 @@ export function replayToIndex(initialState: GameState, actionLog: HistoryEntry[]
   for (const entry of actionLog) {
     if (entry.targetId === '__cpu__') {
       s = replayCpuEntry(s)
+    } else if (entry.targetId === '__hand-limit__') {
+      if (s.pendingAction?.kind === 'choose-hand-limit') {
+        const pa = s.pendingAction
+        const ids = entry.handLimitDiscarded ?? []
+        s = { ...s, pendingAction: { ...pa, selected: ids } }
+        s = confirmHandLimitDiscard(s)
+      }
+    } else if (entry.targetId === '__sell__') {
+      if (s.pendingAction?.kind === 'choose-sell-buildings') {
+        s = confirmSellBuildings(s, entry.soldBuildingIds ?? [])
+      }
     } else {
       s = replayHumanEntry(s, entry)
     }
