@@ -219,7 +219,13 @@ export function useGame() {
         }
       }
     }
-    else if (pa.kind === 'choose-farm-build') state.game = selectFarmBuildTarget(state.game, cardId)
+    else if (pa.kind === 'choose-farm-build') {
+      if (pendingEntry) {
+        const card = toRaw(state.game).players.find(p => p.id === pa.playerId)?.hand.find(c => c.id === cardId)
+        pendingEntry.builtCard = { id: cardId, name: card?.kind === 'building' ? card.name : cardId }
+      }
+      state.game = selectFarmBuildTarget(state.game, cardId)
+    }
     else if (pa.kind === 'choose-double-first') state.game = selectDoubleFirst(state.game, cardId)
     else if (pa.kind === 'choose-double-second') {
       state.game = selectDoubleSecond(state.game, cardId)

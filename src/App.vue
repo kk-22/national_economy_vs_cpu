@@ -45,8 +45,8 @@ onMounted(() => {
   skipAnim.value = localStorage.getItem('ne-setup-skip-anim') === 'true'
   lastStartedDebug.value = localStorage.getItem('ne-setup-debug') === 'true'
 
-  // デバッグモード以外でセーブデータがあれば続きから再開
-  if (!lastStartedDebug.value && hasSavedGame()) {
+  // セーブデータがあれば続きから再開（デバッグモードも含む）
+  if (hasSavedGame()) {
     suppressHandAnim = true
     const restored = restoreGame()
     if (restored) {
