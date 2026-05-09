@@ -25,6 +25,7 @@ const menuOpen = ref(false)
 const showSummary = ref(false)
 const skipAnim = ref(false)
 const lastStartedDebug = ref(false)
+const settingsPaused = ref(false)
 
 const setupCpu = computed(() => setupHasPlayer.value ? setupTotal.value - 1 : setupTotal.value)
 
@@ -252,6 +253,11 @@ function openSetup() {
     cpuStrategies: [...setupCpuStrategies.value],
     skipAnim: skipAnim.value,
   }
+  // CPU専用ゲームではゲーム設定を開いた瞬間にCPUを一時停止
+  if (game.value && !game.value.players.some(p => !p.isCpu)) {
+    settingsPaused.value = true
+    cpuRevision++
+  }
   showSetup.value = true
 }
 
@@ -279,6 +285,7 @@ function scheduleInitialCpuRun() {
 }
 
 function beginGame() {
+  settingsPaused.value = false
   localStorage.setItem('ne-setup-debug', 'false')
   lastStartedDebug.value = false
   suppressHandAnim = true
@@ -298,6 +305,7 @@ function beginGame() {
 }
 
 function beginDebugGame() {
+  settingsPaused.value = false
   localStorage.setItem('ne-setup-debug', 'true')
   lastStartedDebug.value = true
   suppressHandAnim = true
@@ -306,6 +314,7 @@ function beginDebugGame() {
 }
 
 function resumeAfterUndo() {
+  settingsPaused.value = false
   resumeCpu()
   if (!game.value || game.value.phase !== 'placement') return
   const current = game.value.players[game.value.currentPlayerIndex]
@@ -353,6 +362,7 @@ function replayGame() {
       :builtIds="builtIds"
       :drawnIds="drawnIds"
       :canPlayerAct="canPlayerAct"
+      :settingsPaused="settingsPaused"
       :tipEnter="onTipEnter"
       :tipLeave="onTipLeave"
       @menuOpen="menuOpen = true"

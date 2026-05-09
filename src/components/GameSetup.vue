@@ -48,9 +48,7 @@ const bulkStrategy = computed({
   },
   set(val: CpuStrategy | '') {
     if (!val) return
-    const copy = [...props.setupCpuStrategies]
-    for (let i = 0; i < cpuCount.value; i++) copy[i] = val
-    emit('update:setupCpuStrategies', copy)
+    emit('update:setupCpuStrategies', props.setupCpuStrategies.map(() => val as CpuStrategy))
   },
 })
 
