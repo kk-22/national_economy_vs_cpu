@@ -240,6 +240,20 @@ export function useGame() {
     }
   }
 
+  function clickDoubleConfirm(firstId: string, secondId: string) {
+    if (!state.game) return
+    state.game = selectDoubleFirst(state.game, firstId)
+    state.game = selectDoubleSecond(state.game, secondId)
+    const newPa = state.game.pendingAction
+    if (newPa?.kind === 'choose-double-payment') {
+      const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
+      paymentSelectedIds.value = hand
+        .filter(c => c.kind === 'consumption' && c.id !== newPa.firstId && c.id !== newPa.secondId)
+        .slice(0, Math.max(0, newPa.cost - 1))
+        .map(c => c.id)
+    }
+  }
+
   const paymentSelectedIds = ref<string[]>([])
 
   function clickPaymentCard(cardId: string) {
@@ -334,7 +348,7 @@ export function useGame() {
     if (!pa) return []
     if (pa.kind === 'choose-build-target') return getBuildableCards(state.game, pa.playerId, pa.discount)
     if (pa.kind === 'choose-farm-build') return getFarmBuildableCards(state.game, pa.playerId)
-    if (pa.kind === 'choose-double-first') return getDoubleBuildableFirstCards(state.game, pa.playerId)
+    if (pa.kind === 'choose-double-first' || pa.kind === 'choose-double-second') return getDoubleBuildableFirstCards(state.game, pa.playerId)
     return []
   })
 
@@ -486,6 +500,7 @@ export function useGame() {
     clickCancelDiscardChoice,
     clickCancelDoubleSecond,
     clickCancelDoublePayment,
+    clickDoubleConfirm,
     clickDiscardCard,
     clickRevealedCard,
     clickHandLimitCard,

@@ -174,5 +174,5 @@ export function cancelDoubleSecond(state: GameState): GameState {
 export function cancelDoublePayment(state: GameState): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-double-payment') return state
-  return { ...state, pendingAction: { kind: 'choose-double-second', playerId: action.playerId, firstCost: action.firstCost, firstId: action.firstId, sourceName: action.sourceName } }
+  return { ...state, pendingAction: { kind: 'choose-double-first', playerId: action.playerId, sourceName: action.sourceName } }
 }

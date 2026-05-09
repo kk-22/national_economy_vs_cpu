@@ -337,6 +337,7 @@
 .selectable { cursor: pointer !important; }
 .selectable:hover { border-color: #f59e0b !important; background: #fffbeb !important; }
 .selected { border-color: #f59e0b !important; background: #fef3c7 !important; }
+.card-disabled { opacity: 0.35; pointer-events: none; }
 
 /* ===== Player area ===== */
 .player-area {

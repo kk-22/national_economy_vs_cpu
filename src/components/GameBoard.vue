@@ -27,7 +27,7 @@ const {
   getBuildingDef,
   clickPublicWorkplace, clickOwnedBuilding,
   clickBuildTarget, clickPaymentCard, clickCancelBuildChoice, clickCancelBuildPayment,
-  clickCancelDoubleSecond, clickCancelDoublePayment,
+  clickCancelDoublePayment, clickDoubleConfirm,
   clickDiscardCard, clickCancelDiscardChoice, clickRevealedCard, clickHandLimitCard, clickToggleSellBuilding, clickSellOption,
   undo, redo, canUndo, canRedo, cpuPaused,
 } = useGame()
@@ -136,6 +136,44 @@ const sortedHand = computed(() => {
 const sortedBuildableCards = computed(() =>
   handSort.value === 'order' ? buildableCards.value : sortByCost(buildableCards.value)
 )
+
+// ---- ニコイチ建設 2枚同時選択 ----
+const doubleSelectedIds = ref<string[]>([])
+
+function clickDoubleSelect(cardId: string) {
+  const idx = doubleSelectedIds.value.indexOf(cardId)
+  if (idx >= 0) {
+    doubleSelectedIds.value.splice(idx, 1)
+    return
+  }
+  if (doubleSelectedIds.value.length === 0) {
+    doubleSelectedIds.value = [cardId]
+    return
+  }
+  const firstId = doubleSelectedIds.value[0]
+  const firstCost = getBuildingDef(buildableCards.value.find(c => c.id === firstId)?.name ?? '')?.cost
+  const thisCost = getBuildingDef(buildableCards.value.find(c => c.id === cardId)?.name ?? '')?.cost
+  if (firstCost !== undefined && firstCost === thisCost) {
+    doubleSelectedIds.value = []
+    clickDoubleConfirm(firstId, cardId)
+  } else {
+    doubleSelectedIds.value = [cardId]
+  }
+}
+
+function isDoubleCardDisabled(cardId: string): boolean {
+  if (doubleSelectedIds.value.length === 0) return false
+  if (doubleSelectedIds.value.includes(cardId)) return false
+  const firstId = doubleSelectedIds.value[0]
+  const firstCost = getBuildingDef(buildableCards.value.find(c => c.id === firstId)?.name ?? '')?.cost
+  const thisCost = getBuildingDef(buildableCards.value.find(c => c.id === cardId)?.name ?? '')?.cost
+  return firstCost !== thisCost
+}
+
+function cancelDoubleSelect() {
+  doubleSelectedIds.value = []
+  clickCancelBuildChoice()
+}
 
 // ---- 建物売却選択 ----
 const sellBuildingError = ref<string | null>(null)
@@ -264,7 +302,12 @@ function effectDesc(effect: GameEffect): string {
 function cardTooltip(name: string): string {
   const d = getBuildingDef(name)
   if (!d) return ''
-  return effectDesc(d.effect)
+  const desc = effectDesc(d.effect)
+  const labels: string[] = []
+  if (!d.canSell) labels.push('売却不可')
+  if (!d.isWorkplace) labels.push('使用不可')
+  if (labels.length === 0) return desc
+  return desc + '\n' + labels.join(' / ')
 }
 </script>
 
@@ -368,11 +411,10 @@ function cardTooltip(name: string): string {
 
             <!-- Pending action -->
             <div v-if="pendingAction" class="pending-area">
-              <template v-if="pendingAction.kind === 'choose-build-target' || pendingAction.kind === 'choose-farm-build' || pendingAction.kind === 'choose-double-first'">
+              <template v-if="pendingAction.kind === 'choose-build-target' || pendingAction.kind === 'choose-farm-build'">
                 <div class="pending-title-row">
                   <span class="pending-title">
                     {{ pendingAction.kind === 'choose-farm-build' ? `${pendingAction.sourceName}で農場を選択（無料）`
-                     : pendingAction.kind === 'choose-double-first' ? `${pendingAction.sourceName}で1棟目を選択（同コスト2棟）`
                      : `${pendingAction.sourceName}で建設する建物を選択` }}
                   </span>
                   <select v-model="handSort" class="hand-sort-select">
@@ -395,23 +437,27 @@ function cardTooltip(name: string): string {
                 <button class="btn-cancel" @click="clickCancelBuildChoice">キャンセル</button>
               </template>
 
-              <template v-else-if="pendingAction.kind === 'choose-double-second'">
+              <template v-else-if="pendingAction.kind === 'choose-double-first' || pendingAction.kind === 'choose-double-second'">
                 <div class="pending-title-row">
-                  <span class="pending-title">{{ pendingAction.sourceName }}で2棟目を選択（コスト{{ pendingAction.firstCost }}）</span>
+                  <span class="pending-title">{{ pendingAction.sourceName }}で2棟同時に選択（同コスト2棟）</span>
+                  <select v-model="handSort" class="hand-sort-select">
+                    <option value="order">入手順</option>
+                    <option value="cost">コスト順</option>
+                  </select>
                 </div>
                 <div class="card-wrap">
-                  <button
-                    v-for="card in sortedHand.filter(c => c.kind === 'building' && getBuildingDef(c.name!)?.cost === (pendingAction as any).firstCost && c.id !== (pendingAction as any).firstId)"
-                    :key="card.id" class="bcard selectable"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
+                  <button v-for="card in sortedBuildableCards" :key="card.id"
+                    :class="['bcard', 'selectable', { selected: doubleSelectedIds.includes(card.id), 'card-disabled': isDoubleCardDisabled(card.id) }]"
+                    @mouseenter="tipEnter($event, cardTooltip(card.name))"
                     @mouseleave="tipLeave"
-                    @click="clickBuildTarget(card.id)">
-                    <span class="bcard-cost">{{ getBuildingDef((card as any).name)?.cost }}</span>
-                    <span class="bcard-name" :style="bcardNameStyle((card as any).name)">{{ (card as any).name }}</span>
-                    <span class="bcard-asset">{{ getBuildingDef((card as any).name)?.assetValue }}</span>
+                    @click="clickDoubleSelect(card.id)">
+                    <span class="bcard-cost">{{ getBuildingDef(card.name)?.cost }}</span>
+                    <span class="bcard-name" :style="bcardNameStyle(card.name)">{{ card.name }}</span>
+                    <span class="bcard-asset">{{ getBuildingDef(card.name)?.assetValue }}</span>
                   </button>
+                  <span v-if="sortedBuildableCards.length === 0" class="no-options">建設できる建物がありません</span>
                 </div>
-                <button class="btn-cancel" @click="clickCancelDoubleSecond">戻る</button>
+                <button class="btn-cancel" @click="cancelDoubleSelect">キャンセル</button>
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-build-payment' || pendingAction.kind === 'choose-double-payment'">
