@@ -33,6 +33,66 @@ const {
 
 const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
 
+// ---- ログ行ハイライト ----
+type HighlightKey = { type: 'player'; name: string } | { type: 'round' }
+
+const hoveredHighlight = ref<HighlightKey | null>(null)
+const selectedHighlight = ref<HighlightKey | null>(null)
+
+const playerNames = computed(() => game.value?.players.map(p => p.name) ?? [])
+
+function getLogPlayer(msg: string): string | null {
+  for (const name of playerNames.value) {
+    if (msg.startsWith(name + ':') || msg.startsWith(name + ' ')) return name
+  }
+  return null
+}
+
+function isRoundMarker(msg: string): boolean {
+  return /ラウンド \d+ (開始|終了)/.test(msg)
+}
+
+function getLineKey(msg: string): HighlightKey | null {
+  if (isRoundMarker(msg)) return { type: 'round' }
+  const player = getLogPlayer(msg)
+  if (player) return { type: 'player', name: player }
+  return null
+}
+
+function logLineClass(msg: string, _i: number): string {
+  const active = selectedHighlight.value ?? hoveredHighlight.value
+  if (!active) return 'log-line'
+  if (active.type === 'player') {
+    if (getLogPlayer(msg) === active.name) return 'log-line log-line--highlight'
+    if (getLogPlayer(msg) === null) return 'log-line'
+    return 'log-line log-line--dim'
+  }
+  // type === 'round': ラウンドマーカー行のみハイライト
+  if (isRoundMarker(msg)) return 'log-line log-line--highlight'
+  return 'log-line log-line--dim'
+}
+
+function onLogMouseenter(msg: string, _i: number) {
+  const key = getLineKey(msg)
+  if (key) hoveredHighlight.value = key
+}
+
+function onLogMouseleave() {
+  hoveredHighlight.value = null
+}
+
+function onLogClick(msg: string, _i: number) {
+  const key = getLineKey(msg)
+  if (!key) return
+  const cur = selectedHighlight.value
+  if (cur && cur.type === key.type &&
+    (cur.type !== 'player' || (key.type === 'player' && cur.name === key.name))) {
+    selectedHighlight.value = null
+  } else {
+    selectedHighlight.value = key
+  }
+}
+
 // ---- 手札ソート ----
 type HandSort = 'order' | 'cost'
 const handSort = ref<HandSort>('order')
@@ -513,7 +573,14 @@ function cardTooltip(name: string): string {
           <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">進む ▶</button>
         </div>
         <div class="log-label">ログ</div>
-        <div v-for="(msg, i) in [...game.log].reverse()" :key="i" class="log-line">{{ msg }}</div>
+        <div
+          v-for="(msg, i) in [...game.log].reverse()"
+          :key="i"
+          :class="logLineClass(msg, i)"
+          @mouseenter="onLogMouseenter(msg, i)"
+          @mouseleave="onLogMouseleave"
+          @click="onLogClick(msg, i)"
+        >{{ msg }}</div>
       </div>
 
     </div><!-- /game-body -->

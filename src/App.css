@@ -468,10 +468,20 @@
 .log-line {
   font-size: 11px;
   color: #64748b;
-  padding: 3px 0;
+  padding: 3px 4px;
   border-bottom: 1px solid #f1f5f9;
   line-height: 1.4;
   word-break: break-all;
+  cursor: default;
+  border-radius: 3px;
+  transition: background 0.1s;
+}
+.log-line--highlight {
+  background: #fef08a;
+  color: #1e293b;
+}
+.log-line--dim {
+  opacity: 0.3;
 }
 
 /* ===== Setup modal ===== */
@@ -627,6 +637,8 @@
 .summary-table td:nth-child(2), .summary-table th:nth-child(2) { text-align: center; width: 44px; }
 .summary-table tbody tr:hover { background: #f8fafc; }
 .summary-table tbody tr:last-child td { border-bottom: none; }
+.summary-row--current { background: #fef9c3 !important; font-weight: 600; }
+.summary-row--current td:first-child { color: #b45309; }
 .drawer-log-label {
   font-size: 11px;
   font-weight: 700;

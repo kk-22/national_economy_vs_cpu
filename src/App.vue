@@ -411,15 +411,15 @@ function replayGame() {
             <tr><th>ラウンド</th><th>賃金</th><th>建物</th><th>機能</th></tr>
           </thead>
           <tbody>
-            <tr><td>1</td><td>$2</td><td>-</td><td>-</td></tr>
-            <tr><td>2</td><td>$2</td><td>露店</td><td>1枚捨てて家計から$6獲得</td></tr>
-            <tr><td>3</td><td>$3</td><td>市場</td><td>2枚捨てて家計から$12獲得</td></tr>
-            <tr><td>4</td><td>$3</td><td>高等学校</td><td>労働者を4人に増やす</td></tr>
-            <tr><td>5</td><td>$3</td><td>スーパーマーケット</td><td>3枚捨てて家計から$18獲得</td></tr>
-            <tr><td>6</td><td>$4</td><td>大学</td><td>労働者を5人に増やす</td></tr>
-            <tr><td>7</td><td>$4</td><td>百貨店</td><td>4枚捨てて家計から$24獲得</td></tr>
-            <tr><td>8</td><td>$5</td><td>専門学校</td><td>すぐ使える労働者を1人追加</td></tr>
-            <tr><td>9</td><td>$5</td><td>万博</td><td>5枚捨てて家計から$30獲得</td></tr>
+            <tr :class="{ 'summary-row--current': game?.round === 1 }"><td>1</td><td>$2</td><td>-</td><td>-</td></tr>
+            <tr :class="{ 'summary-row--current': game?.round === 2 }"><td>2</td><td>$2</td><td>露店</td><td>1枚捨てて家計から$6獲得</td></tr>
+            <tr :class="{ 'summary-row--current': game?.round === 3 }"><td>3</td><td>$3</td><td>市場</td><td>2枚捨てて家計から$12獲得</td></tr>
+            <tr :class="{ 'summary-row--current': game?.round === 4 }"><td>4</td><td>$3</td><td>高等学校</td><td>労働者を4人に増やす</td></tr>
+            <tr :class="{ 'summary-row--current': game?.round === 5 }"><td>5</td><td>$3</td><td>スーパーマーケット</td><td>3枚捨てて家計から$18獲得</td></tr>
+            <tr :class="{ 'summary-row--current': game?.round === 6 }"><td>6</td><td>$4</td><td>大学</td><td>労働者を5人に増やす</td></tr>
+            <tr :class="{ 'summary-row--current': game?.round === 7 }"><td>7</td><td>$4</td><td>百貨店</td><td>4枚捨てて家計から$24獲得</td></tr>
+            <tr :class="{ 'summary-row--current': game?.round === 8 }"><td>8</td><td>$5</td><td>専門学校</td><td>すぐ使える労働者を1人追加</td></tr>
+            <tr :class="{ 'summary-row--current': game?.round === 9 }"><td>9</td><td>$5</td><td>万博</td><td>5枚捨てて家計から$30獲得</td></tr>
           </tbody>
         </table>
       </div>
