@@ -402,8 +402,9 @@ function replayGame() {
           <span class="hbadge">ラウンド {{ game.round }}/9</span>
           <span class="hbadge">賃金 ${{ currentWage }}</span>
           <span class="hbadge">家計 ${{ game.household }}</span>
+          <span class="hbadge">山札 {{ game.buildingDeck.length }}枚</span>
           <button class="btn-restart" @click="openSetup(); menuOpen = false">ゲーム設定</button>
-          <button class="btn-restart" @click="showSummary = true; menuOpen = false">サマリー</button>
+          <button class="btn-restart" @click="showSummary = true; menuOpen = false">ラウンド毎の情報</button>
         </div>
         <div class="drawer-log-label">ログ</div>
         <div v-for="(msg, i) in [...game.log].reverse().slice(0, 80)" :key="i" class="drawer-log-line">{{ msg }}</div>
@@ -413,7 +414,7 @@ function replayGame() {
     <div v-if="showSummary" class="modal-overlay" @click.self="showSummary = false">
       <div class="modal summary-modal">
         <div class="modal-header">
-          <h2>ラウンドサマリー</h2>
+          <h2>ラウンド毎の情報</h2>
           <button class="modal-close-btn" @click="showSummary = false">✕</button>
         </div>
         <table class="summary-table">

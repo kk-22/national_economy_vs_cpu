@@ -320,6 +320,7 @@ function cardTooltip(name: string): string {
         <span class="hbadge">ラウンド {{ game.round }}/9</span>
         <span class="hbadge">賃金 ${{ currentWage }}</span>
         <span class="hbadge">家計 ${{ game.household }}</span>
+        <span class="hbadge">山札 {{ game.buildingDeck.length }}枚</span>
       </div>
       <div class="mobile-undo-bar">
         <button class="btn-undo" :disabled="!canUndo" @click="undo">◀</button>
@@ -611,8 +612,9 @@ function cardTooltip(name: string): string {
           <span class="hbadge">ラウンド {{ game.round }}/9</span>
           <span class="hbadge">賃金 ${{ currentWage }}</span>
           <span class="hbadge">家計 ${{ game.household }}</span>
+          <span class="hbadge">山札 {{ game.buildingDeck.length }}枚</span>
           <button class="btn-restart" @click="emit('openSetup')">ゲーム設定</button>
-          <button class="btn-restart" @click="emit('openSummary')">サマリー</button>
+          <button class="btn-restart" @click="emit('openSummary')">ラウンド毎の情報</button>
         </div>
         <div class="log-undo-bar">
           <button class="btn-undo" :disabled="!canUndo" @click="undo">◀ 戻る</button>
