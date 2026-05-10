@@ -120,8 +120,7 @@ function autoSellForWages(state: GameState, playerId: number, idsToSell: string[
 // ---- ラウンド終了処理 ----
 
 export function processRoundEnd(state: GameState, noCpu = false): GameState {
-  const wage = ROUND_CARDS[state.round - 1].wage
-  let s = addLog(state, `--- ラウンド ${state.round} 終了 (賃金 $${wage}) ---`)
+  let s = addLog(state, `--- ラウンド ${state.round} 終了 (家計 $${state.household}) ---`)
   s = processWagesCash(s)
   return finishRoundEnd(s, noCpu)
 }
@@ -293,7 +292,7 @@ export function startNextRound(state: GameState, noCpu: boolean): GameState {
 
   s = { ...s, round: nextRound }
   s = flipRoundCard(s, nextRound, playerCount)
-  s = addLog(s, `--- ラウンド ${nextRound} 開始 (賃金 $${ROUND_CARDS[nextRound - 1].wage}) ---`)
+  s = addLog(s, `--- ラウンド ${nextRound} 開始 (家計 $${s.household}) ---`)
 
   s = { ...s, currentPlayerIndex: s.startPlayerIndex }
 

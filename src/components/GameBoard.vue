@@ -609,12 +609,18 @@ function cardTooltip(name: string): string {
       <!-- Right: log panel -->
       <div class="log-panel">
         <div class="log-info">
-          <span class="hbadge">ラウンド {{ game.round }}/9</span>
-          <span class="hbadge">賃金 ${{ currentWage }}</span>
-          <span class="hbadge">家計 ${{ game.household }}</span>
-          <span class="hbadge">山札 {{ game.buildingDeck.length }}枚</span>
-          <button class="btn-restart" @click="emit('openSetup')">ゲーム設定</button>
-          <button class="btn-restart" @click="emit('openSummary')">ラウンド毎の情報</button>
+          <div class="log-info-row">
+            <span class="hbadge">ラウンド {{ game.round }}/9</span>
+            <span class="hbadge">山札 {{ game.buildingDeck.length }}枚</span>
+          </div>
+          <div class="log-info-row">
+            <span class="hbadge">家計 ${{ game.household }}</span>
+            <span class="hbadge">賃金 ${{ currentWage }}</span>
+          </div>
+          <div class="log-info-row">
+            <button class="btn-restart" @click="emit('openSetup')">ゲーム設定</button>
+            <button class="btn-restart" @click="emit('openSummary')">ラウンド毎の情報</button>
+          </div>
         </div>
         <div class="log-undo-bar">
           <button class="btn-undo" :disabled="!canUndo" @click="undo">◀ 戻る</button>

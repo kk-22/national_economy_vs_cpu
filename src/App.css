@@ -422,6 +422,12 @@
   border-bottom: 1px solid #e2e8f0;
   margin-bottom: 6px;
 }
+.log-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+.log-info-row .btn-restart { margin-top: 0; }
 .log-panel {
   width: var(--log-panel-width);
   flex-shrink: 0;
