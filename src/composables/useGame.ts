@@ -317,6 +317,10 @@ export function useGame() {
 
   function clickCancelBuildChoice() {
     if (!state.game) return
+    history.popEntry(false)
+    historyVersion.value++
+    pendingEntry = null
+    paymentSelectedIds.value = []
     state.game = cancelBuildChoice(state.game)
   }
 

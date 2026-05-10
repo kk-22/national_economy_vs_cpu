@@ -86,14 +86,14 @@ export interface Player {
 }
 
 export type PendingAction =
-  | { kind: 'choose-build-target'; playerId: number; discount: number; drawAfter: number; sourceName?: string }
-  | { kind: 'choose-build-payment'; playerId: number; targetId: string; targetName: string; cost: number; drawAfter: number; discount: number; sourceName?: string }
+  | { kind: 'choose-build-target'; playerId: number; discount: number; drawAfter: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-build-payment'; playerId: number; targetId: string; targetName: string; cost: number; drawAfter: number; discount: number; sourceName?: string; sourceId?: string }
   | { kind: 'choose-discard'; playerId: number; count: number; gainAmount: number; selected: string[]; drawCount?: number; sourceName?: string; sourceId?: string }
   | { kind: 'choose-from-revealed'; playerId: number; revealed: HandCard[]; sourceName?: string; sourceId?: string }
-  | { kind: 'choose-farm-build'; playerId: number; sourceName?: string }
-  | { kind: 'choose-double-first'; playerId: number; sourceName?: string }
-  | { kind: 'choose-double-second'; playerId: number; firstCost: number; firstId: string; sourceName?: string }
-  | { kind: 'choose-double-payment'; playerId: number; firstId: string; secondId: string; cost: number; firstCost: number; sourceName?: string }
+  | { kind: 'choose-farm-build'; playerId: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-double-first'; playerId: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-double-second'; playerId: number; firstCost: number; firstId: string; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-double-payment'; playerId: number; firstId: string; secondId: string; cost: number; firstCost: number; sourceName?: string; sourceId?: string }
   | { kind: 'choose-hand-limit'; playerId: number; limit: number; count: number; selected: string[]; noCpu: boolean; sourceName?: string }
   | { kind: 'choose-sell-buildings'; playerId: number; deficit: number; sellableIds: string[]; selected: string[]; noCpu: boolean; sourceName?: string }
 

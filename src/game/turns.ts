@@ -33,7 +33,7 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
 
   if (s.pendingAction) {
     const pa = s.pendingAction
-    const withSource = (pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed')
+    const withSource = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed')
       ? { ...pa, sourceName: workplace.name, sourceId: workplaceId }
       : { ...pa, sourceName: workplace.name }
     s = { ...s, pendingAction: withSource }
@@ -66,7 +66,7 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
 
   if (s.pendingAction) {
     const pa = s.pendingAction
-    const withSource = (pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed')
+    const withSource = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed')
       ? { ...pa, sourceName: building.name, sourceId: buildingId }
       : { ...pa, sourceName: building.name }
     s = { ...s, pendingAction: withSource }
@@ -215,7 +215,7 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
   const expectedWage = workerCount * wage
 
   switch (effect.kind) {
-    case 'build-double': return 110
+    case 'build-double': return 160
     case 'build': {
       // 労働者1人しか残っておらず賃金も払えない場合のみ建設を諦める
       if (availWorkers < 2 && player.money < expectedWage) return -Infinity
@@ -256,7 +256,9 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
         })
         if (hasEquivOwned) return -Infinity
       }
-      return (85 + maxCost * 3) * (availWorkers >= 2 ? 1.2 : 1.0)
+      // 大工 < 建設会社 < ゼネコン < 二胡市建設 の優先度順にスコアを上げる
+      // discount=1(建設会社)+15, drawAfter=2(ゼネコン)+30 で確実に順序を保証
+      return (85 + maxCost * 3) * (availWorkers >= 2 ? 1.2 : 1.0) + effect.discount * 15 + effect.drawAfter * 15
     }
     case 'build-farm-free': return 70
     case 'fill-workers': {
@@ -299,8 +301,7 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
     case 'gain-supply': {
       if (household < effect.n) return -Infinity
       const gsScore = effect.n * 3
-      // 労働者が2人以上残っているなら建設を優先させるためスコアを抑制
-      return availWorkers >= 2 ? gsScore * 0.5 : gsScore
+      return gsScore
     }
     case 'draw': {
       const drawWorkerBonus = (player.workers.length - 1) * 2
@@ -308,8 +309,7 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
       const availableNow = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
       const hasDrawFactory = player.ownedBuildings.some(b => BUILDING_CARDS[b.name]?.effect.kind === 'discard-draw')
       const drawScore = (hasDrawFactory && availableNow >= 3) ? drawBase * 1.4 : drawBase
-      // 労働者が2人以上残っているなら建設を優先させるためスコアを抑制
-      return availWorkers >= 2 ? drawScore * 0.5 : drawScore
+      return drawScore
     }
     case 'draw-if-empty': {
       const diWorkerBonus = (player.workers.length - 1) * 2
@@ -349,7 +349,7 @@ function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState {
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
     if (!def) continue
-    const sc = scoreEffect(def.effect, player, state.household, state.round, availableWorkers)
+    const sc = scoreEffect(def.effect, player, state.household, state.round, availableWorkers) * pubBonus
     if (sc > bestScore) { bestScore = sc; bestBld = bld; bestPub = null }
   }
 
@@ -409,7 +409,7 @@ function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): GameState 
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
     if (!def) continue
-    const sc = scoreEffect(def.effect, player, state.household, state.round, availableWorkers)
+    const sc = scoreEffect(def.effect, player, state.household, state.round, availableWorkers) * pubBonus
     if (sc > bestScore) { bestScore = sc; bestBld = bld; bestPub = null }
   }
 

@@ -118,6 +118,7 @@ export function selectBuildTarget(state: GameState, targetCardId: string): GameS
       drawAfter: action.drawAfter,
       discount: action.discount,
       sourceName: action.sourceName,
+      sourceId: action.sourceId,
     },
   }
 }
@@ -131,7 +132,7 @@ export function selectDoubleFirst(state: GameState, cardId: string): GameState {
   const def = BUILDING_CARDS[card.name]!
   return {
     ...state,
-    pendingAction: { kind: 'choose-double-second', playerId: action.playerId, firstCost: def.cost, firstId: card.id, sourceName: action.sourceName },
+    pendingAction: { kind: 'choose-double-second', playerId: action.playerId, firstCost: def.cost, firstId: card.id, sourceName: action.sourceName, sourceId: action.sourceId },
   }
 }
 
@@ -146,7 +147,7 @@ export function selectDoubleSecond(state: GameState, cardId: string): GameState 
   if (card.id === action.firstId) return state
   return {
     ...state,
-    pendingAction: { kind: 'choose-double-payment', playerId: action.playerId, firstId: action.firstId, secondId: card.id, cost: action.firstCost, firstCost: action.firstCost, sourceName: action.sourceName },
+    pendingAction: { kind: 'choose-double-payment', playerId: action.playerId, firstId: action.firstId, secondId: card.id, cost: action.firstCost, firstCost: action.firstCost, sourceName: action.sourceName, sourceId: action.sourceId },
   }
 }
 
@@ -155,24 +156,24 @@ export function cancelBuildChoice(state: GameState): GameState {
   if (!pa) return state
   if (pa.kind !== 'choose-build-target' && pa.kind !== 'choose-farm-build' && pa.kind !== 'choose-double-first') return state
   const player = getPlayer(state, pa.playerId)
-  let s = undoWorkerPlacement(state, pa.playerId, ['build', 'build-farm-free', 'build-double'])
+  let s = undoWorkerPlacement(state, pa.playerId, ['build', 'build-farm-free', 'build-double'], pa.sourceId)
   return addLog(s, `${player.name}: ${pa.sourceName ?? ''} → キャンセル`)
 }
 
 export function cancelBuildPayment(state: GameState): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-build-payment') return state
-  return { ...state, pendingAction: { kind: 'choose-build-target', playerId: action.playerId, discount: action.discount, drawAfter: action.drawAfter, sourceName: action.sourceName } }
+  return { ...state, pendingAction: { kind: 'choose-build-target', playerId: action.playerId, discount: action.discount, drawAfter: action.drawAfter, sourceName: action.sourceName, sourceId: action.sourceId } }
 }
 
 export function cancelDoubleSecond(state: GameState): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-double-second') return state
-  return { ...state, pendingAction: { kind: 'choose-double-first', playerId: action.playerId, sourceName: action.sourceName } }
+  return { ...state, pendingAction: { kind: 'choose-double-first', playerId: action.playerId, sourceName: action.sourceName, sourceId: action.sourceId } }
 }
 
 export function cancelDoublePayment(state: GameState): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-double-payment') return state
-  return { ...state, pendingAction: { kind: 'choose-double-first', playerId: action.playerId, sourceName: action.sourceName } }
+  return { ...state, pendingAction: { kind: 'choose-double-first', playerId: action.playerId, sourceName: action.sourceName, sourceId: action.sourceId } }
 }
