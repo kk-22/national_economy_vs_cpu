@@ -424,10 +424,11 @@
 }
 .log-info-row {
   display: flex;
-  justify-content: space-between;
   gap: 4px;
 }
-.log-info-row .btn-restart { margin-top: 0; }
+.log-info-row > * {
+  flex: 0 0 50%;
+}
 .log-panel {
   width: var(--log-panel-width);
   flex-shrink: 0;

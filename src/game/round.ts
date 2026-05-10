@@ -292,7 +292,7 @@ export function startNextRound(state: GameState, noCpu: boolean): GameState {
 
   s = { ...s, round: nextRound }
   s = flipRoundCard(s, nextRound, playerCount)
-  s = addLog(s, `--- ラウンド ${nextRound} 開始 (家計 $${s.household}) ---`)
+  s = addLog(s, `■■ラウンド ${nextRound} 開始 (家計 $${s.household}) ■■`)
 
   s = { ...s, currentPlayerIndex: s.startPlayerIndex }
 
