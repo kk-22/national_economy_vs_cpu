@@ -69,7 +69,7 @@ export function makePlayer(overrides: Partial<Player> = {}): Player {
 
 // ---- State変化の検査ヘルパー ----
 
-/** before→after でどの公共施設にワーカーが置かれたか（名前を返す） */
+/** before→after でどの一般職場にワーカーが置かれたか（名前を返す） */
 export function usedPublicWorkplace(before: GameState, after: GameState): string | null {
   for (const wp of after.publicWorkplaces) {
     const prev = before.publicWorkplaces.find(w => w.id === wp.id)

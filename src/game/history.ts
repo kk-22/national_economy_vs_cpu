@@ -7,7 +7,7 @@ export interface CardRef {
 
 export interface HistoryEntry {
   playerId: number
-  targetId: string           // 配置先ID（公共施設 or 所有建物）。CPU は '__cpu__'
+  targetId: string           // 配置先ID（一般職場 or 所有建物）。CPU は '__cpu__'
   targetName: string
   builtCard?: CardRef
   secondBuiltCard?: CardRef

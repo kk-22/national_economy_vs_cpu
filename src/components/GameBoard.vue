@@ -369,10 +369,10 @@ function cardTooltip(name: string): string {
         <!-- ▼ Divider 0 -->
         <div class="col-divider" @mousedown.prevent="startResize(0, $event)"></div>
 
-        <!-- ▼ Row 1: 公共施設 -->
+        <!-- ▼ Row 1: 一般職場 -->
         <div class="game-col" :style="{ height: rowHeights[1] + '%' }">
           <section class="section workplaces-section">
-            <div class="section-label">公共施設</div>
+            <div class="section-label">一般職場</div>
             <div class="wp-cards-scroll">
               <div class="card-wrap">
                 <div
