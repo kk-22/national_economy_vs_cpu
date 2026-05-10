@@ -431,7 +431,11 @@ export function useGame() {
     const hasHumanPlayer = state.game.players.some(p => !p.isCpu)
     const hasPending = !!state.game.pendingAction
 
-    if (hasPending) {
+    // ラウンド終了処理中に自動設定される強制 pending（ユーザー起因ではない）
+    const isMandatoryPending = state.game.pendingAction?.kind === 'choose-sell-buildings'
+      || state.game.pendingAction?.kind === 'choose-hand-limit'
+
+    if (hasPending && !isMandatoryPending) {
       history.clearRedo()
       history.popEntry(false)
     } else if (!hasHumanPlayer) {
@@ -439,9 +443,11 @@ export function useGame() {
     } else {
       // CPU・強制エントリ（__hand-limit__/__sell__）をまとめてundo対象外とし、
       // 最後の人間エントリまでを1ブロックとして取り消す
+      // mandatory pending からの戻りはredoも破棄する
+      if (isMandatoryPending) history.clearRedo()
       while (history.peekLastEntry()) {
         const entry = history.peekLastEntry()!
-        history.popEntry(true)
+        history.popEntry(!isMandatoryPending)
         if (entry.targetId !== '__cpu__' && !MANDATORY_IDS.has(entry.targetId)) break
       }
     }
