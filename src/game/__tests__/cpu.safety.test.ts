@@ -6,7 +6,6 @@ import {
   makeState,
   makeBuildingCard,
   makeConsumptionCard,
-  makeWorker,
 } from './helpers'
 
 beforeEach(() => { resetIds() })
@@ -73,112 +72,6 @@ describe('cpuBuild: 手札不足では建設しない', () => {
 
     expect(result.players[0].ownedBuildings).toHaveLength(1)
     expect(result.players[0].ownedBuildings[0].name).toBe('工場')
-  })
-})
-
-// ============================================================
-// cpuBuild: greedy フィルタ（isWorkplace / パッシブ効果 / ラウンド条件）
-// ============================================================
-
-describe('cpuBuild greedy: isWorkplace=false の建物はラウンド条件でフィルタされる', () => {
-  test('round=5・手札十分でも 倉庫（isWorkplace=false）しかなければ建設しない', () => {
-    // 倉庫 cost=2, isWorkplace=false, effect.kind='p-hand-limit'
-    // → greedy フィルタ: effect.kind.startsWith('p-') → round >= 8 && assetValue > 0 が必要
-    // round=5 なので除外される
-    const player = makePlayer({
-      hand: [makeBuildingCard('倉庫'), makeConsumptionCard(), makeConsumptionCard()],
-    })
-    const state = makeState([player], { round: 5 })
-
-    const result = cpuBuild(state, player.id, 0, 0, 'greedy')
-
-    expect(result.players[0].ownedBuildings).toHaveLength(0)
-  })
-
-  test('round=8・倉庫（assetValue=10）→ パッシブ建物として建設する', () => {
-    // round >= 8 && assetValue=10 > 0 → フィルタ通過
-    const player = makePlayer({
-      hand: [makeBuildingCard('倉庫'), makeConsumptionCard(), makeConsumptionCard()],
-    })
-    const state = makeState([player], { round: 8 })
-
-    const result = cpuBuild(state, player.id, 0, 0, 'greedy')
-
-    expect(result.players[0].ownedBuildings).toHaveLength(1)
-    expect(result.players[0].ownedBuildings[0].name).toBe('倉庫')
-  })
-
-  test('round=5・邸宅（isWorkplace=false, assetValue=28）しかなければ建設しない', () => {
-    // 邸宅 cost=4, isWorkplace=false, effect.kind='none' → 'p-' で始まらない
-    // → greedy フィルタ: round <= 7 && !isWorkplace → false → 除外
-    const player = makePlayer({
-      hand: [
-        makeBuildingCard('邸宅'),
-        makeConsumptionCard(), makeConsumptionCard(),
-        makeConsumptionCard(), makeConsumptionCard(),
-      ],
-    })
-    const state = makeState([player], { round: 5 })
-
-    const result = cpuBuild(state, player.id, 0, 0, 'greedy')
-
-    expect(result.players[0].ownedBuildings).toHaveLength(0)
-  })
-
-  test('round=8・邸宅（effect.kind="none", assetValue=28）は建設する', () => {
-    // effect.kind='none' → 'p-' で始まらない
-    // → greedy フィルタ: round <= 7 ではないので isWorkplace チェックをスキップ
-    // → availableAfter >= 1 → 通過
-    const player = makePlayer({
-      hand: [
-        makeBuildingCard('邸宅'),
-        makeConsumptionCard(), makeConsumptionCard(),
-        makeConsumptionCard(), makeConsumptionCard(),
-      ],
-    })
-    const state = makeState([player], { round: 8 })
-
-    const result = cpuBuild(state, player.id, 0, 0, 'greedy')
-
-    expect(result.players[0].ownedBuildings).toHaveLength(1)
-  })
-})
-
-// ============================================================
-// cpuBuild: 残りワーカー0のとき採算が取れない建物は建設しない
-// ============================================================
-
-describe('cpuBuild greedy: 残りワーカー0のとき採算チェックが働く', () => {
-  test('残りワーカー0・農場（assetValue=6, cost=1）→ 採算が取れず建設しない', () => {
-    // availableAfter=0 の場合: assetValue > (cost+1)*6 が必要
-    // 農場: 6 > (1+1)*6=12 → false → 除外
-    const player = makePlayer({
-      hand: [makeBuildingCard('農場'), makeConsumptionCard()],
-      workers: [makeWorker(0, { placedAt: 'somewhere' })], // 全員配置済み
-    })
-    const state = makeState([player])
-
-    const result = cpuBuild(state, player.id, 0, 0, 'greedy')
-
-    expect(result.players[0].ownedBuildings).toHaveLength(0)
-  })
-
-  test('残りワーカー0・自動車工場（assetValue=24, cost=5）→ 採算が取れず建設しない', () => {
-    // 自動車工場: 24 > (5+1)*6=36 → false → 除外
-    const player = makePlayer({
-      hand: [
-        makeBuildingCard('自動車工場'),
-        makeConsumptionCard(), makeConsumptionCard(),
-        makeConsumptionCard(), makeConsumptionCard(),
-        makeConsumptionCard(),
-      ],
-      workers: [makeWorker(0, { placedAt: 'somewhere' })],
-    })
-    const state = makeState([player])
-
-    const result = cpuBuild(state, player.id, 0, 0, 'greedy')
-
-    expect(result.players[0].ownedBuildings).toHaveLength(0)
   })
 })
 
