@@ -295,8 +295,8 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
     }
     case 'discard-gain': {
       if (player.hand.length < effect.discard || household < effect.gain) return -Infinity
-      const base = effect.gain * 2.5
-      return player.money < expectedWage * 1.5 ? base * 1.8 : base
+      // 施設利用より常に低い優先度になるよう係数を抑制（money urgency 加算は廃止）
+      return effect.gain * 0.2
     }
     case 'gain-supply': {
       if (household < effect.n) return -Infinity
@@ -320,8 +320,8 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
     case 'draw-become-start': return 30
     case 'slash-burn': return 25
     case 'draw-consumption':
-      // 手札3枚以下のときは消費財を確保できる価値が高い（採石場のpubBonusより優先されるよう係数を上げる）
-      return player.hand.length <= 3 ? effect.n * 16 : effect.n * 4
+      // hand>3 でも施設としての価値を反映（discard-gain を常に上回るよう引き上げ）
+      return player.hand.length <= 3 ? effect.n * 16 : effect.n * 12
     case 'draw-consumption-to':
       return player.hand.length >= effect.target ? -Infinity : (effect.target - player.hand.length) * 4
     case 'none': return 5
@@ -342,14 +342,25 @@ function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState {
   let bestPub: PublicWorkplace | null = null
   let bestBld: OwnedBuilding | null = null
 
+  const drawKinds = new Set(['draw', 'discard-draw', 'draw-consumption', 'draw-if-empty'])
+
   for (const wp of pubOptions) {
-    const sc = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers) * pubBonus
+    const base = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers)
+    const soldDef = BUILDING_CARDS[wp.name]
+    // 売却建物 かつ draw 系施設 → コスト連動ボーナス（コスト高いほど優先）
+    const sc = (soldDef && drawKinds.has(wp.effect.kind))
+      ? base * (1.1 + soldDef.cost * 0.2)
+      : base * pubBonus
     if (sc > bestScore) { bestScore = sc; bestPub = wp; bestBld = null }
   }
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
     if (!def) continue
-    const sc = scoreEffect(def.effect, player, state.household, state.round, availableWorkers) * pubBonus
+    const base = scoreEffect(def.effect, player, state.household, state.round, availableWorkers)
+    // draw 系施設 → コスト連動ボーナス、build 系等 → pubBonus 適用
+    const sc = drawKinds.has(def.effect.kind)
+      ? base * (1.0 + def.cost * 0.2)
+      : base * pubBonus
     if (sc > bestScore) { bestScore = sc; bestBld = bld; bestPub = null }
   }
 
@@ -402,14 +413,23 @@ function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): GameState 
   let bestPub: PublicWorkplace | null = null
   let bestBld: OwnedBuilding | null = null
 
+  const drawKinds = new Set(['draw', 'discard-draw', 'draw-consumption', 'draw-if-empty'])
+
   for (const wp of pubOptions) {
-    const sc = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers) * pubBonus
+    const base = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers)
+    const soldDef = BUILDING_CARDS[wp.name]
+    const sc = (soldDef && drawKinds.has(wp.effect.kind))
+      ? base * (1.1 + soldDef.cost * 0.2)
+      : base * pubBonus
     if (sc > bestScore) { bestScore = sc; bestPub = wp; bestBld = null }
   }
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
     if (!def) continue
-    const sc = scoreEffect(def.effect, player, state.household, state.round, availableWorkers) * pubBonus
+    const base = scoreEffect(def.effect, player, state.household, state.round, availableWorkers)
+    const sc = drawKinds.has(def.effect.kind)
+      ? base * (1.0 + def.cost * 0.2)
+      : base * pubBonus
     if (sc > bestScore) { bestScore = sc; bestBld = bld; bestPub = null }
   }
 

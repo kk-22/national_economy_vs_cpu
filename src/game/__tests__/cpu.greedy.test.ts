@@ -345,3 +345,114 @@ describe('greedy: 建設対象外の建物を建設しない', () => {
     expect(builtBuilding(state, result, 0)).toBeNull()
   })
 })
+
+// ============================================================
+// 施設利用とお金稼ぎの優先度
+// ============================================================
+//
+// 期待する優先度（右＝より優先）:
+//   露店 ＜ 万博
+//   ＜ 自分の場の低コスト施設
+//   ＜ 一般職場の低コスト施設
+//   ＜ 自分の場の高コスト施設
+//   ＜ 一般職場の高コスト施設
+//
+// ※ スコアの具体値には依存せず大小比較のみ検証する。
+//   「AよりBを選んだ」= B が available な状況で CPU が B を選択したことで確認。
+//
+// 【手札設定】
+//   消費財5枚 (hand.length=5 > 3): draw-consumption の "hand多め" スコア経路を踏む。
+//   万博(discard=5) を使えるだけの手札枚数も確保。
+
+describe('greedy: 施設利用とお金稼ぎの優先度', () => {
+  // 消費財5枚の手札を生成するヘルパー
+  const hand5 = () => [
+    makeConsumptionCard(), makeConsumptionCard(), makeConsumptionCard(),
+    makeConsumptionCard(), makeConsumptionCard(),
+  ]
+
+  test('discard-gain は gain が多いほど優先される（露店 < 万博）', () => {
+    // 露店(gain=6) と 万博(gain=30) が両方あれば gain の大きい万博を選ぶ
+    const cpu = makePlayer({
+      workers: [makeWorker(0), makeWorker(0)],
+      hand: hand5(),
+      money: 20,
+    })
+    const state = makeState([cpu, makeHumanGuard()], {
+      publicWorkplaces: [
+        makePublicWorkplace('露店', { kind: 'discard-gain', discard: 1, gain: 6 }),
+        makePublicWorkplace('万博', { kind: 'discard-gain', discard: 5, gain: 30 }),
+      ],
+    })
+    const result = cpuOneTurnStep(state)
+    expect(usedPublicWorkplace(state, result)).toBe('万博')
+  })
+
+  test('discard-gain より自分の場の施設を優先する（万博 < 農場 owned）', () => {
+    // 最大 gain の万博があっても、自分の場の農場(draw-consumption)を先に使う
+    const cpu = makePlayer({
+      workers: [makeWorker(0), makeWorker(0)],
+      hand: hand5(),
+      ownedBuildings: [makeOwnedBuilding('農場')],
+      money: 20,
+    })
+    const state = makeState([cpu, makeHumanGuard()], {
+      publicWorkplaces: [
+        makePublicWorkplace('万博', { kind: 'discard-gain', discard: 5, gain: 30 }),
+      ],
+    })
+    const result = cpuOneTurnStep(state)
+    expect(usedOwnedBuilding(state, result, 0)).toBe('農場')
+  })
+
+  test('自分の場の施設より一般職場の同施設を優先する（農場 owned < 農場 public）', () => {
+    // 農場が owned にも一般職場にもある → 一般職場の農場を選ぶ
+    const cpu = makePlayer({
+      workers: [makeWorker(0), makeWorker(0)],
+      hand: hand5(),
+      ownedBuildings: [makeOwnedBuilding('農場')],
+      money: 20,
+    })
+    const state = makeState([cpu, makeHumanGuard()], {
+      publicWorkplaces: [
+        makePublicWorkplace('農場', { kind: 'draw-consumption', n: 2 }),
+      ],
+    })
+    const result = cpuOneTurnStep(state)
+    expect(usedPublicWorkplace(state, result)).toBe('農場')
+  })
+
+  test('一般職場の低コスト施設より自分の場の高コスト施設を優先する（農場 public < 製鉄所 owned）', () => {
+    // 一般職場に低コストの農場(cost=1)があっても、自分の場の高コスト製鉄所(cost=4)を使う
+    const cpu = makePlayer({
+      workers: [makeWorker(0), makeWorker(0)],
+      hand: hand5(),
+      ownedBuildings: [makeOwnedBuilding('製鉄所')],
+      money: 20,
+    })
+    const state = makeState([cpu, makeHumanGuard()], {
+      publicWorkplaces: [
+        makePublicWorkplace('農場', { kind: 'draw-consumption', n: 2 }),
+      ],
+    })
+    const result = cpuOneTurnStep(state)
+    expect(usedOwnedBuilding(state, result, 0)).toBe('製鉄所')
+  })
+
+  test('自分の場の高コスト施設より一般職場の同施設を優先する（製鉄所 owned < 製鉄所 public）', () => {
+    // 製鉄所が owned にも一般職場にもある → 一般職場の製鉄所を選ぶ
+    const cpu = makePlayer({
+      workers: [makeWorker(0), makeWorker(0)],
+      hand: hand5(),
+      ownedBuildings: [makeOwnedBuilding('製鉄所')],
+      money: 20,
+    })
+    const state = makeState([cpu, makeHumanGuard()], {
+      publicWorkplaces: [
+        makePublicWorkplace('製鉄所', { kind: 'draw', n: 3 }),
+      ],
+    })
+    const result = cpuOneTurnStep(state)
+    expect(usedPublicWorkplace(state, result)).toBe('製鉄所')
+  })
+})
