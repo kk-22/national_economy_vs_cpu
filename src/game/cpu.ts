@@ -5,6 +5,11 @@ import type { GameState, HandCard, BuildingCard, CpuStrategy } from './types'
 
 export const MCTS_SIMULATIONS = 10
 
+// greedy CPU が全ラウンドを通じて建設しない建物
+// 珈琲店: gain-supply 効果が household 依存で弱い
+// 倉庫・社宅: パッシブ効果だが得点貢献が低く投資効率が悪い
+export const GREEDY_BUILD_EXCLUDED = new Set(['珈琲店', '倉庫', '社宅'])
+
 // ---- 捨て札ソート（greedy/disruptive 共通: 消費財→低value建物の順） ----
 
 function sortedDiscardIds(hand: HandCard[], count: number): string[] {
@@ -105,6 +110,7 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
     const availableAfter = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
     // 建てて即売り損パターンを除外、7ラウンド以下は配置不可建物（職場でない建物）を建てない
     buildable = buildable.filter(c => {
+      if (GREEDY_BUILD_EXCLUDED.has(c.name)) return false
       const def = BUILDING_CARDS[c.name]!
       if (def.effect.kind.startsWith('p-')) {
         // パッシブ効果: R8以降で得点があれば建設対象

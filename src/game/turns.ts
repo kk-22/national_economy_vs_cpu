@@ -4,7 +4,7 @@ import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './avai
 import { constructBuilding } from './build'
 import { applyEffect } from './effects'
 import { processRoundEnd, calculateScores, resolveAfterHandLimit } from './round'
-import { MCTS_SIMULATIONS } from './cpu'
+import { MCTS_SIMULATIONS, GREEDY_BUILD_EXCLUDED } from './cpu'
 import type { GameState, BuildingCard, PublicWorkplace, OwnedBuilding, GameEffect, Player } from './types'
 
 // ---- Worker placement ----
@@ -224,6 +224,7 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
       let maxCost = -1
       for (const c of player.hand) {
         if (c.kind !== 'building') continue
+        if (GREEDY_BUILD_EXCLUDED.has((c as BuildingCard).name)) continue
         const def = BUILDING_CARDS[(c as BuildingCard).name]
         if (!def) continue
         const discountedCost = Math.max(0, def.cost - effect.discount)

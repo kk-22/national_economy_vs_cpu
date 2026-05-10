@@ -297,3 +297,51 @@ describe('greedy: 残り2ワーカー・建設か既存施設使用か', () => {
     expect(builtBuilding(state, result, 0)).not.toBe('ゼネコン')
   })
 })
+
+// ============================================================
+// 建設対象外の建物
+// ============================================================
+//
+// 珈琲店(gain-supply): household 依存で弱く、建設後に使えない場面が多い
+// 倉庫・社宅: パッシブ効果で得点貢献が低い
+// → GREEDY_BUILD_EXCLUDED に登録し全ラウンドで建設しない
+
+describe('greedy: 建設対象外の建物を建設しない', () => {
+  test('農場（draw-consumption）は建設する', () => {
+    const cpu = makePlayer({
+      workers: [makeWorker(0), makeWorker(0)],
+      hand: [makeBuildingCard('農場'), makeConsumptionCard()],
+      money: 20,
+    })
+    const state = makeState([cpu, makeHumanGuard()], {
+      round: 1,
+      publicWorkplaces: [
+        makePublicWorkplace('大工', { kind: 'build', discount: 0, drawAfter: 0 }),
+      ],
+    })
+
+    const result = cpuOneTurnStep(state)
+
+    expect(builtBuilding(state, result, 0)).toBe('農場')
+  })
+
+  test('珈琲店（gain-supply）は建設しない', () => {
+    // 珈琲店しかない場合、大工スコアは -Infinity → 採石場を選ぶ
+    const cpu = makePlayer({
+      workers: [makeWorker(0), makeWorker(0)],
+      hand: [makeBuildingCard('珈琲店'), makeConsumptionCard()],
+      money: 20,
+    })
+    const state = makeState([cpu, makeHumanGuard()], {
+      round: 1,
+      publicWorkplaces: [
+        makePublicWorkplace('大工', { kind: 'build', discount: 0, drawAfter: 0 }),
+        makePublicWorkplace('採石場', { kind: 'draw-become-start' }),
+      ],
+    })
+
+    const result = cpuOneTurnStep(state)
+
+    expect(builtBuilding(state, result, 0)).toBeNull()
+  })
+})
