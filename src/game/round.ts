@@ -334,10 +334,13 @@ export function calculateScores(state: GameState): ScoreResult[] {
 
     return {
       playerId: player.id,
-      buildingValue,
       money: player.money,
-      unpaidPenalty,
+      buildingValue,
       bonuses,
+      unpaidPenalty,
+      workerCount: player.workers.length,
+      actionsPlaced: 0,
+      victoryPoints: 0,
       total: buildingValue + player.money + bonuses - unpaidPenalty,
     }
   })

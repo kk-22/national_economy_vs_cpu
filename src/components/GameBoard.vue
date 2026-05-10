@@ -355,6 +355,7 @@ function cardTooltip(name: string): string {
                       :class="['bcard', { used: b.workerHereId !== null, 'card-activated': activatedIds.includes(b.id), 'card-built': builtIds.includes(b.id) }]"
                       @mouseenter="tipEnter($event, cardTooltip(b.name))"
                       @mouseleave="tipLeave">
+                      <span v-if="b.workerHereId !== null" class="bcard-used-label">使用済</span>
                       <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
                       <span class="bcard-name" :style="bcardNameStyle(b.name, true)">{{ b.name }}</span>
                       <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
@@ -571,6 +572,7 @@ function cardTooltip(name: string): string {
                       @mouseenter="tipEnter($event, cardTooltip(b.name))"
                       @mouseleave="tipLeave"
                       @click="canPlayerAct && availableOwnedBuildings.some(x => x.id === b.id) && clickOwnedBuilding(b.id)">
+                      <span v-if="b.workerHereId !== null" class="bcard-used-label">使用済</span>
                       <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
                       <span class="bcard-name" :style="bcardNameStyle(b.name)">{{ b.name }}</span>
                       <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>

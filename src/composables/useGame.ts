@@ -153,7 +153,17 @@ export function useGame() {
     return getAvailableOwnedBuildings(state.game, humanPlayer.value!.id)
   })
 
-  const scores = computed(() => state.game?.phase === 'game-over' ? calculateScores(state.game) : null)
+  const scores = computed(() => {
+    if (!state.game || state.game.phase !== 'game-over') return null
+    const raw = calculateScores(state.game)
+    const actionCounts = new Map<number, number>()
+    for (const entry of history.actionLog) {
+      if (entry.targetId !== '__hand-limit__' && entry.targetId !== '__sell__') {
+        actionCounts.set(entry.playerId, (actionCounts.get(entry.playerId) ?? 0) + 1)
+      }
+    }
+    return raw.map(sc => ({ ...sc, actionsPlaced: actionCounts.get(sc.playerId) ?? 0 }))
+  })
 
   const pendingAction = computed(() => state.game?.pendingAction ?? null)
 

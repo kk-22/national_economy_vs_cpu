@@ -127,9 +127,12 @@ export interface GameConfig {
 
 export interface ScoreResult {
   playerId: number
-  buildingValue: number
   money: number
-  unpaidPenalty: number
+  buildingValue: number
   bonuses: number
+  unpaidPenalty: number
+  workerCount: number
+  actionsPlaced: number
+  victoryPoints: number
   total: number
 }

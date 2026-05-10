@@ -28,7 +28,7 @@ function strategyLabel(strategy: CpuStrategy): string {
     <div class="gameover-card">
       <h1>ゲーム終了</h1>
       <table>
-        <thead><tr><th>プレイヤー</th><th>建物</th><th>残金</th><th>ボーナス</th><th>ペナルティ</th><th>合計</th></tr></thead>
+        <thead><tr><th>プレイヤー</th><th>労働者</th><th>総手数</th><th>残金</th><th>未払い賃金</th><th>勝利点</th><th>建物価値</th><th>建物効果</th><th>合計</th></tr></thead>
         <tbody>
           <tr v-for="sc in scores" :key="sc.playerId"
             :class="{ winner: sc.playerId === scores.reduce((a,b) => a.total > b.total ? a : b).playerId }">
@@ -38,10 +38,13 @@ function strategyLabel(strategy: CpuStrategy): string {
                 <br /><span class="result-strategy">{{ strategyLabel(game.players[sc.playerId].cpuStrategy) }}</span>
               </template>
             </td>
-            <td>${{ sc.buildingValue }}</td>
+            <td>{{ sc.workerCount }}</td>
+            <td>{{ sc.actionsPlaced }}</td>
             <td>${{ sc.money }}</td>
-            <td>+{{ sc.bonuses }}</td>
-            <td>-{{ sc.unpaidPenalty }}</td>
+            <td>{{ sc.unpaidPenalty ? '-' + sc.unpaidPenalty : '' }}</td>
+            <td>{{ sc.victoryPoints || '' }}</td>
+            <td>${{ sc.buildingValue }}</td>
+            <td>{{ sc.bonuses || '' }}</td>
             <td><strong>${{ sc.total }}</strong></td>
           </tr>
         </tbody>
