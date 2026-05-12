@@ -17,6 +17,7 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
 
   const beforePlayer = player
   const beforeSP = state.startPlayerIndex
+  const beforeDiscardPile = state.discardPile
 
   let s = updatePlayer(state, playerId, p => ({
     ...p,
@@ -41,7 +42,13 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
   }
 
   const afterPlayer = getPlayer(s, playerId)
-  s = addLog(s, buildActionLog(workplace.name, workplace.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex))
+  let revealPickInfo: { picked: string; discarded: string[] } | undefined
+  if (workplace.effect.kind === 'reveal-pick') {
+    const pickedCard = afterPlayer.hand.find(c => c.kind === 'building' && !beforePlayer.hand.some(b => b.id === c.id)) as (typeof afterPlayer.hand[number] & { kind: 'building' }) | undefined
+    const newDiscarded = s.discardPile.filter(c => !beforeDiscardPile.some(b => b.id === c.id))
+    revealPickInfo = { picked: pickedCard?.name ?? '不明', discarded: newDiscarded.map(c => c.name) }
+  }
+  s = addLog(s, buildActionLog(workplace.name, workplace.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex, revealPickInfo))
 
   return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
 }
@@ -55,6 +62,7 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
 
   const beforePlayer = player
   const beforeSP = state.startPlayerIndex
+  const beforeDiscardPile = state.discardPile
 
   let s = updatePlayer(state, playerId, p => ({
     ...p,
@@ -74,7 +82,13 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
   }
 
   const afterPlayer = getPlayer(s, playerId)
-  s = addLog(s, buildActionLog(building.name, def.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex))
+  let revealPickInfo: { picked: string; discarded: string[] } | undefined
+  if (def.effect.kind === 'reveal-pick') {
+    const pickedCard = afterPlayer.hand.find(c => c.kind === 'building' && !beforePlayer.hand.some(b => b.id === c.id)) as (typeof afterPlayer.hand[number] & { kind: 'building' }) | undefined
+    const newDiscarded = s.discardPile.filter(c => !beforeDiscardPile.some(b => b.id === c.id))
+    revealPickInfo = { picked: pickedCard?.name ?? '不明', discarded: newDiscarded.map(c => c.name) }
+  }
+  s = addLog(s, buildActionLog(building.name, def.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex, revealPickInfo))
 
   return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
 }
@@ -984,7 +998,8 @@ export function pickRevealedCard(state: GameState, cardId: string): GameState {
   let s = updatePlayer(state, action.playerId, p => ({ ...p, hand: [...p.hand, picked] }))
   s = { ...s, discardPile: [...s.discardPile, ...discarded], pendingAction: null }
   const afterPlayer = getPlayer(s, action.playerId)
-  s = addLog(s, buildActionLog(action.sourceName ?? '', 'reveal-pick', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
+  const revealPickInfo = { picked: (picked as BuildingCard).name, discarded: discarded.map(c => c.name) }
+  s = addLog(s, buildActionLog(action.sourceName ?? '', 'reveal-pick', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex, revealPickInfo))
 
   return afterHumanAction(s)
 }

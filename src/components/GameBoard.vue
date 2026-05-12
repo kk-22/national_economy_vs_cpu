@@ -252,14 +252,6 @@ function handDetail(hand: HandCard[]): string {
   if (consumptions > 0) return `（建物${buildings}+消費財${consumptions}）`
   return `（建物${buildings}）`
 }
-function handDisplay(hand: HandCard[]): string {
-  const total = hand.length
-  if (total === 0) return '0'
-  const buildings = hand.filter(c => c.kind === 'building').length
-  const consumptions = total - buildings
-  if (consumptions > 0) return `${total}（建物${buildings}+消費財${consumptions}）`
-  return `${total}（建物${buildings}）`
-}
 function workerNames(workerIds: string[]): string[] {
   if (!game.value) return []
   return workerIds.map(wid => {
@@ -314,13 +306,17 @@ function cardTooltip(name: string): string {
   const d = getBuildingDef(name)
   if (!d) return ''
   const desc = effectDesc(d.effect)
-  const labels: string[] = []
-  if (d.tags.includes('farm')) labels.push('農園マーク')
-  if (d.tags.includes('factory')) labels.push('工場マーク')
-  if (!d.canSell) labels.push('売却不可')
-  if (!d.isWorkplace) labels.push('使用不可')
-  if (labels.length === 0) return desc
-  return desc + '\n' + labels.join(' / ')
+  const tags: string[] = []
+  if (d.tags.includes('farm')) tags.push('農園マーク')
+  if (d.tags.includes('factory')) tags.push('工場マーク')
+  const attrs: string[] = []
+  if (!d.canSell) attrs.push('売却不可')
+  if (!d.isWorkplace) attrs.push('使用不可')
+  const parts: string[] = []
+  if (tags.length > 0) parts.push('タイプ：' + tags.join(' / '))
+  if (attrs.length > 0) parts.push(attrs.join(' / '))
+  if (parts.length === 0) return desc
+  return desc + '\n' + parts.join(' / ')
 }
 </script>
 
@@ -359,7 +355,7 @@ function cardTooltip(name: string): string {
                   <span v-if="cpu.unpaidWages > 0" class="unpaid-badge">未払い{{ cpu.unpaidWages }}</span>
                   <span class="worker-badge">労働者{{ workerStatus(cpu.workers) }}</span>
                   <span class="cpu-money">${{ cpu.money }}</span>
-                  <span class="hand-count">手札{{ handDisplay(cpu.hand) }}</span>
+                  <span class="hand-count"><span class="hand-count-bold">手札{{ handCount(cpu.hand) }}</span>{{ handDetail(cpu.hand) }}</span>
                   <span v-if="game.startPlayerIndex === cpu.id" class="sp-badge">🚩SP</span>
                 </div>
                 <div class="cpu-cards-scroll">

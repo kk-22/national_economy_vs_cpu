@@ -128,22 +128,34 @@ export function buildActionLog(
   after: Player,
   beforeSP: number,
   afterSP: number,
+  revealPickInfo?: { picked: string; discarded: string[] },
 ): string {
   const parts: string[] = []
-  const newBuildings = after.ownedBuildings.filter(b => !before.ownedBuildings.some(ob => ob.id === b.id))
-  const didBuild = newBuildings.length > 0
-  if (didBuild) {
-    parts.push(`${newBuildings.map(b => b.name).join('・')} を建設`)
-  } else if (effectKind === 'build' || effectKind === 'build-farm-free' || effectKind === 'build-double') {
-    parts.push('建設スキップ')
+
+  if (effectKind === 'reveal-pick' && revealPickInfo) {
+    const { picked, discarded } = revealPickInfo
+    if (discarded.length > 0) {
+      parts.push(`${picked}を選び、${discarded.join('、')}を捨てた`)
+    } else {
+      parts.push(`${picked}を選んだ`)
+    }
+  } else {
+    const newBuildings = after.ownedBuildings.filter(b => !before.ownedBuildings.some(ob => ob.id === b.id))
+    const didBuild = newBuildings.length > 0
+    if (didBuild) {
+      parts.push(`${newBuildings.map(b => b.name).join('・')} を建設`)
+    } else if (effectKind === 'build' || effectKind === 'build-farm-free' || effectKind === 'build-double') {
+      parts.push('建設スキップ')
+    }
+    if (after.money > before.money) parts.push(`$${after.money}`)
+    if (!didBuild && after.hand.length !== before.hand.length) parts.push(handSummary(after))
+    if (after.workers.length !== before.workers.length) parts.push(`労働者${after.workers.length}人`)
+    if (effectKind === 'draw-become-start') {
+      if (afterSP === after.id && beforeSP !== after.id) parts.push('SP獲得')
+      else if (afterSP === after.id) parts.push('SP保有済み')
+    }
   }
-  if (after.money > before.money) parts.push(`$${after.money}`)
-  if (!didBuild && after.hand.length !== before.hand.length) parts.push(handSummary(after))
-  if (after.workers.length !== before.workers.length) parts.push(`労働者${after.workers.length}人`)
-  if (effectKind === 'draw-become-start') {
-    if (afterSP === after.id && beforeSP !== after.id) parts.push('SP獲得')
-    else if (afterSP === after.id) parts.push('SP保有済み')
-  }
+
   return `${after.name}: ${sourceName}${parts.length > 0 ? ' → ' + parts.join('、') : ''}`
 }
 
