@@ -27,31 +27,36 @@ npm run deploy       # GitHub Pagesへデプロイ (gh-pages -d dist)
 ## ディレクトリ構成
 
 ```
-national_ecnomy_vs_cpu/
-├── CLAUDE.md
+national_economy_vs_cpu/
 ├── docs/
-│   ├── rules.md           # ゲームルール全文
-│   └── building-cards.md  # カード一覧・効果
-├── src/
-│   ├── main.ts
-│   ├── App.vue
-│   ├── game/              # ゲームロジック（Vue依存なし・純粋TS）
-│   │   ├── types.ts       # 型定義
-│   │   ├── constants.ts   # カードデータ・定数
-│   │   ├── actions.ts     # 合法手の列挙・実行
-│   │   ├── rules.ts       # ルール判定・ラウンド進行
-│   │   └── cpu.ts         # CPUロジック
-│   ├── composables/       # Vue Composables（状態管理）
-│   │   └── useGame.ts
-│   └── components/        # Vueコンポーネント
-│       ├── Board.vue
-│       ├── PlayerArea.vue
-│       ├── CardComponent.vue
-│       └── RoundInfo.vue
-├── index.html
-├── vite.config.ts
-├── tsconfig.json
-└── package.json
+│   ├── rules.md              # ゲームルール全文
+│   └── building-cards.md     # カード一覧・効果
+└── src/
+    ├── App.vue / App.css
+    ├── style.css
+    ├── game/                  # ゲームロジック（Vue依存なし・純粋TS）
+    │   ├── types.ts           # 型定義
+    │   ├── constants.ts       # カードデータ・定数
+    │   ├── random.ts          # シード付き乱数
+    │   ├── primitives.ts      # 低レベル操作ユーティリティ
+    │   ├── init.ts            # ゲーム初期化
+    │   ├── availability.ts    # 配置可能な職場・建物の判定
+    │   ├── turns.ts           # ターン実行（ワーカー配置）
+    │   ├── build.ts           # 建設処理
+    │   ├── effects.ts         # カード効果処理
+    │   ├── resolution.ts      # ワーカー回収・効果解決
+    │   ├── round.ts           # ラウンド進行・賃金支払い
+    │   ├── history.ts         # 操作履歴（戻る/進む用）
+    │   ├── replay.ts          # 履歴から状態を再現
+    │   ├── cpu.ts             # CPUロジック
+    │   └── __tests__/         # ユニットテスト
+    ├── composables/
+    │   ├── useGame.ts         # ゲーム状態管理
+    │   └── useLogHighlight.ts # ログのハイライト管理
+    └── components/
+        ├── GameSetup.vue      # ゲーム開始設定画面
+        ├── GameBoard.vue      # メインゲーム画面
+        └── GameResult.vue     # 結果画面
 ```
 
 ## ゲーム概要
@@ -59,18 +64,12 @@ national_ecnomy_vs_cpu/
 - **ラウンド数**: 9ラウンド固定
 - **プレイヤー**: 人間1人 + CPU 1〜3体
 - **勝利条件**: 最終得点（建物コスト合計 + 残金）が最高
-- **CPUロジック**: 合法手からランダム選択（弱AI）
-
-## 重要なルール
-
-- 毎ラウンド末に賃金支払い（ラウンドカードの賃金 × 労働者数）
-- 支払えない場合は建物をお払い箱（一般職場）に送る
-- お金はゲーム内で循環（サプライが空なら誰も受け取れない）
+- **CPUロジック**: 複数戦略を用意
 - 詳細は `docs/rules.md` 参照
 
 ## カードデータ
 
-- `docs/building-cards.md` に一覧あり（TODO項目は要確認）
+- `docs/building-cards.md` に一覧あり
 - ゲーム内では `src/game/constants.ts` にTypeScriptオブジェクトとして定義する
 
 ## ゲームログの読み方
@@ -79,13 +78,12 @@ UI に表示されるログは **新しい行が上・古い行が下** の順�
 ラウンド内のアクション順は下から上に読む。
 
 ```
---- ラウンド 2 終了 ---   ← 最新
-CPU: 鉱山               ← 3手目（最後）
-人間: 露店              ← 4手目
-CPU: 採石場             ← 2手目
-人間: 学校              ← 3手目
-CPU: 大工               ← 1手目（最初）
---- ラウンド 2 開始 ---   ← 最古
+--- ラウンド 2 終了 (家計 $0) --- ← 最新
+人間: 露店                       ← 2手目（最後）
+CPU: 採石場                      ← 2手目
+人間: 学校                       ← 1手目
+CPU: 大工                        ← 1手目（最初）
+■■ラウンド 2 開始 (家計 $9) ■■    ← 最古
 ```
 
 ## 作業ルール
