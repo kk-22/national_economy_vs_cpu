@@ -241,13 +241,24 @@ function cardLabel(card: { kind: string; name?: string }) {
   return card.kind === 'building' ? card.name! : '消費財'
 }
 
+function handCount(hand: HandCard[]): number {
+  return hand.length
+}
+function handDetail(hand: HandCard[]): string {
+  const total = hand.length
+  if (total === 0) return ''
+  const buildings = hand.filter(c => c.kind === 'building').length
+  const consumptions = total - buildings
+  if (consumptions > 0) return `（建物${buildings}+消費財${consumptions}）`
+  return `（建物${buildings}）`
+}
 function handDisplay(hand: HandCard[]): string {
   const total = hand.length
   if (total === 0) return '0'
   const buildings = hand.filter(c => c.kind === 'building').length
   const consumptions = total - buildings
-  if (consumptions > 0) return `${total}(建物${buildings}+消費財${consumptions})`
-  return `${total}(建物${buildings})`
+  if (consumptions > 0) return `${total}（建物${buildings}+消費財${consumptions}）`
+  return `${total}（建物${buildings}）`
 }
 function workerNames(workerIds: string[]): string[] {
   if (!game.value) return []
@@ -407,7 +418,6 @@ function cardTooltip(name: string): string {
               <span v-if="humanPlayer?.unpaidWages" class="unpaid-badge">未払い{{ humanPlayer.unpaidWages }}</span>
               <span class="worker-badge">労働者{{ humanPlayer ? workerStatus(humanPlayer.workers) : '' }}</span>
               <span class="player-money">${{ humanPlayer?.money }}</span>
-              <span class="hand-count">手札{{ handDisplay(humanPlayer?.hand ?? []) }}</span>
               <span v-if="game.startPlayerIndex === humanPlayer?.id" class="sp-badge">🚩SP</span>
             </div>
 
@@ -582,7 +592,7 @@ function cardTooltip(name: string): string {
               </div>
               <div class="player-subsection">
                 <div class="hand-label-row">
-                  <div class="subsection-label">手札</div>
+                  <div class="subsection-label"><span class="hand-count-bold">手札{{ handCount(humanPlayer?.hand ?? []) }}</span>{{ handDetail(humanPlayer?.hand ?? []) }}</div>
                   <select v-model="handSort" class="hand-sort-select">
                     <option value="order">入手順</option>
                     <option value="cost">コスト順</option>

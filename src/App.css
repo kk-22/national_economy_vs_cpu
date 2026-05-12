@@ -372,6 +372,7 @@
 }
 .player-name { font-weight: 700; color: #059669; font-size: 15px; }
 .player-money { font-weight: 700; color: #0369a1; font-size: 15px; }
+.hand-count-bold { font-weight: 700; color: #0f172a; font-size: 15px; }
 .player-content { display: flex; flex-direction: column; gap: 6px; }
 .player-subsection {}
 
