@@ -297,8 +297,12 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
     }
     case 'discard-gain': {
       if (player.hand.length < effect.discard || household < effect.gain) return -Infinity
-      // 施設利用より常に低い優先度になるよう係数を抑制（money urgency 加算は廃止）
-      return effect.gain * 0.2
+      const dgWage = ROUND_CARDS[round - 1]?.wage ?? 0
+      const dgExpectedWage = player.workers.length * dgWage
+      const dgShortfall = Math.max(0, dgExpectedWage - player.money)
+      // お金不足時は市場系施設を鉱山より優先するためスコアを引き上げる
+      const dgMultiplier = dgShortfall > 0 ? 2.0 : 0.2
+      return effect.gain * dgMultiplier
     }
     case 'gain-supply': {
       if (household < effect.n) return -Infinity

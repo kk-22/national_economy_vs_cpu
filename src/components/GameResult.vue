@@ -16,7 +16,7 @@ const emit = defineEmits<{
 function strategyLabel(strategy: CpuStrategy): string {
   switch (strategy) {
     case 'random':     return 'ランダム'
-    case 'greedy':     return '効率重視'
+    case 'greedy':     return '貪欲法'
     case 'beam':       return 'ビームサーチ'
     case 'mcts':       return 'モンテカルロ'
     case 'disruptive': return 'お邪魔'
