@@ -473,7 +473,7 @@ function cpuTakeTurnMCTS(state: GameState, playerId: number): GameState {
     players: state.players.map(p => ({
       ...p,
       isCpu: true,
-      cpuStrategy: (p.cpuStrategy === 'mcts' || !p.isCpu) ? 'greedy' as const : p.cpuStrategy,
+      cpuStrategy: (p.cpuStrategy === 'mcts' || p.cpuStrategy === 'beam' || !p.isCpu) ? 'greedy' as const : p.cpuStrategy,
     })),
   })
 
@@ -529,7 +529,7 @@ function cpuTakeTurnMCTSNoAuto(state: GameState, playerId: number): GameState {
     players: state.players.map(p => ({
       ...p,
       isCpu: true,
-      cpuStrategy: (p.cpuStrategy === 'mcts' || !p.isCpu) ? 'greedy' as const : p.cpuStrategy,
+      cpuStrategy: (p.cpuStrategy === 'mcts' || p.cpuStrategy === 'beam' || !p.isCpu) ? 'greedy' as const : p.cpuStrategy,
     })),
   })
 
