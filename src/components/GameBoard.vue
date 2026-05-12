@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
 import { useGame } from '../composables/useGame'
+import { useLogHighlight } from '../composables/useLogHighlight'
 import type { Worker, GameEffect, HandCard } from '../game/types'
 
 const props = defineProps<{
@@ -35,63 +36,15 @@ const {
 const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
 
 // ---- ログ行ハイライト ----
-type HighlightKey = { type: 'player'; name: string } | { type: 'round' }
+const { getLogState, onLogMouseenter, onLogMouseleave, onLogClick } = useLogHighlight(
+  () => game.value?.players.map(p => p.name) ?? []
+)
 
-const hoveredHighlight = ref<HighlightKey | null>(null)
-const selectedHighlight = ref<HighlightKey | null>(null)
-
-const playerNames = computed(() => game.value?.players.map(p => p.name) ?? [])
-
-function getLogPlayer(msg: string): string | null {
-  for (const name of playerNames.value) {
-    if (msg.startsWith(name + ':') || msg.startsWith(name + ' ')) return name
-  }
-  return null
-}
-
-function isRoundMarker(msg: string): boolean {
-  return /ラウンド \d+ (開始|終了)/.test(msg)
-}
-
-function getLineKey(msg: string): HighlightKey | null {
-  if (isRoundMarker(msg)) return { type: 'round' }
-  const player = getLogPlayer(msg)
-  if (player) return { type: 'player', name: player }
-  return null
-}
-
-function logLineClass(msg: string, _i: number): string {
-  const active = selectedHighlight.value ?? hoveredHighlight.value
-  if (!active) return 'log-line'
-  if (active.type === 'player') {
-    if (getLogPlayer(msg) === active.name) return 'log-line log-line--highlight'
-    if (getLogPlayer(msg) === null) return 'log-line'
-    return 'log-line log-line--dim'
-  }
-  // type === 'round': ラウンドマーカー行のみハイライト
-  if (isRoundMarker(msg)) return 'log-line log-line--highlight'
-  return 'log-line log-line--dim'
-}
-
-function onLogMouseenter(msg: string, _i: number) {
-  const key = getLineKey(msg)
-  if (key) hoveredHighlight.value = key
-}
-
-function onLogMouseleave() {
-  hoveredHighlight.value = null
-}
-
-function onLogClick(msg: string, _i: number) {
-  const key = getLineKey(msg)
-  if (!key) return
-  const cur = selectedHighlight.value
-  if (cur && cur.type === key.type &&
-    (cur.type !== 'player' || (key.type === 'player' && cur.name === key.name))) {
-    selectedHighlight.value = null
-  } else {
-    selectedHighlight.value = key
-  }
+function logLineClass(msg: string): string {
+  const s = getLogState(msg)
+  if (s === 'highlight') return 'log-line log-line--highlight'
+  if (s === 'dim') return 'log-line log-line--dim'
+  return 'log-line'
 }
 
 // ---- 手札ソート ----
@@ -638,14 +591,16 @@ function cardTooltip(name: string): string {
           <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">進む ▶</button>
         </div>
         <div class="log-label">ログ</div>
-        <div
-          v-for="(msg, i) in [...game.log].reverse()"
-          :key="i"
-          :class="logLineClass(msg, i)"
-          @mouseenter="onLogMouseenter(msg, i)"
-          @mouseleave="onLogMouseleave"
-          @click="onLogClick(msg, i)"
-        >{{ msg }}</div>
+        <div class="log-scroll">
+          <div
+            v-for="(msg, i) in [...game.log].reverse()"
+            :key="i"
+            :class="logLineClass(msg)"
+            @mouseenter="onLogMouseenter(msg)"
+            @mouseleave="onLogMouseleave"
+            @click="onLogClick(msg)"
+          >{{ msg }}</div>
+        </div>
       </div>
 
     </div><!-- /game-body -->

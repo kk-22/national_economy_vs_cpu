@@ -2,6 +2,7 @@
 import './App.css'
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useGame } from './composables/useGame'
+import { useLogHighlight } from './composables/useLogHighlight'
 import type { CpuStrategy } from './game/types'
 import GameSetup from './components/GameSetup.vue'
 import GameResult from './components/GameResult.vue'
@@ -14,6 +15,17 @@ const {
   saveGameState, hasSavedGame, restoreGame,
   undo, canUndo, isUndoRedo, cpuPaused, resumeCpu,
 } = useGame()
+
+// ---- ドロワーログ ハイライト ----
+const { getLogState: drawerLogState, onLogMouseenter: drawerLogEnter, onLogMouseleave: drawerLogLeave, onLogClick: drawerLogClick } = useLogHighlight(
+  () => game.value?.players.map(p => p.name) ?? []
+)
+function drawerLineClass(msg: string): string {
+  const s = drawerLogState(msg)
+  if (s === 'highlight') return 'drawer-log-line drawer-log-line--highlight'
+  if (s === 'dim') return 'drawer-log-line drawer-log-line--dim'
+  return 'drawer-log-line'
+}
 
 // ---- セットアップ状態 ----
 const showSetup = ref(false)
@@ -394,20 +406,31 @@ function replayGame() {
     <template v-if="game">
       <div class="drawer-overlay" :class="{ open: menuOpen }" @click="menuOpen = false"></div>
       <div class="drawer-panel" :class="{ open: menuOpen }">
-        <div class="drawer-top">
-          <span class="drawer-title">メニュー</span>
-          <button class="drawer-close" @click="menuOpen = false">✕</button>
+        <div class="drawer-fixed">
+          <div class="drawer-top">
+            <span class="drawer-title">メニュー</span>
+            <button class="drawer-close" @click="menuOpen = false">✕</button>
+          </div>
+          <div class="drawer-info">
+            <span class="hbadge">ラウンド {{ game.round }}/9</span>
+            <span class="hbadge">賃金 ${{ currentWage }}</span>
+            <span class="hbadge">家計 ${{ game.household }}</span>
+            <span class="hbadge">山札 {{ game.buildingDeck.length }}枚</span>
+            <button class="btn-restart" @click="openSetup(); menuOpen = false">ゲーム設定</button>
+            <button class="btn-restart" @click="showSummary = true; menuOpen = false">ラウンド毎の情報</button>
+          </div>
+          <div class="drawer-log-label">ログ</div>
         </div>
-        <div class="drawer-info">
-          <span class="hbadge">ラウンド {{ game.round }}/9</span>
-          <span class="hbadge">賃金 ${{ currentWage }}</span>
-          <span class="hbadge">家計 ${{ game.household }}</span>
-          <span class="hbadge">山札 {{ game.buildingDeck.length }}枚</span>
-          <button class="btn-restart" @click="openSetup(); menuOpen = false">ゲーム設定</button>
-          <button class="btn-restart" @click="showSummary = true; menuOpen = false">ラウンド毎の情報</button>
+        <div class="drawer-log-scroll">
+          <div
+            v-for="(msg, i) in [...game.log].reverse()"
+            :key="i"
+            :class="drawerLineClass(msg)"
+            @click="drawerLogClick(msg)"
+            @mouseenter="drawerLogEnter(msg)"
+            @mouseleave="drawerLogLeave"
+          >{{ msg }}</div>
         </div>
-        <div class="drawer-log-label">ログ</div>
-        <div v-for="(msg, i) in [...game.log].reverse().slice(0, 80)" :key="i" class="drawer-log-line">{{ msg }}</div>
       </div>
     </template>
 

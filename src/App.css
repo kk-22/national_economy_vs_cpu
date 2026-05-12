@@ -455,11 +455,19 @@
 .log-panel {
   width: var(--log-panel-width);
   flex-shrink: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   background: #fff;
   border-left: 1px solid #e2e8f0;
-  padding: 10px 8px;
+  padding: 10px 8px 0;
+}
+@media (min-width: 641px) {
+  .log-panel { display: flex; flex-direction: column; }
+}
+.log-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 8px;
 }
 .log-undo-bar {
   display: flex;
@@ -623,13 +631,22 @@
   z-index: 901;
   transform: translateX(100%);
   transition: transform 0.25s ease;
-  overflow-y: auto;
-  padding: 14px 14px 24px;
+  overflow: hidden;
   flex-direction: column;
   gap: 0;
   box-sizing: border-box;
   /* display controlled by media query below */
   display: none;
+}
+.drawer-fixed {
+  flex-shrink: 0;
+  padding: 14px 14px 0;
+}
+.drawer-log-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 14px 24px;
 }
 .drawer-panel { pointer-events: none; }
 .drawer-panel.open { transform: translateX(0); pointer-events: auto; }
@@ -681,10 +698,19 @@
 .drawer-log-line {
   font-size: 11px;
   color: #64748b;
-  padding: 3px 0;
+  padding: 3px 4px;
   border-bottom: 1px solid #f1f5f9;
   line-height: 1.4;
   word-break: break-all;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.drawer-log-line--highlight {
+  background: #fef08a;
+  color: #1e293b;
+}
+.drawer-log-line--dim {
+  opacity: 0.3;
 }
 
 @media (max-width: 640px) {
