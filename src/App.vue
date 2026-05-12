@@ -338,7 +338,7 @@ function replayGame() {
     startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies })
     scheduleInitialCpuRun()
   } else {
-    startGame({ humanName: humanPlayer.value?.name ?? 'プレイヤー', cpuCount, cpuStrategies })
+    startGame({ humanName: humanPlayer.value?.name ?? 'プレイヤー', cpuCount, playerOrder: setupPlayerOrder.value, cpuStrategies })
   }
 }
 </script>
