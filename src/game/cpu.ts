@@ -44,7 +44,7 @@ export function cpuRevealPick(state: GameState, playerId: number, n: number, str
   if (revealed.length === 0) return s
 
   let pick: HandCard
-  if (strategy === 'greedy') {
+  if (strategy === 'greedy' || strategy === 'beam') {
     // assetValue 最大のカードを選ぶ
     pick = revealed.reduce((best, c) => {
       if (c.kind !== 'building') return best
@@ -68,7 +68,7 @@ export function cpuRevealPick(state: GameState, playerId: number, n: number, str
 
 export function cpuDiscardDraw(state: GameState, playerId: number, discard: number, draw: number, strategy: CpuStrategy = 'random'): GameState {
   const player = getPlayer(state, playerId)
-  const ids = (strategy === 'greedy' || strategy === 'disruptive')
+  const ids = (strategy === 'greedy' || strategy === 'beam' || strategy === 'disruptive')
     ? sortedDiscardIds(player.hand, discard)
     : player.hand.slice(0, discard).map(c => c.id)
   const discardSet = new Set(ids)
@@ -82,7 +82,7 @@ export function cpuDiscardDraw(state: GameState, playerId: number, discard: numb
 
 export function cpuDiscardGain(state: GameState, playerId: number, discard: number, gain: number, strategy: CpuStrategy = 'random'): GameState {
   const player = getPlayer(state, playerId)
-  const ids = (strategy === 'greedy' || strategy === 'disruptive')
+  const ids = (strategy === 'greedy' || strategy === 'beam' || strategy === 'disruptive')
     ? sortedDiscardIds(player.hand, discard)
     : player.hand.slice(0, discard).map(c => c.id)
   const discardSet = new Set(ids)
@@ -106,7 +106,7 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
 
   if (buildable.length === 0) return state
 
-  if (strategy === 'greedy') {
+  if (strategy === 'greedy' || strategy === 'beam') {
     const availableAfter = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
     // 建てて即売り損パターンを除外、7ラウンド以下は配置不可建物（職場でない建物）を建てない
     buildable = buildable.filter(c => {
@@ -135,7 +135,7 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
 
   let target: BuildingCard & { kind: 'building' }
   let s = state
-  if (strategy === 'greedy') {
+  if (strategy === 'greedy' || strategy === 'beam') {
     // ラウンド8-9は残りラウンドが少なくコスト効果より得点価値が重要
     if (state.round >= 8) {
       target = buildable.reduce((best, c) =>
@@ -175,7 +175,7 @@ export function cpuBuildFarmFree(state: GameState, playerId: number, strategy: C
 
   let target: BuildingCard & { kind: 'building' }
   let s = state
-  if (strategy === 'greedy') {
+  if (strategy === 'greedy' || strategy === 'beam') {
     target = farmCards.reduce((best, c) =>
       (BUILDING_CARDS[c.name]?.assetValue ?? 0) >= (BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
     )
@@ -208,7 +208,7 @@ export function cpuBuildDouble(state: GameState, playerId: number, strategy: Cpu
 
   let chosenEntry: [string, typeof buildings]
   let s = state
-  if (strategy === 'greedy') {
+  if (strategy === 'greedy' || strategy === 'beam') {
     chosenEntry = validCosts.reduce((best, entry) => parseInt(entry[0]) >= parseInt(best[0]) ? entry : best)
   } else if (strategy === 'disruptive') {
     chosenEntry = validCosts.reduce((best, entry) => parseInt(entry[0]) <= parseInt(best[0]) ? entry : best)

@@ -62,6 +62,7 @@ function strategyLabel(strategy: CpuStrategy): string {
   switch (strategy) {
     case 'random':     return 'ランダム'
     case 'greedy':     return '効率重視'
+    case 'beam':       return 'ビームサーチ'
     case 'mcts':       return 'モンテカルロ'
     case 'disruptive': return 'お邪魔'
   }
@@ -104,7 +105,7 @@ function strategyLabel(strategy: CpuStrategy): string {
       <div v-if="cpuCount > 1" class="cpu-strategy-row">
         <span class="cpu-strategy-label">一括：</span>
         <div class="radio-group radio-group--horizontal">
-          <label v-for="s in (['random', 'greedy', 'mcts', 'disruptive'] as CpuStrategy[])" :key="s" class="radio-item">
+          <label v-for="s in (['random', 'greedy', 'beam', 'mcts', 'disruptive'] as CpuStrategy[])" :key="s" class="radio-item">
             <input type="radio" :checked="bulkStrategy === s" @change="bulkStrategy = s" />
             <span>{{ strategyLabel(s) }}</span>
           </label>
@@ -113,7 +114,7 @@ function strategyLabel(strategy: CpuStrategy): string {
       <div v-for="i in cpuCount" :key="i" class="cpu-strategy-row">
         <span class="cpu-strategy-label">CPU {{ i }}：</span>
         <div class="radio-group radio-group--horizontal">
-          <label v-for="s in (['random', 'greedy', 'mcts', 'disruptive'] as CpuStrategy[])" :key="s" class="radio-item">
+          <label v-for="s in (['random', 'greedy', 'beam', 'mcts', 'disruptive'] as CpuStrategy[])" :key="s" class="radio-item">
             <input type="radio" :checked="setupCpuStrategies[i - 1] === s" @change="updateStrategy(i - 1, s)" />
             <span>{{ strategyLabel(s) }}</span>
           </label>

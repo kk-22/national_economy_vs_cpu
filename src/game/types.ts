@@ -1,6 +1,6 @@
 export type Tag = 'farm' | 'factory'
 
-export type CpuStrategy = 'random' | 'greedy' | 'mcts' | 'disruptive'
+export type CpuStrategy = 'random' | 'greedy' | 'beam' | 'mcts' | 'disruptive'
 
 export interface BuildingCardDef {
   name: string
