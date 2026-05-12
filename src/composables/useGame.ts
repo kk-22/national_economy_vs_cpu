@@ -364,6 +364,9 @@ export function useGame() {
 
   function clickCancelDiscardChoice() {
     if (!state.game) return
+    history.popEntry(false)
+    historyVersion.value++
+    pendingEntry = null
     state.game = cancelDiscardChoice(state.game)
   }
 
