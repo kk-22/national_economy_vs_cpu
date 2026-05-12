@@ -292,11 +292,14 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
     }
     case 'discard-draw': {
       if (player.hand.length < effect.discard) return -Infinity
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.draw * 2
       const ddWorkerBonus = (player.workers.length - 1) * 2
       return effect.draw * (8 + ddWorkerBonus)
     }
     case 'discard-gain': {
       if (player.hand.length < effect.discard || household < effect.gain) return -Infinity
+      // ラウンド9後半: 手札→得点の変換機会がないため、gain そのものを得点価値として評価
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.gain * 3
       const dgWage = ROUND_CARDS[round - 1]?.wage ?? 0
       const dgExpectedWage = player.workers.length * dgWage
       const dgShortfall = Math.max(0, dgExpectedWage - player.money)
@@ -306,10 +309,13 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
     }
     case 'gain-supply': {
       if (household < effect.n) return -Infinity
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.n * 3
       const gsScore = effect.n * 3
       return gsScore
     }
     case 'draw': {
+      // ラウンド9後半: 手札を増やしても得点にならないため大幅に減点
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.n * 2
       const drawWorkerBonus = (player.workers.length - 1) * 2
       const drawBase = effect.n * (7 + drawWorkerBonus)
       const availableNow = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
@@ -318,6 +324,7 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
       return drawScore
     }
     case 'draw-if-empty': {
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return 0
       const diWorkerBonus = (player.workers.length - 1) * 2
       return player.hand.length === 0
         ? effect.empty * (10 + diWorkerBonus)
@@ -326,9 +333,12 @@ function scoreEffect(effect: GameEffect, player: Player, household: number, roun
     case 'draw-become-start': return 30
     case 'slash-burn': return 25
     case 'draw-consumption':
+      // ラウンド9後半: 消費財を増やしても得点にならないため大幅に減点
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.n * 2
       // hand>3 でも施設としての価値を反映（discard-gain を常に上回るよう引き上げ）
       return player.hand.length <= 3 ? effect.n * 16 : effect.n * 12
     case 'draw-consumption-to':
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return -Infinity
       return player.hand.length >= effect.target ? -Infinity : (effect.target - player.hand.length) * 4
     case 'none': return 5
     default: return 10
