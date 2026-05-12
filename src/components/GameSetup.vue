@@ -69,7 +69,7 @@ function strategyLabel(strategy: CpuStrategy): string {
 </script>
 
 <template>
-  <div class="modal-overlay">
+  <div class="modal-overlay" @click.self="hasGame && emit('cancel')">
     <div class="modal">
       <div class="modal-header">
         <h2>ゲーム設定</h2>

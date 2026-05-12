@@ -344,19 +344,7 @@ function replayGame() {
 </script>
 
 <template>
-  <GameSetup v-if="showSetup"
-    v-model:setupTotal="setupTotal"
-    v-model:setupHasPlayer="setupHasPlayer"
-    v-model:setupPlayerOrder="setupPlayerOrder"
-    v-model:setupCpuStrategies="setupCpuStrategies"
-    v-model:skipAnim="skipAnim"
-    :hasGame="!!game"
-    @begin="beginGame"
-    @beginDebug="beginDebugGame"
-    @cancel="cancelSetup"
-  />
-
-  <template v-else-if="game">
+  <template v-if="game">
     <GameBoard
       :activatedIds="activatedIds"
       :builtIds="builtIds"
@@ -381,6 +369,18 @@ function replayGame() {
   </template>
 
   <Teleport to="body">
+    <GameSetup v-if="showSetup"
+      v-model:setupTotal="setupTotal"
+      v-model:setupHasPlayer="setupHasPlayer"
+      v-model:setupPlayerOrder="setupPlayerOrder"
+      v-model:setupCpuStrategies="setupCpuStrategies"
+      v-model:skipAnim="skipAnim"
+      :hasGame="!!game"
+      @begin="beginGame"
+      @beginDebug="beginDebugGame"
+      @cancel="cancelSetup"
+    />
+
     <Transition name="round-fade">
       <div v-if="roundAnimRound" class="round-anim-overlay">
         <div class="round-anim-card">ラウンド {{ roundAnimRound }}</div>
