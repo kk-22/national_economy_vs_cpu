@@ -16,6 +16,8 @@ export interface HistoryEntry {
   pickedCard?: CardRef
   handLimitDiscarded?: string[]  // 手札上限超過で捨てたカードID
   soldBuildingIds?: string[]     // 賃金不足で売却した建物ID
+  cpuTargetId?: string           // CPU が実際に配置した職場/建物のID
+  cpuTargetType?: 'pub' | 'bld'  // 公共職場 or 所有建物
   timestamp: number
 }
 

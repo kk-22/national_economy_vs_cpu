@@ -805,3 +805,6 @@
   color: #334155;
   flex-shrink: 0;
 }
+.replay-error-modal { min-width: min(360px, 92vw); max-width: 92vw; padding: 28px 24px 20px; text-align: center; }
+.replay-error-msg { color: #dc2626; font-size: 14px; margin: 12px 0 20px; word-break: break-all; }
+.replay-error-actions { display: flex; justify-content: center; }

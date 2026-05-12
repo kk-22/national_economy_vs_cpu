@@ -14,6 +14,7 @@ const {
   startGame, startDebugGame, runCpuTurns, cpuStepAction, autoAdvanceIfStuck,
   saveGameState, hasSavedGame, restoreGame,
   undo, canUndo, isUndoRedo, cpuPaused, resumeCpu,
+  replayError, clearReplayError,
 } = useGame()
 
 // ---- ドロワーログ ハイライト ----
@@ -297,13 +298,22 @@ function scheduleInitialCpuRun() {
 }
 
 function beginGame() {
+  const cpuCount = setupCpu.value
+  const strategies = setupCpuStrategies.value.slice(0, cpuCount)
+  const hasBeam = strategies.includes('beam')
+  if (skipAnim.value && !setupHasPlayer.value && hasBeam) {
+    const ok = window.confirm(
+      'ビームサーチCPUを含む全CPU対戦をスキップモードで実行します。\n計算のため数十秒フリーズしますがよろしいですか？'
+    )
+    if (!ok) return
+  }
+
   settingsPaused.value = false
   localStorage.setItem('ne-setup-debug', 'false')
   lastStartedDebug.value = false
   suppressHandAnim = true
-  const cpuCount = setupCpu.value
   if (!setupHasPlayer.value) {
-    startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, cpuCount) })
+    startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies: strategies })
     scheduleInitialCpuRun()
   } else {
     startGame({
@@ -456,6 +466,17 @@ function replayGame() {
             <tr :class="{ 'summary-row--current': game?.round === 9 }"><td>9</td><td>$5</td><td>万博</td><td>5枚捨てて家計から$30獲得</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+    <div v-if="replayError" class="modal-overlay">
+      <div class="modal replay-error-modal">
+        <div class="modal-header">
+          <h2>リプレイエラー</h2>
+        </div>
+        <p class="replay-error-msg">{{ replayError }}</p>
+        <div class="replay-error-actions">
+          <button class="btn-restart" @click="clearReplayError(); openSetup()">ゲーム設定</button>
+        </div>
       </div>
     </div>
   </Teleport>

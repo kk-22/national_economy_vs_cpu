@@ -5,7 +5,7 @@ import { calculateScores, confirmSellBuildings } from '../game/round'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from '../game/availability'
 import {
   placeWorkerOnPublic, placeWorkerOnBuilding,
-  cpuOneTurnStep, skipEmptyPlayerTurn,
+  cpuOneTurnStep, consumeLastCpuNoAutoTarget, skipEmptyPlayerTurn,
   selectFarmBuildTarget, confirmBuildPayment, confirmDoublePayment,
   confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard,
 } from '../game/turns'
@@ -27,6 +27,7 @@ const state = shallowReactive<{ game: GameState | null }>({ game: null })
 let history = new GameHistory(1)
 let pendingEntry: HistoryEntry | null = null
 const isUndoRedo = ref(false)
+const replayError = ref<string | null>(null)
 const cpuPaused = ref(false)
 const historyVersion = ref(0)  // incremented after each history mutation to drive canUndo/canRedo reactivity
 
@@ -115,14 +116,24 @@ export function useGame() {
       if (!curr?.isCpu) break
 
       // ワーカーを置くステップのみ history に記録（turn advance は記録しない）
-      if (availableWorkers(curr).length > 0) {
-        history.push({ playerId: curr.id, targetId: '__cpu__', targetName: curr.name, timestamp: Date.now() })
+      const hadWorkers = availableWorkers(curr).length > 0
+      if (hadWorkers) {
+        const entry: HistoryEntry = { playerId: curr.id, targetId: '__cpu__', targetName: curr.name, timestamp: Date.now() }
+        history.push(entry)
         historyVersion.value++
+        const next = cpuOneTurnStep(state.game)
+        if (next === state.game) break  // 変化なし（安全策）
+        const captured = consumeLastCpuNoAutoTarget()
+        if (captured) {
+          entry.cpuTargetId = captured.id
+          entry.cpuTargetType = captured.type
+        }
+        state.game = next
+      } else {
+        const next = cpuOneTurnStep(state.game)
+        if (next === state.game) break
+        state.game = next
       }
-
-      const next = cpuOneTurnStep(state.game)
-      if (next === state.game) break  // 変化なし（安全策）
-      state.game = next
     }
   }
 
@@ -132,9 +143,22 @@ export function useGame() {
     if (state.game.pendingAction) return  // 保留アクション中は実行しない
     const current = state.game.players[state.game.currentPlayerIndex]
     if (!current?.isCpu) return
-    history.push({ playerId: current.id, targetId: '__cpu__', targetName: current.name, timestamp: Date.now() })
-    historyVersion.value++
-    state.game = cpuOneTurnStep(state.game)
+    const hadWorkers = availableWorkers(current).length > 0
+    if (hadWorkers) {
+      const entry: HistoryEntry = { playerId: current.id, targetId: '__cpu__', targetName: current.name, timestamp: Date.now() }
+      history.push(entry)
+      historyVersion.value++
+      const next = cpuOneTurnStep(state.game)
+      const captured = consumeLastCpuNoAutoTarget()
+      if (captured) {
+        entry.cpuTargetId = captured.id
+        entry.cpuTargetType = captured.type
+      }
+      state.game = next
+    } else {
+      const next = cpuOneTurnStep(state.game)
+      if (next !== state.game) state.game = next
+    }
   }
 
   const game = computed(() => state.game)
@@ -460,7 +484,11 @@ export function useGame() {
     historyVersion.value++
     pendingEntry = null
     paymentSelectedIds.value = []
-    state.game = replayToIndex(history.initialState, history.actionLog)
+    try {
+      state.game = replayToIndex(history.initialState, history.actionLog)
+    } catch (e) {
+      replayError.value = e instanceof Error ? e.message : String(e)
+    }
     if (!hasHumanPlayer) cpuPaused.value = true
   }
 
@@ -486,7 +514,11 @@ export function useGame() {
     historyVersion.value++
     pendingEntry = null
     paymentSelectedIds.value = []
-    state.game = replayToIndex(history.initialState, history.actionLog)
+    try {
+      state.game = replayToIndex(history.initialState, history.actionLog)
+    } catch (e) {
+      replayError.value = e instanceof Error ? e.message : String(e)
+    }
   }
 
   return {
@@ -532,5 +564,7 @@ export function useGame() {
     clickSellOption,
     undo,
     redo,
+    replayError,
+    clearReplayError: () => { replayError.value = null },
   }
 }

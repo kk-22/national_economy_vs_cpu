@@ -1,7 +1,6 @@
 import type { GameState } from './types'
 import type { HistoryEntry } from './history'
-import { availableWorkers } from './primitives'
-import { cpuOneTurnStep, placeWorkerOnPublic, placeWorkerOnBuilding,
+import { placeWorkerOnPublic, placeWorkerOnBuilding,
   selectFarmBuildTarget, confirmBuildPayment, confirmDoublePayment,
   confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard } from './turns'
 import { selectBuildTarget, selectDoubleFirst, selectDoubleSecond } from './build'
@@ -66,19 +65,14 @@ function resolvePending(state: GameState, entry: HistoryEntry): GameState {
   return s
 }
 
-// CPU エントリ 1件分を再実行（advance ステップを含む）
-function replayCpuEntry(state: GameState): GameState {
-  let s = state
-  let guard = 200
-  while (guard-- > 0) {
-    if (s.phase !== 'placement' || s.pendingAction) break
-    const curr = s.players[s.currentPlayerIndex]
-    if (!curr?.isCpu) break
-    const hadWorkers = availableWorkers(curr).length > 0
-    s = cpuOneTurnStep(s)
-    if (hadWorkers) break  // 1回の配置完了
+// CPU エントリ 1件分を再実行
+function replayCpuEntry(state: GameState, entry: HistoryEntry): GameState {
+  if (entry.cpuTargetId && entry.cpuTargetType) {
+    return entry.cpuTargetType === 'bld'
+      ? placeWorkerOnBuilding(state, entry.playerId, entry.cpuTargetId, true)
+      : placeWorkerOnPublic(state, entry.playerId, entry.cpuTargetId, true)
   }
-  return s
+  throw new Error('CPU履歴エントリに配置先が記録されていません')
 }
 
 // 人間エントリ 1件分を再実行
@@ -101,7 +95,7 @@ export function replayToIndex(initialState: GameState, actionLog: HistoryEntry[]
   let s = initialState
   for (const entry of actionLog) {
     if (entry.targetId === '__cpu__') {
-      s = replayCpuEntry(s)
+      s = replayCpuEntry(s, entry)
     } else if (entry.targetId === '__hand-limit__') {
       if (s.pendingAction?.kind === 'choose-hand-limit') {
         const pa = s.pendingAction

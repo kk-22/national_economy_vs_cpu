@@ -7,6 +7,15 @@ import { processRoundEnd, calculateScores, resolveAfterHandLimit } from './round
 import { MCTS_SIMULATIONS, GREEDY_BUILD_EXCLUDED } from './cpu'
 import type { GameState, BuildingCard, PublicWorkplace, OwnedBuilding, GameEffect, Player } from './types'
 
+// CPU NoAuto ターンで選択した配置先を一時保持（replay 高速化用）
+let _lastCpuNoAutoTarget: { id: string; type: 'pub' | 'bld' } | null = null
+
+export function consumeLastCpuNoAutoTarget(): { id: string; type: 'pub' | 'bld' } | null {
+  const t = _lastCpuNoAutoTarget
+  _lastCpuNoAutoTarget = null
+  return t
+}
+
 // ---- Worker placement ----
 
 export function placeWorkerOnPublic(state: GameState, playerId: number, workplaceId: string, forceHumanPath = false): GameState {
@@ -214,11 +223,15 @@ function cpuTakeTurnRandomNoAuto(state: GameState, playerId: number): GameState 
   if (usePub) {
     let r2: number
     ;[s, r2] = rngNext(s)
-    return placeWorkerOnPublic(s, playerId, pubOptions[Math.floor(r2 * pubOptions.length)].id, true)
+    const pubId = pubOptions[Math.floor(r2 * pubOptions.length)].id
+    _lastCpuNoAutoTarget = { id: pubId, type: 'pub' }
+    return placeWorkerOnPublic(s, playerId, pubId, true)
   } else if (bldOptions.length > 0) {
     let r2: number
     ;[s, r2] = rngNext(s)
-    return placeWorkerOnBuilding(s, playerId, bldOptions[Math.floor(r2 * bldOptions.length)].id, true)
+    const bldId = bldOptions[Math.floor(r2 * bldOptions.length)].id
+    _lastCpuNoAutoTarget = { id: bldId, type: 'bld' }
+    return placeWorkerOnBuilding(s, playerId, bldId, true)
   }
   return afterHumanAction(s)
 }
@@ -435,7 +448,10 @@ function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): GameState 
         const def = BUILDING_CARDS[b.name]
         return def && def.isWorkplace && def.cost >= bestBuildableCost
       })
-      if (equivBld) return placeWorkerOnBuilding(state, playerId, equivBld.id, true)
+      if (equivBld) {
+        _lastCpuNoAutoTarget = { id: equivBld.id, type: 'bld' }
+        return placeWorkerOnBuilding(state, playerId, equivBld.id, true)
+      }
     }
   }
 
@@ -465,8 +481,14 @@ function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): GameState 
 
   if (bestScore === -Infinity) return cpuTakeTurnRandomNoAuto(state, playerId)
 
-  if (bestPub) return placeWorkerOnPublic(state, playerId, bestPub.id, true)
-  if (bestBld) return placeWorkerOnBuilding(state, playerId, bestBld.id, true)
+  if (bestPub) {
+    _lastCpuNoAutoTarget = { id: bestPub.id, type: 'pub' }
+    return placeWorkerOnPublic(state, playerId, bestPub.id, true)
+  }
+  if (bestBld) {
+    _lastCpuNoAutoTarget = { id: bestBld.id, type: 'bld' }
+    return placeWorkerOnBuilding(state, playerId, bestBld.id, true)
+  }
   return afterHumanAction(state)
 }
 
@@ -536,7 +558,10 @@ function cpuTakeTurnMCTSNoAuto(state: GameState, playerId: number): GameState {
   if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
 
   const expansion = pickWorkerExpansion(state, playerId)
-  if (expansion) return placeWorkerOnPublic(state, playerId, expansion.id, true)
+  if (expansion) {
+    _lastCpuNoAutoTarget = { id: expansion.id, type: 'pub' }
+    return placeWorkerOnPublic(state, playerId, expansion.id, true)
+  }
 
   const options: Array<{ type: 'pub'; id: string } | { type: 'bld'; id: string }> = [
     ...pubOptions.map(w => ({ type: 'pub' as const, id: w.id })),
@@ -580,6 +605,7 @@ function cpuTakeTurnMCTSNoAuto(state: GameState, playerId: number): GameState {
     if (avg > bestScore) { bestScore = avg; bestOption = opt }
   }
 
+  _lastCpuNoAutoTarget = { id: bestOption.id, type: bestOption.type }
   if (bestOption.type === 'pub') return placeWorkerOnPublic(state, playerId, bestOption.id, true)
   return placeWorkerOnBuilding(state, playerId, bestOption.id, true)
 }
@@ -596,6 +622,7 @@ function cpuTakeTurnDisruptive(state: GameState, playerId: number): GameState {
 function cpuTakeTurnDisruptiveNoAuto(state: GameState, playerId: number): GameState {
   const chosen = pickDisruptive(state, playerId)
   if (!chosen) return afterHumanAction(state)
+  _lastCpuNoAutoTarget = { id: chosen.id, type: chosen.type }
   if (chosen.type === 'pub') return placeWorkerOnPublic(state, playerId, chosen.id, true)
   return placeWorkerOnBuilding(state, playerId, chosen.id, true)
 }
@@ -762,16 +789,37 @@ function simulateUntilBeamOrEnd(state: GameState, beamPlayerId: number, startRou
   }
 }
 
+// シミュレーション後のスコアを計算（ラウンド越え時は次ラウンドをbeamWidth-2で探索）
+function scoreAfterSim(s: GameState, beamPlayerId: number, startRound: number, beamWidth: number): number {
+  if (s.phase === 'game-over') return evaluateSimEnd(s, beamPlayerId, startRound)
+
+  if (s.round > startRound) {
+    // 次ラウンドへの延長は1回のみ（元ラウンドからの呼び出し時だけ）
+    if (beamWidth === BEAM_WIDTH) {
+      const nextRound = s.round
+      const nextBeamWidth = beamWidth - 3
+      const sNext = simulateUntilBeamOrEnd(s, beamPlayerId, nextRound)
+      if (sNext.round > nextRound || sNext.phase === 'game-over') {
+        return evaluateSimEnd(sNext, beamPlayerId, nextRound)
+      }
+      return beamSimulateFromTurn(sNext, beamPlayerId, nextRound, nextBeamWidth)
+    }
+    return evaluateSimEnd(s, beamPlayerId, startRound)
+  }
+
+  return beamSimulateFromTurn(s, beamPlayerId, startRound, beamWidth)
+}
+
 // beam プレイヤーの番から再帰的に探索し、最良スコアを返す
-function beamSimulateFromTurn(simState: GameState, beamPlayerId: number, startRound: number): number {
-  const actions = getTopNActionsGreedy(simState, beamPlayerId, BEAM_WIDTH)
+function beamSimulateFromTurn(simState: GameState, beamPlayerId: number, startRound: number, beamWidth: number): number {
+  const actions = getTopNActionsGreedy(simState, beamPlayerId, beamWidth)
 
   if (actions.length === 0) {
     const s = simulateUntilBeamOrEnd(
       { ...simState, currentPlayerIndex: (simState.currentPlayerIndex + 1) % simState.players.length },
       beamPlayerId, startRound,
     )
-    return evaluateSimEnd(s, beamPlayerId, startRound)
+    return scoreAfterSim(s, beamPlayerId, startRound, beamWidth)
   }
 
   let bestScore = -Infinity
@@ -782,10 +830,7 @@ function beamSimulateFromTurn(simState: GameState, beamPlayerId: number, startRo
 
     s = simulateUntilBeamOrEnd(s, beamPlayerId, startRound)
 
-    const score = (s.round > startRound || s.phase === 'game-over')
-      ? evaluateSimEnd(s, beamPlayerId, startRound)
-      : beamSimulateFromTurn(s, beamPlayerId, startRound)
-
+    const score = scoreAfterSim(s, beamPlayerId, startRound, beamWidth)
     if (score > bestScore) bestScore = score
   }
   return bestScore
@@ -822,10 +867,7 @@ function cpuTakeTurnBeam(state: GameState, playerId: number): GameState {
 
     s = simulateUntilBeamOrEnd(s, playerId, startRound)
 
-    const score = (s.round > startRound || s.phase === 'game-over')
-      ? evaluateSimEnd(s, playerId, startRound)
-      : beamSimulateFromTurn(s, playerId, startRound)
-
+    const score = scoreAfterSim(s, playerId, startRound, BEAM_WIDTH)
     if (score > bestScore) { bestScore = score; bestAction = action }
   }
 
@@ -839,7 +881,10 @@ function cpuTakeTurnBeamNoAuto(state: GameState, playerId: number): GameState {
   if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
 
   const expansion = pickWorkerExpansion(state, playerId)
-  if (expansion) return placeWorkerOnPublic(state, playerId, expansion.id, true)
+  if (expansion) {
+    _lastCpuNoAutoTarget = { id: expansion.id, type: 'pub' }
+    return placeWorkerOnPublic(state, playerId, expansion.id, true)
+  }
 
   const simState: GameState = {
     ...state,
@@ -864,13 +909,11 @@ function cpuTakeTurnBeamNoAuto(state: GameState, playerId: number): GameState {
 
     s = simulateUntilBeamOrEnd(s, playerId, startRound)
 
-    const score = (s.round > startRound || s.phase === 'game-over')
-      ? evaluateSimEnd(s, playerId, startRound)
-      : beamSimulateFromTurn(s, playerId, startRound)
-
+    const score = scoreAfterSim(s, playerId, startRound, BEAM_WIDTH)
     if (score > bestScore) { bestScore = score; bestAction = action }
   }
 
+  _lastCpuNoAutoTarget = { id: bestAction.id, type: bestAction.type }
   if (bestAction.type === 'pub') return placeWorkerOnPublic(state, playerId, bestAction.id, true)
   return placeWorkerOnBuilding(state, playerId, bestAction.id, true)
 }
