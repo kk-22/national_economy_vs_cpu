@@ -292,7 +292,7 @@ function effectDesc(effect: GameEffect): string {
                                  ? `コスト${effect.discount}割引で建設${effect.drawAfter > 0 ? `。その後${effect.drawAfter}枚引く` : ''}`
                                  : `建設する${effect.drawAfter > 0 ? `。その後${effect.drawAfter}枚引く` : ''}`
     case 'draw-consumption-to':return `消費財を計${effect.target}枚になるまで引く（手札${effect.target}枚以上なら配置不可）`
-    case 'build-farm-free':    return `農場を1棟無料で建設`
+    case 'build-farm-free':    return `農園マークの建物をコスト無しで建設する`
     case 'discard-gain':       return `手札${effect.discard}枚捨てて家計から $${effect.gain} もらう（家計に$${effect.gain}以上必要）`
     case 'add-worker':         return `労働者を1人雇う${effect.immediate ? '（即時使用可）' : ''}`
     case 'fill-workers':       return `労働者を${effect.target}人になるまで雇う`
@@ -315,6 +315,8 @@ function cardTooltip(name: string): string {
   if (!d) return ''
   const desc = effectDesc(d.effect)
   const labels: string[] = []
+  if (d.tags.includes('farm')) labels.push('農園マーク')
+  if (d.tags.includes('factory')) labels.push('工場マーク')
   if (!d.canSell) labels.push('売却不可')
   if (!d.isWorkplace) labels.push('使用不可')
   if (labels.length === 0) return desc
