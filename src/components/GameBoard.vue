@@ -526,7 +526,9 @@ function cardTooltip(name: string): string {
                     @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="tipLeave"
                     @click="clickRevealedCard(card.id)">
+                    <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
                     <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
+                    <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                   </button>
                 </div>
               </template>
@@ -553,7 +555,7 @@ function cardTooltip(name: string): string {
 
               <template v-else-if="pendingAction.kind === 'choose-sell-buildings'">
                 <div class="pending-title-row">
-                  <span class="pending-title sell-warning">
+                  <span :class="['pending-title', pendingAction.selected.reduce((s, id) => s + (getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue ?? 0), 0) >= pendingAction.deficit ? 'sell-ok' : 'sell-warning']">
                     ⚠ 賃金不足のため売却する建物を選択（選択中 ${{ pendingAction.selected.reduce((s, id) => s + (getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue ?? 0), 0) }} / 必要額 ${{ pendingAction.deficit }}）
                   </span>
                 </div>

@@ -219,6 +219,10 @@ export function useGame() {
       const newPa = state.game.pendingAction
       if (newPa?.kind === 'choose-build-payment') {
         if (newPa.cost === 0) {
+          if (pendingEntry) {
+            pendingEntry.builtCard = { id: newPa.targetId, name: newPa.targetName }
+            pendingEntry.paymentCards = []
+          }
           state.game = confirmBuildPayment(state.game, [])
         } else {
           const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
