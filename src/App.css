@@ -183,14 +183,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.2);
   color: #fff;
-  font-size: 13px;
+  font-size: 19.5px;
   border-radius: 8px;
   pointer-events: none;
   z-index: 10;
   opacity: 0;
-  animation: cpu-thinking-fadein 0s 1s forwards;
+  animation: cpu-thinking-fadein 0s 0.5s forwards;
 }
 @keyframes cpu-thinking-fadein {
   to { opacity: 1; }

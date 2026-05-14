@@ -288,16 +288,11 @@ function cancelSetup() {
 }
 
 function scheduleCpuStep(delay: number, rev: number) {
+  cpuThinkingPlayerId.value = game.value?.players[game.value.currentPlayerIndex]?.id ?? null
   setTimeout(() => {
-    if (cpuRevision !== rev) return
-    cpuThinkingPlayerId.value = game.value?.players[game.value.currentPlayerIndex]?.id ?? null
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (cpuRevision !== rev) { cpuThinkingPlayerId.value = null; return }
-        cpuStepAction()
-        cpuThinkingPlayerId.value = null
-      })
-    })
+    if (cpuRevision !== rev) { cpuThinkingPlayerId.value = null; return }
+    cpuStepAction()
+    cpuThinkingPlayerId.value = null
   }, delay)
 }
 
