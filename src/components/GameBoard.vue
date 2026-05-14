@@ -361,7 +361,10 @@ function cardTooltip(name: string): string {
               <span class="player-name">{{ humanPlayer?.name }}</span>
               <span v-if="humanPlayer?.unpaidWages" class="unpaid-badge">未払い{{ humanPlayer.unpaidWages }}</span>
               <span class="worker-badge">労働者{{ humanPlayer ? workerStatus(humanPlayer.workers) : '' }}</span>
-              <span class="player-money">${{ humanPlayer?.money }}</span>
+              <span class="wage-summary">
+                所持${{ humanPlayer?.money }} -
+                <span :class="(humanPlayer?.money ?? 0) >= (humanPlayer?.workers.length ?? 0) * currentWage ? 'wage-cost wage-cost--ok' : 'wage-cost'">必要賃金${{ (humanPlayer?.workers.length ?? 0) * currentWage }}</span>
+              </span>
               <span v-if="game.startPlayerIndex === humanPlayer?.id" class="sp-badge">🚩SP</span>
             </div>
 
