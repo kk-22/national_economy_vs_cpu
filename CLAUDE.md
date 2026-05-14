@@ -24,41 +24,6 @@ npm run test         # Vitestでユニットテスト
 npm run deploy       # GitHub Pagesへデプロイ (gh-pages -d dist)
 ```
 
-## ディレクトリ構成
-
-```
-national_economy_vs_cpu/
-├── docs/
-│   ├── rules.md              # ゲームルール全文
-│   └── building-cards.md     # カード一覧・効果
-└── src/
-    ├── App.vue / App.css
-    ├── style.css
-    ├── game/                  # ゲームロジック（Vue依存なし・純粋TS）
-    │   ├── types.ts           # 型定義
-    │   ├── constants.ts       # カードデータ・定数
-    │   ├── random.ts          # シード付き乱数
-    │   ├── primitives.ts      # 低レベル操作ユーティリティ
-    │   ├── init.ts            # ゲーム初期化
-    │   ├── availability.ts    # 配置可能な職場・建物の判定
-    │   ├── turns.ts           # ターン実行（ワーカー配置）
-    │   ├── build.ts           # 建設処理
-    │   ├── effects.ts         # カード効果処理
-    │   ├── resolution.ts      # ワーカー回収・効果解決
-    │   ├── round.ts           # ラウンド進行・賃金支払い
-    │   ├── history.ts         # 操作履歴（戻る/進む用）
-    │   ├── replay.ts          # 履歴から状態を再現
-    │   ├── cpu.ts             # CPUロジック
-    │   └── __tests__/         # ユニットテスト
-    ├── composables/
-    │   ├── useGame.ts         # ゲーム状態管理
-    │   └── useLogHighlight.ts # ログのハイライト管理
-    └── components/
-        ├── GameSetup.vue      # ゲーム開始設定画面
-        ├── GameBoard.vue      # メインゲーム画面
-        └── GameResult.vue     # 結果画面
-```
-
 ## ゲーム概要
 
 - **ラウンド数**: 9ラウンド固定
