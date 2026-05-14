@@ -463,6 +463,29 @@ function cardTooltip(name: string): string {
                     <HCard :card="card" />
                   </button>
                 </div>
+                <div v-if="humanPlayer?.ownedBuildings.length" class="hand-label-row" style="margin-top: 6px;">
+                  <div class="subsection-label"><span class="hand-count-bold">建物{{ humanPlayer.ownedBuildings.length }}枚</span>（参照用）</div>
+                </div>
+                <div v-if="humanPlayer?.ownedBuildings.length" class="card-wrap">
+                  <div v-for="b in humanPlayer.ownedBuildings" :key="b.id"
+                    class="bcard card-disabled"
+                    @mouseenter="tipEnter($event, cardTooltip(b.name))"
+                    @mouseleave="tipLeave">
+                    <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
+                    <span class="bcard-name" :style="bcardNameStyle(b.name)">{{ b.name }}</span>
+                    <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
+                  </div>
+                </div>
+                <div v-if="humanPlayer?.hand.length" class="hand-label-row" style="margin-top: 6px;">
+                  <div class="subsection-label"><span class="hand-count-bold">手札{{ handCount(humanPlayer?.hand ?? []) }}</span>{{ handDetail(humanPlayer?.hand ?? []) }}（参照用）</div>
+                </div>
+                <div v-if="humanPlayer?.hand.length" class="card-wrap">
+                  <div v-for="card in sortedHand" :key="card.id" class="hcard card-disabled"
+                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
+                    @mouseleave="tipLeave">
+                    <HCard :card="card" />
+                  </div>
+                </div>
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-hand-limit'">
