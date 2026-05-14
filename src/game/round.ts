@@ -19,6 +19,7 @@ export function flipRoundCard(state: GameState, round: number, playerCount: numb
       ;[s, id] = genId(s, `wp-`)
       newWorkplaces.push({
         id,
+        kind: 'round',
         name: wp.name,
         effect: wp.effect,
         allowMultiple,
@@ -102,7 +103,7 @@ function autoSellForWages(state: GameState, playerId: number, idsToSell: string[
     if (def.isWorkplace) {
       let wpId: string
       ;[s, wpId] = genId(s, 'wp-sold-')
-      s = { ...s, publicWorkplaces: [...s.publicWorkplaces, { id: wpId, name: b.name, effect: def.effect, allowMultiple: false, workerIds: [] }] }
+      s = { ...s, publicWorkplaces: [...s.publicWorkplaces, { id: wpId, kind: 'sold', name: b.name, effect: def.effect, allowMultiple: false, workerIds: [] }] }
     }
     s = addLog(s, `${getPlayer(s, playerId).name} が ${b.name} を $${def.assetValue} で売却`)
   }

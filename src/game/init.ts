@@ -175,6 +175,7 @@ export function createDebugGame(cpuCount: number = 3): GameState {
           ...state,
           publicWorkplaces: [...state.publicWorkplaces, {
             id: wpId,
+            kind: 'round' as const,
             name: wp.name,
             effect: wp.effect,
             allowMultiple,
@@ -195,6 +196,7 @@ export function createDebugGame(cpuCount: number = 3): GameState {
       ...state,
       publicWorkplaces: [...state.publicWorkplaces, {
         id: wpId,
+        kind: 'sold' as const,
         name: def.name,
         effect: def.effect,
         allowMultiple: false,

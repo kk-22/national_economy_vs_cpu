@@ -267,7 +267,7 @@ export function pickDisruptive(state: GameState, playerId: number): { type: 'pub
       scored.push({ type: 'pub', id: wp.id, priority: 13, tiebreak: 0 })
       continue
     }
-    if (wp.id.startsWith('wp-sold-')) {
+    if (wp.kind === 'sold') {
       const cost = costOf(wp.name)
       let priority: number
       if (cost >= 5) priority = 2

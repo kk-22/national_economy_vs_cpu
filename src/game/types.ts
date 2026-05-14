@@ -67,6 +67,7 @@ export interface OwnedBuilding {
 
 export interface PublicWorkplace {
   id: string
+  kind: 'round' | 'sold'
   name: string
   effect: GameEffect
   allowMultiple: boolean

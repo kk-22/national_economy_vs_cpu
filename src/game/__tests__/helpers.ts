@@ -25,6 +25,7 @@ export function makeOwnedBuilding(name: string): OwnedBuilding {
 export function makePublicWorkplace(name: string, effect: GameEffect, overrides: Partial<PublicWorkplace> = {}): PublicWorkplace {
   return {
     id: uid('wp'),
+    kind: 'round',
     name,
     effect,
     allowMultiple: false,
