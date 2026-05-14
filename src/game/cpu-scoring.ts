@@ -223,75 +223,67 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
 }
 
 export function pickDisruptive(state: GameState, playerId: number): { type: 'pub' | 'bld'; id: string } | null {
-  const player = getPlayer(state, playerId)
+  // 自分の場の建物は使用しない
   const pubOptions = getAvailablePublicWorkplaces(state, playerId).filter(wp => wp.name !== '大工')
-  const bldOptions = getAvailableOwnedBuildings(state, playerId)
-  if (pubOptions.length === 0 && bldOptions.length === 0) return null
+  if (pubOptions.length === 0) return null
 
   const costOf = (name: string) => BUILDING_CARDS[name]?.cost ?? 0
   const assetOf = (name: string) => BUILDING_CARDS[name]?.assetValue ?? 0
-  const gainOf = (effect: GameEffect): number => effect.kind === 'discard-gain' ? effect.gain : 0
+  const expansionOrder = ['専門学校', '大学', '学校', '高等学校']
 
-  // 売却建物のコスト分類（優先度2・3）
-  const soldOptions = pubOptions.filter(wp => wp.id.startsWith('wp-sold-'))
-  const soldUniqueCosts = [...new Set(soldOptions.map(wp => costOf(wp.name)))].sort((a, b) => b - a)
-  const maxCost = soldUniqueCosts[0] ?? -1
-  const secondCost = soldUniqueCosts[1] ?? -1
-
-  // 非売却の discard-gain 施設（優先度4・7）。売却建物は除外（優先度2・3で処理）
-  const allGainSorted: Array<{ type: 'pub' | 'bld'; id: string; gain: number }> = [
-    ...pubOptions
-      .filter(wp => !wp.id.startsWith('wp-sold-') && wp.effect.kind === 'discard-gain')
-      .map(wp => ({ type: 'pub' as const, id: wp.id, gain: gainOf(wp.effect) })),
-    ...bldOptions
-      .filter(b => BUILDING_CARDS[b.name]?.effect.kind === 'discard-gain')
-      .map(b => ({ type: 'bld' as const, id: b.id, gain: gainOf(BUILDING_CARDS[b.name]!.effect) })),
-  ].sort((a, b) => b.gain - a.gain)
-
-  // 労働者3人時の拡張職場優先順（優先度9）
-  const expansion3Order = ['専門学校', '大学', '学校', '高等学校']
-
-  type Scored = { type: 'pub' | 'bld'; id: string; priority: number; tiebreak: number }
+  // 優先度（小さいほど優先）:
+  // 2: 一般職場 cost>=5 / 3: cost4 / 4: 万博 / 5: cost3
+  // 6: 百貨店・スーパーマーケット / 7: cost2 / 8: 採石場 / 9: 市場
+  // 10: cost1 / 11: 拡張職場 / 12: 露店 / 13: 鉱山
+  type Scored = { type: 'pub'; id: string; priority: number; tiebreak: number }
   const scored: Scored[] = []
 
   for (const wp of pubOptions) {
+    if (wp.name === '万博') {
+      scored.push({ type: 'pub', id: wp.id, priority: 4, tiebreak: 0 })
+      continue
+    }
+    if (wp.name === '百貨店' || wp.name === 'スーパーマーケット') {
+      scored.push({ type: 'pub', id: wp.id, priority: 6, tiebreak: 0 })
+      continue
+    }
+    if (wp.name === '採石場') {
+      scored.push({ type: 'pub', id: wp.id, priority: 8, tiebreak: 0 })
+      continue
+    }
+    if (wp.name === '市場') {
+      scored.push({ type: 'pub', id: wp.id, priority: 9, tiebreak: 0 })
+      continue
+    }
+    if (expansionOrder.includes(wp.name)) {
+      scored.push({ type: 'pub', id: wp.id, priority: 11, tiebreak: expansionOrder.length - expansionOrder.indexOf(wp.name) })
+      continue
+    }
+    if (wp.name === '露店') {
+      scored.push({ type: 'pub', id: wp.id, priority: 12, tiebreak: 0 })
+      continue
+    }
+    if (wp.name === '鉱山') {
+      scored.push({ type: 'pub', id: wp.id, priority: 13, tiebreak: 0 })
+      continue
+    }
     if (wp.id.startsWith('wp-sold-')) {
       const cost = costOf(wp.name)
       let priority: number
-      if (cost === maxCost) priority = 2
-      else if (cost === secondCost) priority = 3
+      if (cost >= 5) priority = 2
+      else if (cost === 4) priority = 3
       else if (cost === 3) priority = 5
-      else if (cost === 2) priority = 6
+      else if (cost === 2) priority = 7
       else if (cost === 1) priority = 10
       else priority = 99
       scored.push({ type: 'pub', id: wp.id, priority, tiebreak: assetOf(wp.name) })
       continue
     }
-    if (wp.name === '採石場') { scored.push({ type: 'pub', id: wp.id, priority: 8, tiebreak: 0 }); continue }
-    if (wp.name === '鉱山') { scored.push({ type: 'pub', id: wp.id, priority: 11, tiebreak: 0 }); continue }
-    if (player.workers.length === 3 && expansion3Order.includes(wp.name)) {
-      scored.push({ type: 'pub', id: wp.id, priority: 9, tiebreak: expansion3Order.length - expansion3Order.indexOf(wp.name) })
-      continue
-    }
-    const gainIdx = allGainSorted.findIndex(g => g.id === wp.id)
-    if (gainIdx === 0) { scored.push({ type: 'pub', id: wp.id, priority: 4, tiebreak: allGainSorted[0].gain }); continue }
-    if (gainIdx === 1) { scored.push({ type: 'pub', id: wp.id, priority: 7, tiebreak: allGainSorted[1].gain }); continue }
     scored.push({ type: 'pub', id: wp.id, priority: 99, tiebreak: 0 })
   }
 
-  for (const b of bldOptions) {
-    const gainIdx = allGainSorted.findIndex(g => g.id === b.id)
-    if (gainIdx === 0) { scored.push({ type: 'bld', id: b.id, priority: 4, tiebreak: allGainSorted[0].gain }); continue }
-    if (gainIdx === 1) { scored.push({ type: 'bld', id: b.id, priority: 7, tiebreak: allGainSorted[1].gain }); continue }
-    scored.push({ type: 'bld', id: b.id, priority: 99, tiebreak: 0 })
-  }
-
   const valid = scored.filter(s => s.priority < 99)
-  if (valid.length === 0) {
-    if (pubOptions.length > 0) return { type: 'pub', id: pubOptions[0].id }
-    if (bldOptions.length > 0) return { type: 'bld', id: bldOptions[0].id }
-    return null
-  }
+  if (valid.length === 0) return { type: 'pub', id: pubOptions[0].id }
 
   valid.sort((a, b) => a.priority !== b.priority ? a.priority - b.priority : b.tiebreak - a.tiebreak)
   return { type: valid[0].type, id: valid[0].id }
