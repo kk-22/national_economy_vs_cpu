@@ -469,17 +469,23 @@ function cardTooltip(name: string): string {
                     ⚠ 賃金不足のため売却する建物を選択（選択中 ${{ pendingAction.selected.reduce((s, id) => s + (getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue ?? 0), 0) }} / 必要額 ${{ pendingAction.deficit }}）
                   </span>
                 </div>
-                <div class="card-wrap">
-                  <button
-                    v-for="id in pendingAction.sellableIds" :key="id"
-                    :class="['bcard', 'selectable', { selected: pendingAction.selected.includes(id) }]"
-                    @mouseenter="tipEnter($event, cardTooltip(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? ''))"
-                    @mouseleave="tipLeave"
-                    @click="clickToggleSellBuilding(id)">
-                    <span class="bcard-cost">{{ getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.cost }}</span>
-                    <span class="bcard-name" :style="bcardNameStyle(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')">{{ humanPlayer!.ownedBuildings.find(b => b.id === id)?.name }}</span>
-                    <span class="bcard-asset">{{ getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue }}</span>
-                  </button>
+                <div class="sell-buildings-row">
+                  <div class="card-wrap">
+                    <button
+                      v-for="id in pendingAction.sellableIds" :key="id"
+                      :class="['bcard', 'selectable', { selected: pendingAction.selected.includes(id) }]"
+                      @mouseenter="tipEnter($event, cardTooltip(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? ''))"
+                      @mouseleave="tipLeave"
+                      @click="clickToggleSellBuilding(id)">
+                      <span class="bcard-cost">{{ getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.cost }}</span>
+                      <span class="bcard-name" :style="bcardNameStyle(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')">{{ humanPlayer!.ownedBuildings.find(b => b.id === id)?.name }}</span>
+                      <span class="bcard-asset">{{ getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue }}</span>
+                    </button>
+                  </div>
+                  <div class="sell-confirm-col">
+                    <div v-if="sellBuildingError" class="sell-error">{{ sellBuildingError }}</div>
+                    <button class="btn-confirm" :disabled="pendingAction.selected.length === 0" @click="clickConfirmSellBuildings">確定</button>
+                  </div>
                 </div>
                 <div v-if="humanPlayer?.hand.length" class="hand-label-row" style="margin-top: 6px;">
                   <div class="subsection-label"><span class="hand-count-bold">手札{{ handCount(humanPlayer?.hand ?? []) }}</span>{{ handDetail(humanPlayer?.hand ?? []) }}（売却不可）</div>
@@ -489,8 +495,6 @@ function cardTooltip(name: string): string {
                     <HCard :card="card" />
                   </div>
                 </div>
-                <div v-if="sellBuildingError" class="sell-error">{{ sellBuildingError }}</div>
-                <button class="btn-confirm" :disabled="pendingAction.selected.length === 0" @click="clickConfirmSellBuildings">確定</button>
               </template>
             </div>
 

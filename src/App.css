@@ -442,6 +442,23 @@
   background: #fef2f2; border: 1px solid #fecaca;
   border-radius: 4px; padding: 2px 8px; margin-top: 2px;
 }
+.sell-buildings-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.sell-buildings-row > .card-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.sell-confirm-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
 .btn-confirm {
   background: #3b82f6; color: #fff; border: none; border-radius: 6px;
   padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 12px;
