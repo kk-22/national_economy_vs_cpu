@@ -44,8 +44,9 @@ const settingsPaused = ref(false)
 const cpuThinkingPlayerId = ref<number | null>(null)
 
 watchEffect(() => {
-  const anyModal = showManual.value || showSummary.value || !!replayError.value
-  document.body.style.overflow = anyModal ? 'hidden' : ''
+  const lock = (showManual.value || showSummary.value || !!replayError.value) ? 'hidden' : ''
+  document.documentElement.style.overflow = lock
+  document.body.style.overflow = lock
 })
 
 const setupCpu = computed(() => setupHasPlayer.value ? setupTotal.value - 1 : setupTotal.value)

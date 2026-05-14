@@ -587,6 +587,7 @@
   display: flex; align-items: flex-start; justify-content: center;
   z-index: 200;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px;
   box-sizing: border-box;
 }
