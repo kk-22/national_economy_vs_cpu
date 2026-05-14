@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useGame } from '../composables/useGame'
 import { useLogHighlight } from '../composables/useLogHighlight'
 import type { Worker, GameEffect } from '../game/types'
@@ -53,7 +53,11 @@ function logLineClass(msg: string): string {
 
 // ---- 手札ソート ----
 type HandSort = 'order' | 'cost'
-const handSort = ref<HandSort>('order')
+const HAND_SORT_KEY = 'ne-hand-sort'
+const handSort = ref<HandSort>(
+  localStorage.getItem(HAND_SORT_KEY) === 'cost' ? 'cost' : 'order'
+)
+watch(handSort, (v) => { localStorage.setItem(HAND_SORT_KEY, v) })
 
 function sortByCost<T extends { kind: string; name?: string }>(cards: T[]): T[] {
   return [...cards].sort((a, b) => {
