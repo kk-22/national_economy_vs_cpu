@@ -4,6 +4,7 @@ import { useGame } from '../composables/useGame'
 import { useLogHighlight } from '../composables/useLogHighlight'
 import type { Worker, GameEffect } from '../game/types'
 import { bcardNameStyle, cardLabel, handCount, handDetail } from '../utils/cardDisplay'
+import { ROUND_CARDS } from '../game/constants'
 import HandSortHeader from './HandSortHeader.vue'
 import HCard from './HCard.vue'
 
@@ -38,6 +39,15 @@ const {
 } = useGame()
 
 const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
+
+const publicWorkplacesLabel = computed(() => {
+  const round = game.value?.round ?? 1
+  if (round >= 9) return '一般職場（最終ラウンド）'
+  const nextCard = ROUND_CARDS[round]
+  if (!nextCard) return '一般職場'
+  const names = nextCard.workplaces.map(wp => wp.name).join('・')
+  return `一般職場（次ラウンド：${names}）`
+})
 
 // ---- ログ行ハイライト ----
 const { getLogState, onLogMouseenter, onLogMouseleave, onLogClick } = useLogHighlight(
@@ -316,7 +326,7 @@ function cardTooltip(name: string): string {
         <!-- ▼ Row 1: 一般職場 -->
         <div class="game-col" :style="{ height: rowHeights[1] + '%' }">
           <section class="section workplaces-section">
-            <div class="section-label">一般職場</div>
+            <div class="section-label public-workplaces-label">{{ publicWorkplacesLabel }}</div>
             <div class="wp-cards-scroll">
               <div class="card-wrap">
                 <div
