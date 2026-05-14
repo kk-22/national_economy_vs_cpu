@@ -3,11 +3,43 @@ import { getPlayer, getMaxWorkers } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { GREEDY_BUILD_EXCLUDED } from './cpu'
 import { calculateScores } from './round'
-import type { GameState, BuildingCard, GameEffect, Player } from './types'
+import type { GameState, BuildingCard, GameEffect, Player, PublicWorkplace, OwnedBuilding } from './types'
 
 export const BEAM_WIDTH = 5
 
 export type ActionOption = { type: 'pub'; id: string } | { type: 'bld'; id: string }
+
+// 上位互換関係にある職場から下位互換の選択肢を除外する
+// 1. 採石場が選択肢にあれば鉱山を除外（採石場は draw-become-start で上位互換）
+// 2. 自分の所有施設と同名の一般職場を除外（専有できる自分の施設が上位互換）
+// 3. 大農園（draw-consumption n:3）が選択肢にあれば農場（n:2）を除外
+export function filterDominatedWorkplaces(
+  pubOptions: PublicWorkplace[],
+  bldOptions: OwnedBuilding[],
+): { pubOptions: PublicWorkplace[]; bldOptions: OwnedBuilding[] } {
+  let filteredPub = pubOptions
+  let filteredBld = bldOptions
+
+  // 1. 採石場 > 鉱山
+  if (filteredPub.some(wp => wp.name === '採石場')) {
+    filteredPub = filteredPub.filter(wp => wp.name !== '鉱山')
+  }
+
+  // 2. 自分の所有施設（使用可能なもの）と同名の一般職場を除外
+  const ownedNames = new Set(filteredBld.map(b => b.name))
+  if (ownedNames.size > 0) {
+    filteredPub = filteredPub.filter(wp => !ownedNames.has(wp.name))
+  }
+
+  // 3. 大農園 > 農場（draw-consumption n:3 が n:2 の上位互換）
+  const hasDainouen = filteredPub.some(wp => wp.name === '大農園') || filteredBld.some(b => b.name === '大農園')
+  if (hasDainouen) {
+    filteredPub = filteredPub.filter(wp => wp.name !== '農場')
+    filteredBld = filteredBld.filter(b => b.name !== '農場')
+  }
+
+  return { pubOptions: filteredPub, bldOptions: filteredBld }
+}
 
 export function scoreEffect(effect: GameEffect, player: Player, household: number, round: number, availWorkers: number = 1): number {
   const workerCount = player.workers.length
@@ -158,8 +190,10 @@ export function pickWorkerExpansion(state: GameState, playerId: number): { type:
 // greedy スコアで上位 n 件のアクションを返す（beam 候補選択に使用）
 export function getTopNActionsGreedy(state: GameState, playerId: number, n: number): ActionOption[] {
   const player = getPlayer(state, playerId)
-  const pubOptions = getAvailablePublicWorkplaces(state, playerId)
-  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+  const { pubOptions, bldOptions } = filterDominatedWorkplaces(
+    getAvailablePublicWorkplaces(state, playerId),
+    getAvailableOwnedBuildings(state, playerId),
+  )
   const avail = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
   const pubBonus = avail >= 2 ? 1.3 : 1.0
   const drawKinds = new Set(['draw', 'discard-draw', 'draw-consumption', 'draw-if-empty'])

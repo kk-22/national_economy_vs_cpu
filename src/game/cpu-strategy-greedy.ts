@@ -1,15 +1,17 @@
 import { BUILDING_CARDS, ROUND_CARDS } from './constants'
 import { getPlayer } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
-import { scoreEffect } from './cpu-scoring'
+import { scoreEffect, filterDominatedWorkplaces } from './cpu-scoring'
 import { setLastCpuNoAutoTarget } from './turns'
 import { placeWorkerOnPublic, placeWorkerOnBuilding, afterAction, afterHumanAction } from './turns'
 import { cpuTakeTurnRandom, cpuTakeTurnRandomNoAuto } from './cpu-strategy-random'
 import type { GameState, BuildingCard, PublicWorkplace, OwnedBuilding } from './types'
 
 export function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState {
-  const pubOptions = getAvailablePublicWorkplaces(state, playerId)
-  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+  const { pubOptions, bldOptions } = filterDominatedWorkplaces(
+    getAvailablePublicWorkplaces(state, playerId),
+    getAvailableOwnedBuildings(state, playerId),
+  )
   if (pubOptions.length === 0 && bldOptions.length === 0) return afterAction(state)
 
   const player = getPlayer(state, playerId)
@@ -51,8 +53,10 @@ export function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState
 }
 
 export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): GameState {
-  const pubOptions = getAvailablePublicWorkplaces(state, playerId)
-  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+  const { pubOptions, bldOptions } = filterDominatedWorkplaces(
+    getAvailablePublicWorkplaces(state, playerId),
+    getAvailableOwnedBuildings(state, playerId),
+  )
   if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
 
   const player = getPlayer(state, playerId)
