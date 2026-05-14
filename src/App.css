@@ -385,9 +385,11 @@
   background: #eff6ff !important;
   cursor: pointer !important;
 }
-.available:hover { background: #dbeafe !important; }
 .selectable { cursor: pointer !important; }
-.selectable:hover { border-color: #f59e0b !important; background: #fffbeb !important; }
+@media (hover: hover) {
+  .available:hover { background: #dbeafe !important; }
+  .selectable:hover { border-color: #f59e0b !important; background: #fffbeb !important; }
+}
 .selected { border-color: #f59e0b !important; background: #fef3c7 !important; }
 .card-disabled { opacity: 0.35; pointer-events: none; }
 
