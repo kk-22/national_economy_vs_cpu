@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import './App.css'
-import { ref, onMounted, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, computed, watch, watchEffect, nextTick } from 'vue'
 import { useGame } from './composables/useGame'
 import { useLogHighlight } from './composables/useLogHighlight'
 import type { CpuStrategy } from './game/types'
@@ -42,6 +42,11 @@ const skipAnim = ref(false)
 const lastStartedDebug = ref(false)
 const settingsPaused = ref(false)
 const cpuThinkingPlayerId = ref<number | null>(null)
+
+watchEffect(() => {
+  const anyModal = showManual.value || showSummary.value || !!replayError.value
+  document.body.style.overflow = anyModal ? 'hidden' : ''
+})
 
 const setupCpu = computed(() => setupHasPlayer.value ? setupTotal.value - 1 : setupTotal.value)
 

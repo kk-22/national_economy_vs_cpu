@@ -273,7 +273,6 @@ function cardTooltip(name: string): string {
         <span class="hbadge">ラウンド {{ game.round }}/9</span>
         <span class="hbadge">賃金 ${{ currentWage }}</span>
         <span class="hbadge">家計 ${{ game.household }}</span>
-        <span class="hbadge">山札 {{ game.buildingDeck.length }}枚</span>
       </div>
       <div class="mobile-undo-bar">
         <button class="btn-undo" :disabled="!canUndo" @click="undo">◀</button>
