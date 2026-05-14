@@ -293,7 +293,9 @@ function cardTooltip(name: string): string {
           <section class="section cpu-section">
             <div class="cpu-grid">
               <div v-for="cpu in cpuPlayers" :key="cpu.id" class="cpu-col">
-                <div v-if="props.cpuThinkingPlayerId === cpu.id" class="cpu-thinking-overlay">思考中・・・</div>
+                <div v-if="props.cpuThinkingPlayerId === cpu.id" class="cpu-thinking-overlay">
+                  <span class="cpu-thinking-spinner"></span>思考中・・・
+                </div>
                 <div class="cpu-header">
                   <span class="cpu-name">{{ cpu.name }}</span>
                   <span v-if="cpu.unpaidWages > 0" class="unpaid-badge">未払い{{ cpu.unpaidWages }}</span>
