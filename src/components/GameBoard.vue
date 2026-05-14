@@ -23,6 +23,7 @@ const emit = defineEmits<{
   menuOpen: []
   openSetup: []
   openSummary: []
+  openManual: []
   resume: []
 }>()
 
@@ -599,6 +600,7 @@ function cardTooltip(name: string): string {
             <span class="hbadge">家計 ${{ game.household }}</span>
             <span class="hbadge">賃金 ${{ currentWage }}</span>
           </div>
+          <button class="btn-restart" @click="emit('openManual')">説明書</button>
           <button class="btn-restart" @click="emit('openSetup')">ゲーム設定</button>
           <button class="btn-restart" @click="emit('openSummary')">ラウンド毎の情報</button>
         </div>
