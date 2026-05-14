@@ -208,6 +208,7 @@
 .worker-badge {
   background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;
   padding: 1px 7px; font-size: 11px; font-weight: 700; color: #1d4ed8;
+  min-width: 6em; text-align: center;
 }
 .hand-count { font-size: 11px; color: #94a3b8; }
 .sp-badge { font-size: 10px; font-weight: 700; color: #f59e0b; background: #78350f; border-radius: 3px; padding: 1px 4px; letter-spacing: 0.05em; }
@@ -227,10 +228,10 @@
   padding: 12px;
 }
 .bld-scroll {
-  padding: 12px;
+  padding: 0;
 }
 .hand-scroll {
-  padding: 12px;
+  padding: 0;
 }
 
 /* ===== Building card (bcard) ===== */
@@ -401,7 +402,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 7px;
-  padding: 4px 0;
+  padding: 0;
 }
 .pending-title-row {
   display: flex;
@@ -817,6 +818,9 @@
   margin-bottom: 7px;
 }
 .hand-label-row .subsection-label {
+  margin-bottom: 0;
+}
+.pending-area .hand-label-row {
   margin-bottom: 0;
 }
 .hand-sort-select {
