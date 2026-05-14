@@ -64,25 +64,9 @@ function sortByCost<T extends { kind: string; name?: string }>(cards: T[]): T[] 
 
 const sortedHand = computed(() => {
   const hand = humanPlayer.value?.hand ?? []
-  const pa = pendingAction.value
   const consumptions = hand.filter(c => c.kind === 'consumption')
   const buildings = hand.filter(c => c.kind === 'building')
   const sortedBuildings = handSort.value === 'cost' ? sortByCost(buildings) : buildings
-
-  const isDiscardScene = pa?.kind === 'choose-discard' ||
-    pa?.kind === 'choose-build-payment' ||
-    pa?.kind === 'choose-double-payment' ||
-    pa?.kind === 'choose-hand-limit'
-
-  if (isDiscardScene) {
-    const selectedIds = (pa?.kind === 'choose-discard' || pa?.kind === 'choose-hand-limit')
-      ? pa.selected
-      : paymentSelected.value
-    const selectedConsumptions = consumptions.filter(c => selectedIds.includes(c.id))
-    const unselectedConsumptions = consumptions.filter(c => !selectedIds.includes(c.id))
-    return [...selectedConsumptions, ...unselectedConsumptions, ...sortedBuildings]
-  }
-
   return [...sortedBuildings, ...consumptions]
 })
 
@@ -386,16 +370,16 @@ function cardTooltip(name: string): string {
                   </select>
                 </div>
                 <div class="card-wrap">
-                  <button v-for="card in sortedBuildableCards" :key="card.id"
-                    class="bcard selectable"
-                    @mouseenter="tipEnter($event, cardTooltip(card.name))"
+                  <button v-for="card in sortedHand" :key="card.id"
+                    :class="['hcard', 'selectable', { 'card-disabled': !buildableCards.some(b => b.id === card.id) }]"
+                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="tipLeave"
                     @click="clickBuildTarget(card.id)">
-                    <span class="bcard-cost">{{ getBuildingDef(card.name)?.cost }}</span>
-                    <span class="bcard-name" :style="bcardNameStyle(card.name)">{{ card.name }}</span>
-                    <span class="bcard-asset">{{ getBuildingDef(card.name)?.assetValue }}</span>
+                    <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
+                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
+                    <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                   </button>
-                  <span v-if="sortedBuildableCards.length === 0" class="no-options">建設できる建物がありません</span>
+                  <span v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</span>
                 </div>
                 <button class="btn-cancel" @click="clickCancelBuildChoice">キャンセル</button>
               </template>
@@ -455,7 +439,11 @@ function cardTooltip(name: string): string {
                 </div>
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
-                    :class="['hcard', 'selectable', { selected: pendingAction.selected.includes(card.id), 'card-drawn': drawnIds.includes(card.id) }]"
+                    :class="['hcard', 'selectable', {
+                      selected: pendingAction.selected.includes(card.id),
+                      'card-drawn': drawnIds.includes(card.id),
+                      'card-disabled': !pendingAction.selected.includes(card.id) && pendingAction.selected.length >= pendingAction.count
+                    }]"
                     @click="clickDiscardCard(card.id)">
                     <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
                     <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
@@ -491,7 +479,11 @@ function cardTooltip(name: string): string {
                 </div>
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
-                    :class="['hcard', 'selectable', { selected: pendingAction.selected.includes(card.id), 'card-drawn': drawnIds.includes(card.id) }]"
+                    :class="['hcard', 'selectable', {
+                      selected: pendingAction.selected.includes(card.id),
+                      'card-drawn': drawnIds.includes(card.id),
+                      'card-disabled': !pendingAction.selected.includes(card.id) && pendingAction.selected.length >= pendingAction.count
+                    }]"
                     @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="tipLeave"
                     @click="clickHandLimitCard(card.id)">
