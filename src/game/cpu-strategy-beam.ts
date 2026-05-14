@@ -32,29 +32,31 @@ function simulateUntilBeamOrEnd(state: GameState, beamPlayerId: number, startRou
   }
 }
 
-// シミュレーション後のスコアを計算（ラウンド越え時は次ラウンドをbeamWidth-2で探索）
-function scoreAfterSim(s: GameState, beamPlayerId: number, startRound: number, beamWidth: number): number {
+// シミュレーション後のスコアを計算（次ラウンドは下限2で幅を段階削減、2ラウンド先以降はevaluateSimEnd）
+function scoreAfterSim(s: GameState, beamPlayerId: number, startRound: number, beamWidth: number, roundsLeft: number): number {
   if (s.phase === 'game-over') return evaluateSimEnd(s, beamPlayerId, startRound)
 
   if (s.round > startRound) {
-    // 次ラウンドへの延長は1回のみ（元ラウンドからの呼び出し時だけ）
-    if (beamWidth === BEAM_WIDTH) {
+    if (roundsLeft > 0 && beamWidth >= 3) {
       const nextRound = s.round
-      const nextBeamWidth = beamWidth - 3
+      const nextBeamWidth = beamWidth - 1
       const sNext = simulateUntilBeamOrEnd(s, beamPlayerId, nextRound)
       if (sNext.round > nextRound || sNext.phase === 'game-over') {
         return evaluateSimEnd(sNext, beamPlayerId, nextRound)
       }
-      return beamSimulateFromTurn(sNext, beamPlayerId, nextRound, nextBeamWidth)
+      return beamSimulateFromTurn(sNext, beamPlayerId, nextRound, nextBeamWidth, roundsLeft - 1)
     }
     return evaluateSimEnd(s, beamPlayerId, startRound)
   }
 
-  return beamSimulateFromTurn(s, beamPlayerId, startRound, beamWidth)
+  // 同ラウンド内：現在ラウンドは下限4、次ラウンドは下限2
+  const minWidth = roundsLeft > 0 ? 4 : 2
+  const nextWidth = Math.max(minWidth, beamWidth - 1)
+  return beamSimulateFromTurn(s, beamPlayerId, startRound, nextWidth, roundsLeft)
 }
 
-// beam プレイヤーの番から再帰的に探索し、最良スコアを返す
-function beamSimulateFromTurn(simState: GameState, beamPlayerId: number, startRound: number, beamWidth: number): number {
+// beam プレイヤーの番から再帰的に探索し、中央値スコアを返す
+function beamSimulateFromTurn(simState: GameState, beamPlayerId: number, startRound: number, beamWidth: number, roundsLeft: number): number {
   const actions = getTopNActionsGreedy(simState, beamPlayerId, beamWidth)
 
   if (actions.length === 0) {
@@ -62,21 +64,21 @@ function beamSimulateFromTurn(simState: GameState, beamPlayerId: number, startRo
       { ...simState, currentPlayerIndex: (simState.currentPlayerIndex + 1) % simState.players.length },
       beamPlayerId, startRound,
     )
-    return scoreAfterSim(s, beamPlayerId, startRound, beamWidth)
+    return scoreAfterSim(s, beamPlayerId, startRound, beamWidth, roundsLeft)
   }
 
-  let bestScore = -Infinity
+  const scores: number[] = []
   for (const action of actions) {
     let s = action.type === 'pub'
       ? placeWorkerOnPublic(simState, beamPlayerId, action.id, true)
       : placeWorkerOnBuilding(simState, beamPlayerId, action.id, true)
 
     s = simulateUntilBeamOrEnd(s, beamPlayerId, startRound)
-
-    const score = scoreAfterSim(s, beamPlayerId, startRound, beamWidth)
-    if (score > bestScore) bestScore = score
+    scores.push(scoreAfterSim(s, beamPlayerId, startRound, beamWidth, roundsLeft))
   }
-  return bestScore
+
+  scores.sort((a, b) => a - b)
+  return scores[Math.floor(scores.length / 2)]
 }
 
 export function cpuTakeTurnBeam(state: GameState, playerId: number): GameState {
@@ -110,7 +112,7 @@ export function cpuTakeTurnBeam(state: GameState, playerId: number): GameState {
 
     s = simulateUntilBeamOrEnd(s, playerId, startRound)
 
-    const score = scoreAfterSim(s, playerId, startRound, BEAM_WIDTH)
+    const score = scoreAfterSim(s, playerId, startRound, BEAM_WIDTH, 1)
     if (score > bestScore) { bestScore = score; bestAction = action }
   }
 
@@ -152,7 +154,7 @@ export function cpuTakeTurnBeamNoAuto(state: GameState, playerId: number): GameS
 
     s = simulateUntilBeamOrEnd(s, playerId, startRound)
 
-    const score = scoreAfterSim(s, playerId, startRound, BEAM_WIDTH)
+    const score = scoreAfterSim(s, playerId, startRound, BEAM_WIDTH, 1)
     if (score > bestScore) { bestScore = score; bestAction = action }
   }
 

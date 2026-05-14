@@ -187,7 +187,17 @@ export function pickWorkerExpansion(state: GameState, playerId: number): { type:
   return null
 }
 
+const CARD_CATEGORY: Record<string, string> = {
+  '大工': 'builder', '建設会社': 'builder', 'ゼネコン': 'builder', '二胡市建設': 'builder', '開拓民': 'builder',
+  '鉱山': 'drawer', '農場': 'drawer', '大農園': 'drawer', '果樹園': 'drawer', '設計事務所': 'drawer',
+  '工場': 'drawer', '製鉄所': 'drawer', '自動車工場': 'drawer', '化学工場': 'drawer', '採石場': 'drawer',
+  '学校': 'worker', '専門学校': 'worker', '高等学校': 'worker', '大学': 'worker',
+  '露店': 'income', '市場': 'income', 'スーパーマーケット': 'income', '百貨店': 'income',
+  '万博': 'income', 'レストラン': 'income', '珈琲店': 'income', '焼畑': 'income',
+}
+
 // greedy スコアで上位 n 件のアクションを返す（beam 候補選択に使用）
+// 上位2手は無条件選択、残り n-2 手は未使用カテゴリを優先して多様性を保証する
 export function getTopNActionsGreedy(state: GameState, playerId: number, n: number): ActionOption[] {
   const player = getPlayer(state, playerId)
   const { pubOptions, bldOptions } = filterDominatedWorkplaces(
@@ -198,7 +208,7 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
   const pubBonus = avail >= 2 ? 1.3 : 1.0
   const drawKinds = new Set(['draw', 'discard-draw', 'draw-consumption', 'draw-if-empty'])
 
-  const scored: Array<{ option: ActionOption; score: number }> = []
+  const scored: Array<{ option: ActionOption; score: number; name: string }> = []
 
   for (const wp of pubOptions) {
     const base = scoreEffect(wp.effect, player, state.household, state.round, avail)
@@ -206,7 +216,7 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
     const sc = (soldDef && drawKinds.has(wp.effect.kind))
       ? base * (1.1 + soldDef.cost * 0.2)
       : base * pubBonus
-    scored.push({ option: { type: 'pub', id: wp.id }, score: sc })
+    scored.push({ option: { type: 'pub', id: wp.id }, score: sc, name: wp.name })
   }
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
@@ -215,11 +225,44 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
     const sc = drawKinds.has(def.effect.kind)
       ? base * (1.0 + def.cost * 0.2)
       : base * pubBonus
-    scored.push({ option: { type: 'bld', id: bld.id }, score: sc })
+    scored.push({ option: { type: 'bld', id: bld.id }, score: sc, name: bld.name })
   }
 
   scored.sort((a, b) => b.score - a.score)
-  return scored.slice(0, n).map(x => x.option)
+
+  // 上位2手を無条件選択
+  const result: ActionOption[] = []
+  const seenCategories = new Set<string>()
+  const top2Count = Math.min(2, scored.length, n)
+  for (let i = 0; i < top2Count; i++) {
+    result.push(scored[i].option)
+    const cat = CARD_CATEGORY[scored[i].name]
+    if (cat) seenCategories.add(cat)
+  }
+
+  if (result.length >= n) return result
+
+  // 残り n-2 手：未使用カテゴリを優先、枯渇したらgreedy補完
+  const remaining = scored.slice(top2Count)
+  const diversePicks: ActionOption[] = []
+  const greedyFallback: ActionOption[] = []
+
+  for (const item of remaining) {
+    const cat = CARD_CATEGORY[item.name]
+    if (cat && !seenCategories.has(cat)) {
+      diversePicks.push(item.option)
+      seenCategories.add(cat)
+    } else {
+      greedyFallback.push(item.option)
+    }
+  }
+
+  for (const opt of [...diversePicks, ...greedyFallback]) {
+    if (result.length >= n) break
+    result.push(opt)
+  }
+
+  return result
 }
 
 export function pickDisruptive(state: GameState, playerId: number): { type: 'pub' | 'bld'; id: string } | null {
