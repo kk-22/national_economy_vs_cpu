@@ -115,6 +115,7 @@ export interface GameState {
   _rngSeed: number   // ゲーム開始時のシード（不変・保存用）
   _rngState: number  // 現在のRNG状態（スナップショットに含まれ再現可能）
   _pendingWageDeficit?: { playerId: number; deficit: number }  // 賃金不足の一時記録（手札上限処理後に建物売却へ）
+  _pendingRoundEnd?: true  // Vue層がアニメーション後にラウンド終了処理を行うための一時フラグ
 }
 
 export interface GameConfig {

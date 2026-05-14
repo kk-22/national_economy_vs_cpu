@@ -11,7 +11,7 @@ import GameBoard from './components/GameBoard.vue'
 const {
   game, humanPlayer, isHumanTurn, currentWage,
   pendingAction, scores,
-  startGame, startDebugGame, runCpuTurns, cpuStepAction, autoAdvanceIfStuck,
+  startGame, startDebugGame, runCpuTurns, cpuStepAction, triggerRoundEnd, autoAdvanceIfStuck,
   saveGameState, hasSavedGame, restoreGame,
   undo, canUndo, isUndoRedo, cpuPaused, resumeCpu,
   replayError, clearReplayError,
@@ -167,7 +167,8 @@ watch(game, (newGame, oldGame) => {
 
   for (const newWp of newGame.publicWorkplaces) {
     const oldWp = oldGame.publicWorkplaces.find(w => w.id === newWp.id)
-    if (oldWp && newWp.workerIds.length > oldWp.workerIds.length) flashActivated(newWp.id)
+    if (!oldWp) flashBuilt(newWp.id)
+    else if (newWp.workerIds.length > oldWp.workerIds.length) flashActivated(newWp.id)
   }
   for (const newP of newGame.players) {
     const oldP = oldGame.players.find(p => p.id === newP.id)
@@ -190,6 +191,16 @@ watch(game, (newGame, oldGame) => {
     const roundDelay = skipAnim.value ? 0 : ANIM_DURATION + 50
     setTimeout(() => triggerRoundAnim(newGame.round), roundDelay)
     if (!skipAnim.value) setAnimating(ANIM_DURATION + 50 + ROUND_ANIM_DURATION + 100)
+  }
+
+  // CPUがラウンド最終手番のとき、アニメーション後にラウンド終了処理を行う
+  if (newGame._pendingRoundEnd) {
+    const rev = cpuRevision
+    setTimeout(() => {
+      if (cpuRevision !== rev) return
+      triggerRoundEnd()
+    }, ANIM_DURATION + 50)
+    return
   }
 
   if (newGame.phase === 'placement') {

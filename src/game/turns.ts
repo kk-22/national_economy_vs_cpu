@@ -111,6 +111,10 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
 
 // ---- Turn sequencing ----
 
+// Vue層のアニメーション待ちのため、ラウンド終了を_pendingRoundEndフラグで遅延させるか否か
+let _deferRoundEnd = false
+export function setDeferRoundEnd(v: boolean) { _deferRoundEnd = v }
+
 export function afterAction(state: GameState): GameState {
   if (state.pendingAction) return state
   const allPlaced = state.players.every(p => p.workers.every(w => w.isTraining || w.placedAt !== null))
@@ -121,7 +125,10 @@ export function afterAction(state: GameState): GameState {
 export function afterHumanAction(state: GameState): GameState {
   if (state.pendingAction) return state
   const allPlaced = state.players.every(p => p.workers.every(w => w.isTraining || w.placedAt !== null))
-  if (allPlaced) return processRoundEnd(state, true)
+  if (allPlaced) {
+    if (_deferRoundEnd) return { ...state, _pendingRoundEnd: true }
+    return processRoundEnd(state, true)
+  }
   return advanceTurnNoCpu(state)
 }
 

@@ -321,7 +321,7 @@ function cardTooltip(name: string): string {
               <div class="card-wrap">
                 <div
                   v-for="wp in game.publicWorkplaces" :key="wp.id"
-                  :class="['wpcard', { used: wp.workerIds.length > 0 && !wp.allowMultiple, available: canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id), 'card-activated': activatedIds.includes(wp.id) }]"
+                  :class="['wpcard', { used: wp.workerIds.length > 0 && !wp.allowMultiple, available: canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id), 'card-activated': activatedIds.includes(wp.id), 'card-built': builtIds.includes(wp.id) }]"
                   @mouseenter="tipEnter($event, effectDesc(wp.effect))"
                   @mouseleave="tipLeave"
                   @click="canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id) && clickPublicWorkplace(wp.id)"

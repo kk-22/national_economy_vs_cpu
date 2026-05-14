@@ -1,11 +1,11 @@
 import { shallowReactive, computed, ref, toRaw } from 'vue'
 import type { GameConfig, GameState } from '../game/types'
 import { createGame, createDebugGame } from '../game/init'
-import { calculateScores, confirmSellBuildings } from '../game/round'
+import { calculateScores, confirmSellBuildings, processRoundEnd } from '../game/round'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from '../game/availability'
 import {
   placeWorkerOnPublic, placeWorkerOnBuilding,
-  cpuOneTurnStep, consumeLastCpuNoAutoTarget, skipEmptyPlayerTurn,
+  cpuOneTurnStep, consumeLastCpuNoAutoTarget, skipEmptyPlayerTurn, setDeferRoundEnd,
   selectFarmBuildTarget, confirmBuildPayment, confirmDoublePayment,
   confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard,
 } from '../game/turns'
@@ -148,7 +148,9 @@ export function useGame() {
       const entry: HistoryEntry = { playerId: current.id, targetId: '__cpu__', targetName: current.name, timestamp: Date.now() }
       history.push(entry)
       historyVersion.value++
+      setDeferRoundEnd(true)
       const next = cpuOneTurnStep(state.game)
+      setDeferRoundEnd(false)
       const captured = consumeLastCpuNoAutoTarget()
       if (captured) {
         entry.cpuTargetId = captured.id
@@ -159,6 +161,11 @@ export function useGame() {
       const next = cpuOneTurnStep(state.game)
       if (next !== state.game) state.game = next
     }
+  }
+
+  function triggerRoundEnd() {
+    if (!state.game?._pendingRoundEnd) return
+    state.game = processRoundEnd({ ...state.game, _pendingRoundEnd: undefined }, true)
   }
 
   const game = computed(() => state.game)
@@ -613,6 +620,7 @@ export function useGame() {
     startDebugGame,
     runCpuTurns,
     cpuStepAction,
+    triggerRoundEnd,
     autoAdvanceIfStuck,
     clickPublicWorkplace,
     clickOwnedBuilding,
