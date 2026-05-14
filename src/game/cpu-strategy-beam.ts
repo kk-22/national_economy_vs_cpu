@@ -5,9 +5,9 @@ import { BEAM_WIDTH, evaluateSimEnd, getTopNActionsGreedy, pickWorkerExpansion }
 import { setLastCpuNoAutoTarget } from './turns'
 import { placeWorkerOnPublic, placeWorkerOnBuilding, afterAction, afterHumanAction } from './turns'
 import { cpuTakeTurnGreedy, cpuTakeTurnGreedyNoAuto } from './cpu-strategy-greedy'
+import { cpuTakeTurnDisruptiveNoAuto } from './cpu-strategy-disruptive'
 import type { GameState } from './types'
 
-// 他プレイヤーを greedy 1ステップずつ進め、beam プレイヤーの番かラウンド終了まで待つ
 function simulateUntilBeamOrEnd(state: GameState, beamPlayerId: number, startRound: number): GameState {
   let s = state
   const total = s.players.length
@@ -28,8 +28,7 @@ function simulateUntilBeamOrEnd(state: GameState, beamPlayerId: number, startRou
 
     if (current.id === beamPlayerId) return s
 
-    // 他プレイヤーを greedy で 1 手だけ実行（afterHumanAction → advanceTurnNoCpu で自動カスケードしない）
-    s = cpuTakeTurnGreedyNoAuto(s, current.id)
+    s = cpuTakeTurnDisruptiveNoAuto(s, current.id)
   }
 }
 

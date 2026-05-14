@@ -147,9 +147,12 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
       )
     }
   } else if (strategy === 'disruptive') {
-    target = buildable.reduce((best, c) =>
-      (BUILDING_CARDS[c.name]?.cost ?? 0) <= (BUILDING_CARDS[best.name]?.cost ?? 0) ? c : best
-    )
+    target = buildable.reduce((best, c) => {
+      const cc = BUILDING_CARDS[c.name]?.cost ?? 0
+      const bc = BUILDING_CARDS[best.name]?.cost ?? 0
+      if (cc !== bc) return cc < bc ? c : best
+      return (BUILDING_CARDS[c.name]?.assetValue ?? 0) <= (BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
+    })
   } else {
     let r: number
     ;[s, r] = rngNext(s)

@@ -223,47 +223,78 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
 }
 
 export function pickDisruptive(state: GameState, playerId: number): { type: 'pub' | 'bld'; id: string } | null {
-  const pubOptions = getAvailablePublicWorkplaces(state, playerId)
+  const player = getPlayer(state, playerId)
+  const pubOptions = getAvailablePublicWorkplaces(state, playerId).filter(wp => wp.name !== '大工')
   const bldOptions = getAvailableOwnedBuildings(state, playerId)
   if (pubOptions.length === 0 && bldOptions.length === 0) return null
 
-  // 1. 売られた建物（上位2コストグループ）
+  const costOf = (name: string) => BUILDING_CARDS[name]?.cost ?? 0
+  const assetOf = (name: string) => BUILDING_CARDS[name]?.assetValue ?? 0
+  const gainOf = (effect: GameEffect): number => effect.kind === 'discard-gain' ? effect.gain : 0
+
+  // 売却建物のコスト分類（優先度2・3）
   const soldOptions = pubOptions.filter(wp => wp.id.startsWith('wp-sold-'))
-  if (soldOptions.length > 0) {
-    const uniqueCosts = [...new Set(
-      soldOptions.map(wp => BUILDING_CARDS[wp.name]?.cost ?? 0)
-    )].sort((a, b) => b - a).slice(0, 2)
+  const soldUniqueCosts = [...new Set(soldOptions.map(wp => costOf(wp.name)))].sort((a, b) => b - a)
+  const maxCost = soldUniqueCosts[0] ?? -1
+  const secondCost = soldUniqueCosts[1] ?? -1
 
-    const topGroup = soldOptions.filter(wp => uniqueCosts.includes(BUILDING_CARDS[wp.name]?.cost ?? -1))
-    if (topGroup.length > 0) {
-      const best = topGroup.reduce((a, b) =>
-        (BUILDING_CARDS[a.name]?.assetValue ?? 0) >= (BUILDING_CARDS[b.name]?.assetValue ?? 0) ? a : b
-      )
-      return { type: 'pub', id: best.id }
+  // 非売却の discard-gain 施設（優先度4・7）。売却建物は除外（優先度2・3で処理）
+  const allGainSorted: Array<{ type: 'pub' | 'bld'; id: string; gain: number }> = [
+    ...pubOptions
+      .filter(wp => !wp.id.startsWith('wp-sold-') && wp.effect.kind === 'discard-gain')
+      .map(wp => ({ type: 'pub' as const, id: wp.id, gain: gainOf(wp.effect) })),
+    ...bldOptions
+      .filter(b => BUILDING_CARDS[b.name]?.effect.kind === 'discard-gain')
+      .map(b => ({ type: 'bld' as const, id: b.id, gain: gainOf(BUILDING_CARDS[b.name]!.effect) })),
+  ].sort((a, b) => b.gain - a.gain)
+
+  // 労働者3人時の拡張職場優先順（優先度9）
+  const expansion3Order = ['専門学校', '大学', '学校', '高等学校']
+
+  type Scored = { type: 'pub' | 'bld'; id: string; priority: number; tiebreak: number }
+  const scored: Scored[] = []
+
+  for (const wp of pubOptions) {
+    if (wp.id.startsWith('wp-sold-')) {
+      const cost = costOf(wp.name)
+      let priority: number
+      if (cost === maxCost) priority = 2
+      else if (cost === secondCost) priority = 3
+      else if (cost === 3) priority = 5
+      else if (cost === 2) priority = 6
+      else if (cost === 1) priority = 10
+      else priority = 99
+      scored.push({ type: 'pub', id: wp.id, priority, tiebreak: assetOf(wp.name) })
+      continue
     }
+    if (wp.name === '採石場') { scored.push({ type: 'pub', id: wp.id, priority: 8, tiebreak: 0 }); continue }
+    if (wp.name === '鉱山') { scored.push({ type: 'pub', id: wp.id, priority: 11, tiebreak: 0 }); continue }
+    if (player.workers.length === 3 && expansion3Order.includes(wp.name)) {
+      scored.push({ type: 'pub', id: wp.id, priority: 9, tiebreak: expansion3Order.length - expansion3Order.indexOf(wp.name) })
+      continue
+    }
+    const gainIdx = allGainSorted.findIndex(g => g.id === wp.id)
+    if (gainIdx === 0) { scored.push({ type: 'pub', id: wp.id, priority: 4, tiebreak: allGainSorted[0].gain }); continue }
+    if (gainIdx === 1) { scored.push({ type: 'pub', id: wp.id, priority: 7, tiebreak: allGainSorted[1].gain }); continue }
+    scored.push({ type: 'pub', id: wp.id, priority: 99, tiebreak: 0 })
   }
 
-  // 2. 今ラウンドの新施設
-  const currentRoundNames = new Set(ROUND_CARDS[state.round - 1]?.workplaces.map(w => w.name) ?? [])
-  const roundOptions = pubOptions.filter(wp => currentRoundNames.has(wp.name))
-  if (roundOptions.length > 0) {
-    // discard-gain の gain 最大を優先
-    const best = roundOptions.reduce((a, b) => {
-      const aGain = a.effect.kind === 'discard-gain' ? a.effect.gain : 0
-      const bGain = b.effect.kind === 'discard-gain' ? b.effect.gain : 0
-      return aGain >= bGain ? a : b
-    })
-    return { type: 'pub', id: best.id }
+  for (const b of bldOptions) {
+    const gainIdx = allGainSorted.findIndex(g => g.id === b.id)
+    if (gainIdx === 0) { scored.push({ type: 'bld', id: b.id, priority: 4, tiebreak: allGainSorted[0].gain }); continue }
+    if (gainIdx === 1) { scored.push({ type: 'bld', id: b.id, priority: 7, tiebreak: allGainSorted[1].gain }); continue }
+    scored.push({ type: 'bld', id: b.id, priority: 99, tiebreak: 0 })
   }
 
-  // 3. ランダム（pub/bldから）
-  const allOptions: Array<{ type: 'pub' | 'bld'; id: string }> = [
-    ...pubOptions.map(w => ({ type: 'pub' as const, id: w.id })),
-    ...bldOptions.map(b => ({ type: 'bld' as const, id: b.id })),
-  ]
-  if (allOptions.length === 0) return null
-  // 疑似ランダム（RNG使わず先頭）
-  return allOptions[0]
+  const valid = scored.filter(s => s.priority < 99)
+  if (valid.length === 0) {
+    if (pubOptions.length > 0) return { type: 'pub', id: pubOptions[0].id }
+    if (bldOptions.length > 0) return { type: 'bld', id: bldOptions[0].id }
+    return null
+  }
+
+  valid.sort((a, b) => a.priority !== b.priority ? a.priority - b.priority : b.tiebreak - a.tiebreak)
+  return { type: valid[0].type, id: valid[0].id }
 }
 
 // ラウンド終了後の中間評価関数
