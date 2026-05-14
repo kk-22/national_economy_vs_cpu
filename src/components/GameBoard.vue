@@ -2,7 +2,10 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useGame } from '../composables/useGame'
 import { useLogHighlight } from '../composables/useLogHighlight'
-import type { Worker, GameEffect, HandCard } from '../game/types'
+import type { Worker, GameEffect } from '../game/types'
+import { bcardNameStyle, cardLabel, handCount, handDetail } from '../utils/cardDisplay'
+import HandSortHeader from './HandSortHeader.vue'
+import HCard from './HCard.vue'
 
 const props = defineProps<{
   activatedIds: string[]
@@ -173,21 +176,7 @@ onUnmounted(() => {
   window.removeEventListener('mouseup', stopResize)
 })
 
-function cardLabel(card: { kind: string; name?: string }) {
-  return card.kind === 'building' ? card.name! : '消費財'
-}
 
-function handCount(hand: HandCard[]): number {
-  return hand.length
-}
-function handDetail(hand: HandCard[]): string {
-  const total = hand.length
-  if (total === 0) return ''
-  const buildings = hand.filter(c => c.kind === 'building').length
-  const consumptions = total - buildings
-  if (consumptions > 0) return `（建物${buildings}+消費財${consumptions}）`
-  return `（建物${buildings}）`
-}
 function workerNames(workerIds: string[]): string[] {
   if (!game.value) return []
   return workerIds.map(wid => {
@@ -200,12 +189,7 @@ function workerStatus(workers: Worker[]): string {
   return `${available}/${workers.length}`
 }
 
-function bcardNameStyle(name: string, small = false): Record<string, string> {
-  const usable = small ? 46 : 64
-  const base   = small ? 11 : 14
-  if (!name || name.length * base <= usable) return {}
-  return { fontSize: Math.max(8, Math.floor(usable / name.length)) + 'px' }
-}
+
 
 function effectDesc(effect: GameEffect): string {
   switch (effect.kind) {
@@ -359,15 +343,12 @@ function cardTooltip(name: string): string {
             <!-- Pending action -->
             <div v-if="pendingAction" class="pending-area">
               <template v-if="pendingAction.kind === 'choose-build-target' || pendingAction.kind === 'choose-farm-build'">
-                <div class="pending-title-row">
+                <div class="hand-label-row">
+                  <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">
                     {{ pendingAction.kind === 'choose-farm-build' ? `${pendingAction.sourceName}で農場を選択（無料）`
                      : `${pendingAction.sourceName}で建設する建物を選択` }}
                   </span>
-                  <select v-model="handSort" class="hand-sort-select">
-                    <option value="order">入手順</option>
-                    <option value="cost">コスト順</option>
-                  </select>
                 </div>
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
@@ -375,9 +356,7 @@ function cardTooltip(name: string): string {
                     @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="tipLeave"
                     @click="clickBuildTarget(card.id)">
-                    <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
-                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
-                    <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
+                    <HCard :card="card" />
                   </button>
                   <span v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</span>
                 </div>
@@ -385,12 +364,9 @@ function cardTooltip(name: string): string {
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-double-first' || pendingAction.kind === 'choose-double-second'">
-                <div class="pending-title-row">
+                <div class="hand-label-row">
+                  <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">{{ pendingAction.sourceName }}で2棟同時に選択（同コスト2棟）</span>
-                  <select v-model="handSort" class="hand-sort-select">
-                    <option value="order">入手順</option>
-                    <option value="cost">コスト順</option>
-                  </select>
                 </div>
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
@@ -398,9 +374,7 @@ function cardTooltip(name: string): string {
                     @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="tipLeave"
                     @click="clickDoubleSelect(card.id)">
-                    <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
-                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
-                    <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
+                    <HCard :card="card" />
                   </button>
                   <span v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</span>
                 </div>
@@ -408,7 +382,8 @@ function cardTooltip(name: string): string {
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-build-payment' || pendingAction.kind === 'choose-double-payment'">
-                <div class="pending-title-row">
+                <div class="hand-label-row">
+                  <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">
                     {{ pendingAction.kind === 'choose-build-payment'
                       ? pendingAction.targetName
@@ -425,21 +400,16 @@ function cardTooltip(name: string): string {
                       'card-disabled': card.id === (pendingAction as any).targetId || card.id === (pendingAction as any).firstId || card.id === (pendingAction as any).secondId
                     }]"
                     @click="clickPaymentCard(card.id)">
-                    <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
-                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
-                    <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
+                    <HCard :card="card" />
                   </button>
                 </div>
                 <button class="btn-cancel" @click="pendingAction.kind === 'choose-build-payment' ? clickCancelBuildPayment() : clickCancelDoublePayment()">戻る</button>
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-discard'">
-                <div class="pending-title-row">
+                <div class="hand-label-row">
+                  <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">{{ pendingAction.sourceName }}の捨て札を選択 ({{ pendingAction.selected.length }}/{{ pendingAction.count }})</span>
-                  <select v-model="handSort" class="hand-sort-select">
-                    <option value="order">入手順</option>
-                    <option value="cost">コスト順</option>
-                  </select>
                 </div>
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
@@ -449,9 +419,7 @@ function cardTooltip(name: string): string {
                       'card-disabled': !pendingAction.selected.includes(card.id) && pendingAction.selected.length >= pendingAction.count
                     }]"
                     @click="clickDiscardCard(card.id)">
-                    <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
-                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
-                    <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
+                    <HCard :card="card" />
                   </button>
                 </div>
                 <button class="btn-cancel" @click="clickCancelDiscardChoice">キャンセル</button>
@@ -467,15 +435,14 @@ function cardTooltip(name: string): string {
                     @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="tipLeave"
                     @click="clickRevealedCard(card.id)">
-                    <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
-                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
-                    <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
+                    <HCard :card="card" />
                   </button>
                 </div>
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-hand-limit'">
-                <div class="pending-title-row">
+                <div class="hand-label-row">
+                  <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title hand-limit-title">
                     ⚠ 手札上限超過（上限{{ pendingAction.limit }}枚）：{{ pendingAction.count }}枚捨ててください
                     （{{ pendingAction.selected.length }}/{{ pendingAction.count }}）
@@ -491,9 +458,7 @@ function cardTooltip(name: string): string {
                     @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="tipLeave"
                     @click="clickHandLimitCard(card.id)">
-                    <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
-                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
-                    <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
+                    <HCard :card="card" />
                   </button>
                 </div>
               </template>
@@ -515,6 +480,14 @@ function cardTooltip(name: string): string {
                     <span class="bcard-name" :style="bcardNameStyle(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')">{{ humanPlayer!.ownedBuildings.find(b => b.id === id)?.name }}</span>
                     <span class="bcard-asset">{{ getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue }}</span>
                   </button>
+                </div>
+                <div v-if="humanPlayer?.hand.length" class="hand-label-row" style="margin-top: 6px;">
+                  <div class="subsection-label"><span class="hand-count-bold">手札{{ handCount(humanPlayer?.hand ?? []) }}</span>{{ handDetail(humanPlayer?.hand ?? []) }}（売却不可）</div>
+                </div>
+                <div v-if="humanPlayer?.hand.length" class="card-wrap">
+                  <div v-for="card in sortedHand" :key="card.id" class="hcard card-disabled">
+                    <HCard :card="card" />
+                  </div>
                 </div>
                 <div v-if="sellBuildingError" class="sell-error">{{ sellBuildingError }}</div>
                 <button class="btn-confirm" :disabled="pendingAction.selected.length === 0" @click="clickConfirmSellBuildings">確定</button>
@@ -541,11 +514,7 @@ function cardTooltip(name: string): string {
               </div>
               <div class="player-subsection">
                 <div class="hand-label-row">
-                  <div class="subsection-label"><span class="hand-count-bold">手札{{ handCount(humanPlayer?.hand ?? []) }}</span>{{ handDetail(humanPlayer?.hand ?? []) }}</div>
-                  <select v-model="handSort" class="hand-sort-select">
-                    <option value="order">入手順</option>
-                    <option value="cost">コスト順</option>
-                  </select>
+                  <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                 </div>
                 <div class="hand-scroll">
                   <div class="card-wrap">

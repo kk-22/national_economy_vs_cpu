@@ -794,7 +794,9 @@
 .hand-label-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+  width: 100%;
   margin-bottom: 7px;
 }
 .hand-label-row .subsection-label {
