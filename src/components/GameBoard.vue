@@ -116,12 +116,21 @@ function cancelDoubleSelect() {
 
 // ---- 建物売却選択 ----
 const sellBuildingError = ref<string | null>(null)
+
+function sellBuildingName(id: string): string {
+  return humanPlayer.value?.ownedBuildings.find(b => b.id === id)?.name ?? ''
+}
+
+const sellSelectedTotal = computed(() => {
+  const pa = pendingAction.value
+  if (!pa || pa.kind !== 'choose-sell-buildings') return 0
+  return pa.selected.reduce((s, id) => s + (getBuildingDef(sellBuildingName(id))?.assetValue ?? 0), 0)
+})
+
 function clickConfirmSellBuildings() {
   const pa = game.value?.pendingAction
   if (!pa || pa.kind !== 'choose-sell-buildings') return
-  const ownedBuildings = game.value?.players.find(p => !p.isCpu)?.ownedBuildings ?? []
-  const getValue = (id: string) => getBuildingDef(ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue ?? 0
-  const total = pa.selected.reduce((sum, id) => sum + getValue(id), 0)
+  const total = sellSelectedTotal.value
   if (total < pa.deficit) {
     sellBuildingError.value = `合計 $${total} は不足分 $${pa.deficit} に足りません`
     return
@@ -129,7 +138,7 @@ function clickConfirmSellBuildings() {
   // 最小売却チェック: 各建物の価値 > (合計 − 不足分) でなければ不要な建物が含まれている
   const slack = total - pa.deficit
   for (const id of pa.selected) {
-    if (getValue(id) <= slack) {
+    if ((getBuildingDef(sellBuildingName(id))?.assetValue ?? 0) <= slack) {
       sellBuildingError.value = `選択された建物が多すぎます。最小限にする必要があります。`
       return
     }
@@ -465,8 +474,8 @@ function cardTooltip(name: string): string {
 
               <template v-else-if="pendingAction.kind === 'choose-sell-buildings'">
                 <div class="pending-title-row">
-                  <span :class="['pending-title', pendingAction.selected.reduce((s, id) => s + (getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue ?? 0), 0) >= pendingAction.deficit ? 'sell-ok' : 'sell-warning']">
-                    ⚠ 賃金不足のため売却する建物を選択（選択中 ${{ pendingAction.selected.reduce((s, id) => s + (getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue ?? 0), 0) }} / 必要額 ${{ pendingAction.deficit }}）
+                  <span :class="['pending-title', sellSelectedTotal >= pendingAction.deficit ? 'sell-ok' : 'sell-warning']">
+                    ⚠ 賃金不足のため売却する建物を選択（選択中 ${{ sellSelectedTotal }} / 必要額 ${{ pendingAction.deficit }}）
                   </span>
                 </div>
                 <div class="sell-buildings-row">
@@ -474,12 +483,12 @@ function cardTooltip(name: string): string {
                     <button
                       v-for="id in pendingAction.sellableIds" :key="id"
                       :class="['bcard', 'selectable', { selected: pendingAction.selected.includes(id) }]"
-                      @mouseenter="tipEnter($event, cardTooltip(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? ''))"
+                      @mouseenter="tipEnter($event, cardTooltip(sellBuildingName(id)))"
                       @mouseleave="tipLeave"
                       @click="clickToggleSellBuilding(id)">
-                      <span class="bcard-cost">{{ getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.cost }}</span>
-                      <span class="bcard-name" :style="bcardNameStyle(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')">{{ humanPlayer!.ownedBuildings.find(b => b.id === id)?.name }}</span>
-                      <span class="bcard-asset">{{ getBuildingDef(humanPlayer!.ownedBuildings.find(b => b.id === id)?.name ?? '')?.assetValue }}</span>
+                      <span class="bcard-cost">{{ getBuildingDef(sellBuildingName(id))?.cost }}</span>
+                      <span class="bcard-name" :style="bcardNameStyle(sellBuildingName(id))">{{ sellBuildingName(id) }}</span>
+                      <span class="bcard-asset">{{ getBuildingDef(sellBuildingName(id))?.assetValue }}</span>
                     </button>
                   </div>
                   <div class="sell-confirm-col">
