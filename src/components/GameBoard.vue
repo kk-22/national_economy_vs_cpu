@@ -10,6 +10,7 @@ const props = defineProps<{
   drawnIds: string[]
   canPlayerAct: boolean
   settingsPaused: boolean
+  cpuThinkingPlayerId: number | null
   tipEnter: (e: MouseEvent, text: string) => void
   tipLeave: () => void
 }>()
@@ -70,9 +71,6 @@ const sortedHand = computed(() => {
   return [...sortedBuildings, ...consumptions]
 })
 
-const sortedBuildableCards = computed(() =>
-  handSort.value === 'order' ? buildableCards.value : sortByCost(buildableCards.value)
-)
 
 // ---- ニコイチ建設 2枚同時選択 ----
 const doubleSelectedIds = ref<string[]>([])
@@ -99,6 +97,7 @@ function clickDoubleSelect(cardId: string) {
 }
 
 function isDoubleCardDisabled(cardId: string): boolean {
+  if (!buildableCards.value.some(b => b.id === cardId)) return true
   if (doubleSelectedIds.value.length === 0) return false
   if (doubleSelectedIds.value.includes(cardId)) return false
   const firstId = doubleSelectedIds.value[0]
@@ -287,6 +286,7 @@ function cardTooltip(name: string): string {
           <section class="section cpu-section">
             <div class="cpu-grid">
               <div v-for="cpu in cpuPlayers" :key="cpu.id" class="cpu-col">
+                <div v-if="props.cpuThinkingPlayerId === cpu.id" class="cpu-thinking-overlay">思考中・・・</div>
                 <div class="cpu-header">
                   <span class="cpu-name">{{ cpu.name }}</span>
                   <span v-if="cpu.unpaidWages > 0" class="unpaid-badge">未払い{{ cpu.unpaidWages }}</span>
@@ -393,16 +393,16 @@ function cardTooltip(name: string): string {
                   </select>
                 </div>
                 <div class="card-wrap">
-                  <button v-for="card in sortedBuildableCards" :key="card.id"
-                    :class="['bcard', 'selectable', { selected: doubleSelectedIds.includes(card.id), 'card-disabled': isDoubleCardDisabled(card.id) }]"
-                    @mouseenter="tipEnter($event, cardTooltip(card.name))"
+                  <button v-for="card in sortedHand" :key="card.id"
+                    :class="['hcard', 'selectable', { selected: doubleSelectedIds.includes(card.id), 'card-disabled': isDoubleCardDisabled(card.id) }]"
+                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="tipLeave"
                     @click="clickDoubleSelect(card.id)">
-                    <span class="bcard-cost">{{ getBuildingDef(card.name)?.cost }}</span>
-                    <span class="bcard-name" :style="bcardNameStyle(card.name)">{{ card.name }}</span>
-                    <span class="bcard-asset">{{ getBuildingDef(card.name)?.assetValue }}</span>
+                    <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
+                    <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
+                    <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
                   </button>
-                  <span v-if="sortedBuildableCards.length === 0" class="no-options">建設できる建物がありません</span>
+                  <span v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</span>
                 </div>
                 <button class="btn-cancel" @click="cancelDoubleSelect">キャンセル</button>
               </template>
@@ -417,9 +417,13 @@ function cardTooltip(name: string): string {
                 </div>
                 <div class="card-wrap">
                   <button
-                    v-for="card in sortedHand.filter(c => c.id !== (pendingAction as any).targetId && c.id !== (pendingAction as any).firstId && c.id !== (pendingAction as any).secondId)"
+                    v-for="card in sortedHand"
                     :key="card.id"
-                    :class="['hcard', 'selectable', { selected: paymentSelected.includes(card.id), 'card-drawn': drawnIds.includes(card.id) }]"
+                    :class="['hcard', 'selectable', {
+                      selected: paymentSelected.includes(card.id),
+                      'card-drawn': drawnIds.includes(card.id),
+                      'card-disabled': card.id === (pendingAction as any).targetId || card.id === (pendingAction as any).firstId || card.id === (pendingAction as any).secondId
+                    }]"
                     @click="clickPaymentCard(card.id)">
                     <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
                     <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>

@@ -39,6 +39,7 @@ const showSummary = ref(false)
 const skipAnim = ref(false)
 const lastStartedDebug = ref(false)
 const settingsPaused = ref(false)
+const cpuThinkingPlayerId = ref<number | null>(null)
 
 const setupCpu = computed(() => setupHasPlayer.value ? setupTotal.value - 1 : setupTotal.value)
 
@@ -155,7 +156,7 @@ watch(game, (newGame, oldGame) => {
         if (skipAnim.value) runCpuTurns()
         else {
           const rev = cpuRevision
-          setTimeout(() => { if (cpuRevision === rev) cpuStepAction() }, 100)
+          scheduleCpuStep(100, rev)
         }
       }
     }
@@ -202,7 +203,7 @@ watch(game, (newGame, oldGame) => {
           ? ANIM_DURATION + 50 + ROUND_ANIM_DURATION + 100
           : ANIM_DURATION + 50
         const rev = cpuRevision
-        setTimeout(() => { if (cpuRevision === rev) cpuStepAction() }, cpuDelay)
+        scheduleCpuStep(cpuDelay, rev)
       }
     } else {
       if (!newGame.pendingAction) {
@@ -286,6 +287,20 @@ function cancelSetup() {
   showSetup.value = false
 }
 
+function scheduleCpuStep(delay: number, rev: number) {
+  setTimeout(() => {
+    if (cpuRevision !== rev) return
+    cpuThinkingPlayerId.value = game.value?.players[game.value.currentPlayerIndex]?.id ?? null
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cpuRevision !== rev) { cpuThinkingPlayerId.value = null; return }
+        cpuStepAction()
+        cpuThinkingPlayerId.value = null
+      })
+    })
+  }, delay)
+}
+
 // cpuOnly ゲーム開始後、watch が old=null で early return するため手動で最初の CPU を起動する
 function scheduleInitialCpuRun() {
   if (!game.value || game.value.phase !== 'placement') return
@@ -293,7 +308,7 @@ function scheduleInitialCpuRun() {
     runCpuTurns()
   } else {
     const rev = cpuRevision
-    setTimeout(() => { if (cpuRevision === rev) cpuStepAction() }, 100)
+    scheduleCpuStep(100, rev)
   }
 }
 
@@ -346,7 +361,7 @@ function resumeAfterUndo() {
     runCpuTurns()
   } else {
     const rev = cpuRevision
-    setTimeout(() => { if (cpuRevision === rev) cpuStepAction() }, 100)
+    scheduleCpuStep(100, rev)
   }
 }
 
@@ -373,6 +388,7 @@ function replayGame() {
       :drawnIds="drawnIds"
       :canPlayerAct="canPlayerAct"
       :settingsPaused="settingsPaused"
+      :cpuThinkingPlayerId="cpuThinkingPlayerId"
       :tipEnter="onTipEnter"
       :tipLeave="onTipLeave"
       @menuOpen="menuOpen = true"
