@@ -38,7 +38,7 @@ const setupCpuStrategies = ref<CpuStrategy[]>(['random', 'random', 'random', 'ra
 const menuOpen = ref(false)
 const showSummary = ref(false)
 const showManual = ref(false)
-const skipAnim = ref(false)
+const animSpeed = ref<'none' | 'short' | 'long'>('short')
 const lastStartedDebug = ref(false)
 const settingsPaused = ref(false)
 const cpuThinkingPlayerId = ref<number | null>(null)
@@ -47,6 +47,14 @@ watchEffect(() => {
   const lock = (showManual.value || showSummary.value || !!replayError.value) ? 'hidden' : ''
   document.documentElement.style.overflow = lock
   document.body.style.overflow = lock
+})
+
+watchEffect(() => {
+  const factor = animSpeed.value === 'long' ? 2 : 1
+  const root = document.documentElement
+  root.style.setProperty('--card-anim-dur', `${0.9 * factor}s`)
+  root.style.setProperty('--card-build-dur', `${1.0 * factor}s`)
+  root.style.setProperty('--round-anim-dur', `${1.2 * factor}s`)
 })
 
 const setupCpu = computed(() => setupHasPlayer.value ? setupTotal.value - 1 : setupTotal.value)
@@ -65,7 +73,12 @@ onMounted(() => {
   const order = Number(localStorage.getItem('ne-setup-order'))
   if (order >= 0 && order <= 4) setupPlayerOrder.value = order
 
-  skipAnim.value = localStorage.getItem('ne-setup-skip-anim') === 'true'
+  const savedSpeed = localStorage.getItem('ne-setup-anim-speed')
+  if (savedSpeed === 'none' || savedSpeed === 'short' || savedSpeed === 'long') {
+    animSpeed.value = savedSpeed
+  } else if (localStorage.getItem('ne-setup-skip-anim') === 'true') {
+    animSpeed.value = 'none'
+  }
   lastStartedDebug.value = localStorage.getItem('ne-setup-debug') === 'true'
 
   if (!localStorage.getItem('ne-manual-seen')) {
@@ -102,7 +115,7 @@ watch(setupTotal, (newVal) => {
   if (setupPlayerOrder.value > newVal) setupPlayerOrder.value = newVal
 })
 watch(setupPlayerOrder, (newVal) => { localStorage.setItem('ne-setup-order', String(newVal)) })
-watch(skipAnim, (newVal) => { localStorage.setItem('ne-setup-skip-anim', String(newVal)) })
+watch(animSpeed, (newVal) => { localStorage.setItem('ne-setup-anim-speed', newVal) })
 
 // ---- アニメーション管理 ----
 const activatedIds = ref<string[]>([])
@@ -110,8 +123,8 @@ const builtIds = ref<string[]>([])
 const drawnIds = ref<string[]>([])
 const roundAnimRound = ref<number | null>(null)
 
-const ANIM_DURATION = 900
-const ROUND_ANIM_DURATION = 1200
+const ANIM_DURATION = computed(() => animSpeed.value === 'long' ? 1800 : 900)
+const ROUND_ANIM_DURATION = computed(() => animSpeed.value === 'long' ? 2400 : 1200)
 
 const isAnimating = ref(false)
 let animEndTimer: ReturnType<typeof setTimeout> | null = null
@@ -119,34 +132,34 @@ let cpuRevision = 0  // undo/redo 時にインクリメントしてスケジュ�
 let suppressHandAnim = false  // ゲーム開始直後の初期手札アニメーション抑制
 
 function setAnimating(totalMs: number) {
-  if (skipAnim.value) return
+  if (animSpeed.value === 'none') return
   isAnimating.value = true
   if (animEndTimer !== null) clearTimeout(animEndTimer)
   animEndTimer = setTimeout(() => { isAnimating.value = false }, totalMs)
 }
 
 function flashActivated(id: string) {
-  if (skipAnim.value) return
+  if (animSpeed.value === 'none') return
   activatedIds.value = [...activatedIds.value, id]
-  setAnimating(ANIM_DURATION + 50)
-  setTimeout(() => { activatedIds.value = activatedIds.value.filter(x => x !== id) }, ANIM_DURATION)
+  setAnimating(ANIM_DURATION.value + 50)
+  setTimeout(() => { activatedIds.value = activatedIds.value.filter(x => x !== id) }, ANIM_DURATION.value)
 }
 function flashBuilt(id: string) {
-  if (skipAnim.value) return
+  if (animSpeed.value === 'none') return
   builtIds.value = [...builtIds.value, id]
-  setAnimating(ANIM_DURATION + 100 + 50)
-  setTimeout(() => { builtIds.value = builtIds.value.filter(x => x !== id) }, ANIM_DURATION + 100)
+  setAnimating(ANIM_DURATION.value + 100 + 50)
+  setTimeout(() => { builtIds.value = builtIds.value.filter(x => x !== id) }, ANIM_DURATION.value + 100)
 }
 function flashDrawn(id: string) {
-  if (skipAnim.value || suppressHandAnim) return
+  if (animSpeed.value === 'none' || suppressHandAnim) return
   drawnIds.value = [...drawnIds.value, id]
-  setAnimating(ANIM_DURATION + 50)
-  setTimeout(() => { drawnIds.value = drawnIds.value.filter(x => x !== id) }, ANIM_DURATION)
+  setAnimating(ANIM_DURATION.value + 50)
+  setTimeout(() => { drawnIds.value = drawnIds.value.filter(x => x !== id) }, ANIM_DURATION.value)
 }
 function triggerRoundAnim(round: number) {
-  if (skipAnim.value) return
+  if (animSpeed.value === 'none') return
   roundAnimRound.value = round
-  setTimeout(() => { roundAnimRound.value = null }, ROUND_ANIM_DURATION)
+  setTimeout(() => { roundAnimRound.value = null }, ROUND_ANIM_DURATION.value)
 }
 
 const canPlayerAct = computed(() =>
@@ -165,11 +178,7 @@ watch(game, (newGame, oldGame) => {
     if (!cpuPaused.value && newGame.phase === 'placement') {
       const current = newGame.players[newGame.currentPlayerIndex]
       if (current?.isCpu) {
-        if (skipAnim.value) runCpuTurns()
-        else {
-          const rev = cpuRevision
-          scheduleCpuStep(100, rev)
-        }
+        scheduleCpuStep(cpuRevision)
       }
     }
     return
@@ -200,9 +209,9 @@ watch(game, (newGame, oldGame) => {
   suppressHandAnim = false
 
   if (hasRoundChange) {
-    const roundDelay = skipAnim.value ? 0 : ANIM_DURATION + 50
+    const roundDelay = animSpeed.value === 'none' ? 0 : ANIM_DURATION.value + 50
     setTimeout(() => triggerRoundAnim(newGame.round), roundDelay)
-    if (!skipAnim.value) setAnimating(ANIM_DURATION + 50 + ROUND_ANIM_DURATION + 100)
+    if (animSpeed.value !== 'none') setAnimating(ANIM_DURATION.value + 50 + ROUND_ANIM_DURATION.value + 100)
   }
 
   // CPUがラウンド最終手番のとき、アニメーション後にラウンド終了処理を行う
@@ -211,7 +220,7 @@ watch(game, (newGame, oldGame) => {
     setTimeout(() => {
       if (cpuRevision !== rev) return
       triggerRoundEnd()
-    }, ANIM_DURATION + 50)
+    }, ANIM_DURATION.value + 50)
     return
   }
 
@@ -219,23 +228,15 @@ watch(game, (newGame, oldGame) => {
     const current = newGame.players[newGame.currentPlayerIndex]
 
     if (current?.isCpu) {
-      if (skipAnim.value) {
-        runCpuTurns()
-      } else {
-          const cpuDelay = hasRoundChange
-          ? ANIM_DURATION + 50 + ROUND_ANIM_DURATION + 100
-          : ANIM_DURATION + 50
-        const rev = cpuRevision
-        scheduleCpuStep(cpuDelay, rev)
-      }
+      scheduleCpuStep(cpuRevision)
     } else {
       if (!newGame.pendingAction) {
         const avail = current?.workers.filter(w => !w.isTraining && w.placedAt === null) ?? []
         if (avail.length === 0) {
           const snapIndex = newGame.currentPlayerIndex
           const delay = hasRoundChange
-            ? ANIM_DURATION + 50 + ROUND_ANIM_DURATION + 150
-            : ANIM_DURATION + 100
+            ? ANIM_DURATION.value + 50 + ROUND_ANIM_DURATION.value + 150
+            : ANIM_DURATION.value + 100
           const rev = cpuRevision
           setTimeout(() => {
             if (cpuRevision !== rev) return
@@ -279,7 +280,6 @@ let setupSnapshot: {
   hasPlayer: boolean
   playerOrder: number
   cpuStrategies: CpuStrategy[]
-  skipAnim: boolean
 } | null = null
 
 function openSetup() {
@@ -288,7 +288,6 @@ function openSetup() {
     hasPlayer: setupHasPlayer.value,
     playerOrder: setupPlayerOrder.value,
     cpuStrategies: [...setupCpuStrategies.value],
-    skipAnim: skipAnim.value,
   }
   // CPU専用ゲームではゲーム設定を開いた瞬間にCPUを一時停止
   if (game.value && !game.value.players.some(p => !p.isCpu)) {
@@ -304,37 +303,47 @@ function cancelSetup() {
     setupHasPlayer.value = setupSnapshot.hasPlayer
     setupPlayerOrder.value = setupSnapshot.playerOrder
     setupCpuStrategies.value = [...setupSnapshot.cpuStrategies]
-    skipAnim.value = setupSnapshot.skipAnim
     setupSnapshot = null
   }
   showSetup.value = false
 }
 
-function scheduleCpuStep(delay: number, rev: number) {
-  cpuThinkingPlayerId.value = game.value?.players[game.value.currentPlayerIndex]?.id ?? null
-  setTimeout(() => {
-    if (cpuRevision !== rev) { cpuThinkingPlayerId.value = null; return }
-    cpuStepAction()
-    cpuThinkingPlayerId.value = null
-  }, delay)
+function scheduleCpuStep(rev: number) {
+  // アニメーション完了まで即時ポーリング（isAnimating=false なら即発火）
+  waitForAnimThen(rev, () => {
+    if (cpuRevision !== rev) return
+    cpuThinkingPlayerId.value = game.value?.players[game.value.currentPlayerIndex]?.id ?? null
+    // double-rAF で1フレーム描画を保証してからCPU実行
+    // rAFで1フレーム描画（インジケータを表示）してから、rAFの外でCPUを実行する。
+    // rAF内でCPUを長時間ブロックするとフレームのtimeline.currentTimeが凍結され、
+    // 直後のCSSアニメーションのstart-timeがズレて表示されなくなるため。
+    nextTick(() => requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (cpuRevision !== rev) { cpuThinkingPlayerId.value = null; return }
+        if (animSpeed.value === 'none') runCpuTurns()
+        else cpuStepAction()
+        cpuThinkingPlayerId.value = null
+      }, 0)
+    }))
+  })
+}
+
+function waitForAnimThen(rev: number, fn: () => void) {
+  if (!isAnimating.value || cpuRevision !== rev) { fn(); return }
+  setTimeout(() => waitForAnimThen(rev, fn), 30)
 }
 
 // cpuOnly ゲーム開始後、watch が old=null で early return するため手動で最初の CPU を起動する
 function scheduleInitialCpuRun() {
   if (!game.value || game.value.phase !== 'placement') return
-  if (skipAnim.value) {
-    runCpuTurns()
-  } else {
-    const rev = cpuRevision
-    scheduleCpuStep(100, rev)
-  }
+  scheduleCpuStep(cpuRevision)
 }
 
 function beginGame() {
   const cpuCount = setupCpu.value
   const strategies = setupCpuStrategies.value.slice(0, cpuCount)
   const hasBeam = strategies.includes('beam')
-  if (skipAnim.value && !setupHasPlayer.value && hasBeam) {
+  if (animSpeed.value === 'none' && !setupHasPlayer.value && hasBeam) {
     const ok = window.confirm(
       'ビームサーチCPUを含む全CPU対戦をスキップモードで実行します。\n計算のため数十秒フリーズしますがよろしいですか？'
     )
@@ -375,12 +384,7 @@ function resumeAfterUndo() {
   const current = game.value.players[game.value.currentPlayerIndex]
   if (!current?.isCpu) return
   cpuRevision++
-  if (skipAnim.value) {
-    runCpuTurns()
-  } else {
-    const rev = cpuRevision
-    scheduleCpuStep(100, rev)
-  }
+  scheduleCpuStep(cpuRevision)
 }
 
 function closeManual() {
@@ -436,7 +440,7 @@ function replayGame() {
       v-model:setupHasPlayer="setupHasPlayer"
       v-model:setupPlayerOrder="setupPlayerOrder"
       v-model:setupCpuStrategies="setupCpuStrategies"
-      v-model:skipAnim="skipAnim"
+      v-model:animSpeed="animSpeed"
       :hasGame="!!game"
       @begin="beginGame"
       @beginDebug="beginDebugGame"

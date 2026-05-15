@@ -1,6 +1,11 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root { --log-panel-width: 216px; }
+:root {
+  --log-panel-width: 216px;
+  --card-anim-dur: 0.9s;
+  --card-build-dur: 1.0s;
+  --round-anim-dur: 1.2s;
+}
 
 /* ===== Overall layout ===== */
 .game {
@@ -196,11 +201,7 @@
   border-radius: 8px;
   pointer-events: none;
   z-index: 10;
-  opacity: 0;
-  animation: cpu-thinking-fadein 0s 0.5s forwards;
-}
-@keyframes cpu-thinking-fadein {
-  to { opacity: 1; }
+  opacity: 1;
 }
 .cpu-thinking-spinner {
   width: 18px;
@@ -371,14 +372,14 @@
   30%  { box-shadow: 0 0 0 9px rgba(5,150,105,0.35); transform: scale(1.07); background: #a7f3d0; }
   100% { box-shadow: 0 0 0 0 rgba(5,150,105,0); transform: scale(1); background: #fff; }
 }
-.card-activated { animation: cardActivate 0.9s ease-out; }
-.card-built     { animation: cardBuild 1.0s ease-out; }
+.card-activated { animation: cardActivate var(--card-anim-dur) ease-out; }
+.card-built     { animation: cardBuild var(--card-build-dur) ease-out; }
 @keyframes cardDrawn {
   0%   { box-shadow: 0 0 0 0 rgba(14,165,233,0.8); transform: scale(0.88) translateY(6px); background: #e0f2fe; }
   35%  { box-shadow: 0 0 0 9px rgba(14,165,233,0.35); transform: scale(1.08) translateY(-3px); background: #bae6fd; }
   100% { box-shadow: 0 0 0 0 rgba(14,165,233,0); transform: scale(1) translateY(0); background: #fff; }
 }
-.card-drawn { animation: cardDrawn 0.9s ease-out; }
+.card-drawn { animation: cardDrawn var(--card-anim-dur) ease-out; }
 
 /* ===== Available/selectable states ===== */
 .available {
@@ -623,7 +624,9 @@
 .radio-group-label { font-size: 13px; color: #475569; font-weight: 600; margin-bottom: 6px; }
 .radio-group { display: flex; flex-direction: column; gap: 6px; }
 .radio-group--horizontal { flex-direction: row; flex-wrap: wrap; }
-.debug-group { display: flex; flex-direction: column; gap: 6px; margin-top: 48px; }
+.debug-group { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.setup-section-title { font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: -4px; }
+.setup-divider { border: none; border-top: 1px solid #e2e8f0; margin: 4px 0; }
 .radio-item {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px; color: #374151; cursor: pointer;
@@ -633,7 +636,12 @@
 .radio-item:hover { background: #eff6ff; border-color: #bfdbfe; }
 .radio-item input[type="radio"] { accent-color: #3b82f6; width: 15px; height: 15px; cursor: pointer; }
 .radio-item:has(input:checked) { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; font-weight: 600; }
-.modal-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.modal-actions { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; align-items: stretch; }
+.btn-debug-text {
+  background: none; border: none; cursor: pointer;
+  font-size: 11px; color: #94a3b8; text-align: right; padding: 2px 4px;
+}
+.btn-debug-text:hover { color: #64748b; text-decoration: underline; }
 .btn-primary {
   background: #3b82f6; color: #fff; border: none; border-radius: 7px;
   padding: 18px 20px; font-weight: 700; cursor: pointer; font-size: 13px;
@@ -810,7 +818,7 @@
   font-weight: 800;
   letter-spacing: 0.05em;
   box-shadow: 0 8px 36px rgba(0, 0, 0, 0.35);
-  animation: roundPop 1.2s ease-in-out forwards;
+  animation: roundPop var(--round-anim-dur) ease-in-out forwards;
 }
 .round-fade-enter-active, .round-fade-leave-active { transition: opacity 0.15s; }
 .round-fade-enter-from, .round-fade-leave-to { opacity: 0; }

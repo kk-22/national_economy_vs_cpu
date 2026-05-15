@@ -7,7 +7,7 @@ const props = defineProps<{
   setupHasPlayer: boolean
   setupPlayerOrder: number
   setupCpuStrategies: CpuStrategy[]
-  skipAnim: boolean
+  animSpeed: 'none' | 'short' | 'long'
   hasGame: boolean
 }>()
 
@@ -16,7 +16,7 @@ const emit = defineEmits<{
   'update:setupHasPlayer': [v: boolean]
   'update:setupPlayerOrder': [v: number]
   'update:setupCpuStrategies': [v: CpuStrategy[]]
-  'update:skipAnim': [v: boolean]
+  'update:animSpeed': [v: 'none' | 'short' | 'long']
   begin: []
   beginDebug: []
   cancel: []
@@ -77,6 +77,30 @@ function strategyLabel(strategy: CpuStrategy): string {
         <button v-if="hasGame" class="modal-close-btn" @click="emit('cancel')">✕</button>
       </div>
 
+      <!-- 表示設定 -->
+      <div class="setup-section-title">表示設定</div>
+
+      <div class="radio-group-label">アニメーション</div>
+      <div class="radio-group radio-group--horizontal">
+        <label class="radio-item">
+          <input type="radio" :checked="animSpeed === 'none'" @change="emit('update:animSpeed', 'none')" />
+          <span>なし</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" :checked="animSpeed === 'short'" @change="emit('update:animSpeed', 'short')" />
+          <span>短い</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" :checked="animSpeed === 'long'" @change="emit('update:animSpeed', 'long')" />
+          <span>長い</span>
+        </label>
+      </div>
+
+      <hr class="setup-divider" />
+
+      <!-- ゲーム開始設定 -->
+      <div class="setup-section-title">ゲーム開始設定</div>
+
       <div class="radio-group-label">人数</div>
       <div class="radio-group radio-group--horizontal">
         <label v-for="n in [2, 3, 4]" :key="n" class="radio-item">
@@ -123,14 +147,9 @@ function strategyLabel(strategy: CpuStrategy): string {
 
       <div class="modal-actions">
         <button class="btn-primary" @click="emit('begin')">新しく始める</button>
-        <div class="debug-group">
-          <label class="check-item">
-            <input type="checkbox" :checked="skipAnim" @change="emit('update:skipAnim', ($event.target as HTMLInputElement).checked)" />
-            <span>アニメーションをスキップ</span>
-          </label>
-          <button class="btn-debug" @click="emit('beginDebug')">デバッグスタート</button>
-        </div>
+        <button class="btn-debug-text" @click="emit('beginDebug')">テストモードで始める</button>
       </div>
+
     </div>
   </div>
 </template>
