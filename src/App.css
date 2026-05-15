@@ -334,9 +334,8 @@
 .wp-wlabel.faded { opacity: 0.4; }
 
 /* ===== Used (worker placed, single-use) ===== */
-/* !important を使わないため、available の !important に負けて青が優先される */
-.bcard.used  { background: #f1f5f9; }
-.wpcard.used { background: #f1f5f9; }
+.bcard.used  { background: #fff !important; }
+.wpcard.used { background: #fff !important; }
 
 .bcard-used-label {
   position: absolute;
