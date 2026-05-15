@@ -108,6 +108,8 @@ onMounted(() => {
       playerOrder: setupPlayerOrder.value,
       cpuStrategies: setupCpuStrategies.value.slice(0, setupCpu.value),
     })
+    // watch が oldGame=null で早期 return するため、初回起動時は手動でCPUを起動する
+    scheduleInitialCpuRun()
   }
 })
 
