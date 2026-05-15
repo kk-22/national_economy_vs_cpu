@@ -19,14 +19,14 @@ const {
 } = useGame()
 
 // ---- ドロワーログ ハイライト ----
-const { getLogState: drawerLogState, onLogMouseenter: drawerLogEnter, onLogMouseleave: drawerLogLeave, onLogClick: drawerLogClick } = useLogHighlight(
+const { getLogState: drawerLogState, onLogClick: drawerLogClick } = useLogHighlight(
   () => game.value?.players.map(p => p.name) ?? []
 )
 function drawerLineClass(msg: string): string {
   const s = drawerLogState(msg)
-  if (s === 'highlight') return 'drawer-log-line drawer-log-line--highlight'
-  if (s === 'dim') return 'drawer-log-line drawer-log-line--dim'
-  return 'drawer-log-line'
+  if (s === 'highlight') return 'log-line log-line--highlight'
+  if (s === 'dim') return 'log-line log-line--dim'
+  return 'log-line'
 }
 
 // ---- セットアップ状態 ----
@@ -478,8 +478,6 @@ function replayGame() {
             :key="i"
             :class="drawerLineClass(msg)"
             @click="drawerLogClick(msg)"
-            @mouseenter="drawerLogEnter(msg)"
-            @mouseleave="drawerLogLeave"
           >{{ msg }}</div>
         </div>
       </div>

@@ -53,6 +53,7 @@ export function useLogHighlight(getPlayerNames: () => string[]) {
     if (cur && cur.type === key.type &&
       (cur.type !== 'player' || (key.type === 'player' && cur.name === key.name))) {
       selectedHighlight.value = null
+      hoveredHighlight.value = null
     } else {
       selectedHighlight.value = key
     }

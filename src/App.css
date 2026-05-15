@@ -576,7 +576,7 @@
   border-bottom: 1px solid #f1f5f9;
   line-height: 1.4;
   word-break: break-all;
-  cursor: default;
+  cursor: pointer;
   border-radius: 3px;
   transition: background 0.1s;
 }
@@ -770,23 +770,7 @@
   color: #94a3b8;
   margin-bottom: 6px;
 }
-.drawer-log-line {
-  font-size: 11px;
-  color: #64748b;
-  padding: 3px 4px;
-  border-bottom: 1px solid #f1f5f9;
-  line-height: 1.4;
-  word-break: break-all;
-  border-radius: 3px;
-  cursor: pointer;
-}
-.drawer-log-line--highlight {
-  background: #fef08a;
-  color: #1e293b;
-}
-.drawer-log-line--dim {
-  opacity: 0.3;
-}
+
 
 @media (max-width: 640px) {
   .drawer-overlay,
