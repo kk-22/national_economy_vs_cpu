@@ -4,7 +4,7 @@ import { useGame } from '../composables/useGame'
 import { useLogHighlight } from '../composables/useLogHighlight'
 import type { Worker, GameEffect } from '../game/types'
 import { bcardNameStyle, cardLabel, handCount, handDetail } from '../utils/cardDisplay'
-import { ROUND_CARDS } from '../game/constants'
+import { ROUND_CARDS, BUILDING_CARDS } from '../game/constants'
 import HandSortHeader from './HandSortHeader.vue'
 import HCard from './HCard.vue'
 
@@ -48,6 +48,52 @@ const publicWorkplacesLabel = computed(() => {
   if (!nextCard) return '一般職場'
   const names = nextCard.workplaces.map(wp => wp.name).join('・')
   return `一般職場（次ラウンド：${names}）`
+})
+
+// ---- 一般職場ソート ----
+type WpSortOrder = 'added' | 'cost' | 'role'
+const wpSortOrder = ref<WpSortOrder>(
+  (localStorage.getItem('ne-wp-sort') as WpSortOrder) ?? 'added'
+)
+watch(wpSortOrder, v => localStorage.setItem('ne-wp-sort', v))
+
+const ROLE_RANK: Record<string, number> = {
+  'draw': 0, 'draw-become-start': 0, 'draw-if-empty': 0, 'discard-draw': 0, 'reveal-pick': 0,
+  'draw-consumption': 1, 'draw-consumption-to': 1, 'gain-supply': 1,
+  'add-worker': 2, 'fill-workers': 2,
+  'build': 3, 'build-farm-free': 3, 'build-double': 3,
+  'discard-gain': 4,
+}
+
+function wpCostKey(name: string): [number, number, string] {
+  const def = BUILDING_CARDS[name]
+  return [def?.cost ?? 0, def?.assetValue ?? 0, name]
+}
+
+const sortedPublicWorkplaces = computed(() => {
+  const wps = game.value?.publicWorkplaces ?? []
+  if (wpSortOrder.value === 'added') return wps
+
+  if (wpSortOrder.value === 'cost') {
+    // ラウンドカード職場を追加順（降順）で先頭に、続いて売却建物をコスト順
+    const roundWps = wps.filter(wp => wp.kind === 'round')
+    const soldWps = wps.filter(wp => wp.kind === 'sold').sort((a, b) => {
+      const [ca, va, na] = wpCostKey(a.name)
+      const [cb, vb, nb] = wpCostKey(b.name)
+      return ca !== cb ? ca - cb : va !== vb ? va - vb : na.localeCompare(nb)
+    })
+    return [...roundWps, ...soldWps]
+  }
+
+  // 役割順：同ランク内はコスト順（第2・第3キー同じ）
+  return [...wps].sort((a, b) => {
+    const ra = ROLE_RANK[a.effect.kind] ?? 99
+    const rb = ROLE_RANK[b.effect.kind] ?? 99
+    if (ra !== rb) return ra - rb
+    const [ca, va, na] = wpCostKey(a.name)
+    const [cb, vb, nb] = wpCostKey(b.name)
+    return ca !== cb ? ca - cb : va !== vb ? va - vb : na.localeCompare(nb)
+  })
 })
 
 // ---- ログ行ハイライト ----
@@ -328,11 +374,18 @@ function cardTooltip(name: string): string {
         <!-- ▼ Row 1: 一般職場 -->
         <div class="game-col" :style="{ height: rowHeights[1] + '%' }">
           <section class="section workplaces-section">
-            <div class="section-label public-workplaces-label">{{ publicWorkplacesLabel }}</div>
+            <div class="wp-section-header">
+              <div class="section-label public-workplaces-label">{{ publicWorkplacesLabel }}</div>
+              <select v-model="wpSortOrder" class="wp-sort-select">
+                <option value="added">追加順</option>
+                <option value="cost">コスト順</option>
+                <option value="role">役割順</option>
+              </select>
+            </div>
             <div class="wp-cards-scroll">
               <div class="card-wrap">
                 <div
-                  v-for="wp in game.publicWorkplaces" :key="wp.id"
+                  v-for="wp in sortedPublicWorkplaces" :key="wp.id"
                   :class="['wpcard', { used: wp.workerIds.length > 0 && !wp.allowMultiple, available: canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id), 'card-activated': activatedIds.includes(wp.id), 'card-built': builtIds.includes(wp.id) }]"
                   @mouseenter="tipEnter($event, effectDesc(wp.effect))"
                   @mouseleave="tipLeave"
@@ -627,3 +680,28 @@ function cardTooltip(name: string): string {
     </div><!-- /game-body -->
   </div>
 </template>
+
+<style scoped>
+.wp-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.wp-section-header .section-label {
+  margin: 0;
+  line-height: 1;
+}
+
+.wp-sort-select {
+  font-size: 0.72rem;
+  padding: 1px 4px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+</style>
