@@ -58,15 +58,11 @@ function updateStrategy(idx: number, val: CpuStrategy) {
   emit('update:setupCpuStrategies', copy)
 }
 
-function strategyLabel(strategy: CpuStrategy): string {
-  switch (strategy) {
-    case 'random':     return 'ランダム'
-    case 'greedy':     return '貪欲法'
-    case 'beam':       return 'ビームサーチ'
-    case 'mcts':       return 'モンテカルロ'
-    case 'disruptive': return 'お邪魔'
-  }
-}
+const DIFFICULTY_OPTIONS: { label: string; strategy: CpuStrategy }[] = [
+  { label: '初級', strategy: 'disruptive' },
+  { label: '中級', strategy: 'greedy' },
+  { label: '上級', strategy: 'beam' },
+]
 </script>
 
 <template>
@@ -125,22 +121,22 @@ function strategyLabel(strategy: CpuStrategy): string {
         </label>
       </div>
 
-      <div class="radio-group-label">CPUの戦略（弱い→強い）</div>
+      <div class="radio-group-label">CPUの難易度</div>
       <div v-if="cpuCount > 1" class="cpu-strategy-row">
         <span class="cpu-strategy-label">一括：</span>
         <div class="radio-group radio-group--horizontal">
-          <label v-for="s in (['random', 'disruptive', 'greedy', 'mcts', 'beam'] as CpuStrategy[])" :key="s" class="radio-item">
-            <input type="radio" :checked="bulkStrategy === s" @change="bulkStrategy = s" />
-            <span>{{ strategyLabel(s) }}</span>
+          <label v-for="opt in DIFFICULTY_OPTIONS" :key="opt.strategy" class="radio-item">
+            <input type="radio" :checked="bulkStrategy === opt.strategy" @change="bulkStrategy = opt.strategy" />
+            <span>{{ opt.label }}</span>
           </label>
         </div>
       </div>
       <div v-for="i in cpuCount" :key="i" class="cpu-strategy-row">
         <span class="cpu-strategy-label">CPU {{ i }}：</span>
         <div class="radio-group radio-group--horizontal">
-          <label v-for="s in (['random', 'disruptive', 'greedy', 'mcts', 'beam'] as CpuStrategy[])" :key="s" class="radio-item">
-            <input type="radio" :checked="setupCpuStrategies[i - 1] === s" @change="updateStrategy(i - 1, s)" />
-            <span>{{ strategyLabel(s) }}</span>
+          <label v-for="opt in DIFFICULTY_OPTIONS" :key="opt.strategy" class="radio-item">
+            <input type="radio" :checked="setupCpuStrategies[i - 1] === opt.strategy" @change="updateStrategy(i - 1, opt.strategy)" />
+            <span>{{ opt.label }}</span>
           </label>
         </div>
       </div>
