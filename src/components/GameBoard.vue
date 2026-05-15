@@ -58,7 +58,7 @@ const wpSortOrder = ref<WpSortOrder>(
 watch(wpSortOrder, v => localStorage.setItem('ne-wp-sort', v))
 
 const ROLE_RANK: Record<string, number> = {
-  'draw': 0, 'draw-become-start': 0, 'draw-if-empty': 0, 'discard-draw': 0, 'reveal-pick': 0,
+  'draw-become-start': -1, 'draw': 0, 'draw-if-empty': 0, 'discard-draw': 0, 'reveal-pick': 0,
   'draw-consumption': 1, 'draw-consumption-to': 1, 'gain-supply': 1,
   'add-worker': 2, 'fill-workers': 2,
   'build': 3, 'build-farm-free': 3, 'build-double': 3,
