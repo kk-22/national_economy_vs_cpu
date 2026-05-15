@@ -5,7 +5,7 @@ import { GREEDY_BUILD_EXCLUDED } from './cpu'
 import { calculateScores } from './round'
 import type { GameState, BuildingCard, GameEffect, Player, PublicWorkplace, OwnedBuilding } from './types'
 
-export const BEAM_WIDTH = 5
+export const BEAM_WIDTH = 7
 
 export type ActionOption = { type: 'pub'; id: string } | { type: 'bld'; id: string }
 
