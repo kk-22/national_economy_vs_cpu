@@ -466,9 +466,9 @@ function replayGame() {
             <span class="hbadge">賃金 ${{ currentWage }}</span>
             <span class="hbadge">家計 ${{ game.household }}</span>
             <span class="hbadge">山札 {{ game.buildingDeck.length }}枚</span>
-            <button class="btn-restart" @click="showManual = true; menuOpen = false">説明書</button>
-            <button class="btn-restart" @click="openSetup(); menuOpen = false">ゲーム設定</button>
-            <button class="btn-restart" @click="showSummary = true; menuOpen = false">ラウンド毎の情報</button>
+            <button class="btn-restart" @click="showManual = true; menuOpen = false">📖 説明書</button>
+            <button class="btn-restart" @click="openSetup(); menuOpen = false">⚙️ ゲーム設定</button>
+            <button class="btn-restart" @click="showSummary = true; menuOpen = false">📋 ラウンド毎の情報</button>
           </div>
           <div class="drawer-log-label">ログ</div>
         </div>
