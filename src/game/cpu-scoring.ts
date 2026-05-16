@@ -11,8 +11,7 @@ export type ActionOption = { type: 'pub'; id: string } | { type: 'bld'; id: stri
 
 // 上位互換関係にある職場から下位互換の選択肢を除外する
 // 1. 採石場が選択肢にあれば鉱山を除外（採石場は draw-become-start で上位互換）
-// 2. 自分の所有施設と同名の一般職場を除外（専有できる自分の施設が上位互換）
-// 3. 大農園（draw-consumption n:3）が選択肢にあれば農場（n:2）を除外
+// 2. 大農園（draw-consumption n:3）が選択肢にあれば農場（n:2）を除外
 export function filterDominatedWorkplaces(
   pubOptions: PublicWorkplace[],
   bldOptions: OwnedBuilding[],
@@ -25,13 +24,7 @@ export function filterDominatedWorkplaces(
     filteredPub = filteredPub.filter(wp => wp.name !== '鉱山')
   }
 
-  // 2. 自分の所有施設（使用可能なもの）と同名の一般職場を除外
-  const ownedNames = new Set(filteredBld.map(b => b.name))
-  if (ownedNames.size > 0) {
-    filteredPub = filteredPub.filter(wp => !ownedNames.has(wp.name))
-  }
-
-  // 3. 大農園 > 農場（draw-consumption n:3 が n:2 の上位互換）
+  // 2. 大農園 > 農場（draw-consumption n:3 が n:2 の上位互換）
   const hasDainouen = filteredPub.some(wp => wp.name === '大農園') || filteredBld.some(b => b.name === '大農園')
   if (hasDainouen) {
     filteredPub = filteredPub.filter(wp => wp.name !== '農場')
@@ -41,7 +34,7 @@ export function filterDominatedWorkplaces(
   return { pubOptions: filteredPub, bldOptions: filteredBld }
 }
 
-export function scoreEffect(effect: GameEffect, player: Player, household: number, round: number, availWorkers: number = 1): number {
+export function scoreEffect(effect: GameEffect, player: Player, household: number, round: number, availWorkers: number = 1, isStartPlayer: boolean = false): number {
   const workerCount = player.workers.length
   const wage = ROUND_CARDS[round - 1]?.wage ?? 0
   const expectedWage = workerCount * wage
@@ -160,7 +153,12 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
         ? effect.empty * (10 + diWorkerBonus)
         : effect.normal * (10 + diWorkerBonus)
     }
-    case 'draw-become-start': return 30
+    case 'draw-become-start': {
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return 2
+      // すでにスタートプレイヤーなら SP 効果はゼロ。draw n=1 相当のみ評価
+      if (isStartPlayer) return Math.floor(1 * (7 + (player.workers.length - 1) * 2))
+      return 30
+    }
     case 'slash-burn': return 25
     case 'draw-consumption':
       // ラウンド9後半: 消費財を増やしても得点にならないため大幅に減点
@@ -207,11 +205,12 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
   const avail = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
   const pubBonus = avail >= 2 ? 1.3 : 1.0
   const drawKinds = new Set(['draw', 'discard-draw', 'draw-consumption', 'draw-if-empty'])
+  const isStartPlayer = state.players[state.startPlayerIndex]?.id === player.id
 
   const scored: Array<{ option: ActionOption; score: number; name: string }> = []
 
   for (const wp of pubOptions) {
-    const base = scoreEffect(wp.effect, player, state.household, state.round, avail)
+    const base = scoreEffect(wp.effect, player, state.household, state.round, avail, isStartPlayer)
     const soldDef = BUILDING_CARDS[wp.name]
     const sc = (soldDef && drawKinds.has(wp.effect.kind))
       ? base * (1.1 + soldDef.cost * 0.2)
@@ -221,7 +220,7 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
     if (!def) continue
-    const base = scoreEffect(def.effect, player, state.household, state.round, avail)
+    const base = scoreEffect(def.effect, player, state.household, state.round, avail, isStartPlayer)
     const sc = drawKinds.has(def.effect.kind)
       ? base * (1.0 + def.cost * 0.2)
       : base * pubBonus

@@ -405,8 +405,8 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
     expect(usedOwnedBuilding(state, result, 0)).toBe('農場')
   })
 
-  test('自分の場の施設と同名の一般職場があれば自分の施設を使う（農場 owned が上位互換）', () => {
-    // 農場が owned にも一般職場にもある → 自分の農場を使う（一般職場は上位互換により除外）
+  test('自分の場の施設と同名の一般職場があれば一般職場を優先する（ブロック優先）（農場）', () => {
+    // 農場が owned にも一般職場にもある → 公開職場を先に使って相手をブロック
     const cpu = makePlayer({
       workers: [makeWorker(0), makeWorker(0)],
       hand: hand5(),
@@ -419,7 +419,7 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
       ],
     })
     const result = cpuOneTurnStep(state)
-    expect(usedOwnedBuilding(state, result, 0)).toBe('農場')
+    expect(usedPublicWorkplace(state, result)).toBe('農場')
   })
 
   test('一般職場の低コスト施設より自分の場の高コスト施設を優先する（農場 public < 製鉄所 owned）', () => {
@@ -439,8 +439,8 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
     expect(usedOwnedBuilding(state, result, 0)).toBe('製鉄所')
   })
 
-  test('自分の場の施設と同名の一般職場があれば自分の施設を使う（製鉄所 owned が上位互換）', () => {
-    // 製鉄所が owned にも一般職場にもある → 自分の製鉄所を使う（一般職場は上位互換により除外）
+  test('自分の場の施設と同名の一般職場があれば一般職場を優先する（ブロック優先）（製鉄所）', () => {
+    // 製鉄所が owned にも一般職場にもある → 公開職場を先に使って相手をブロック
     const cpu = makePlayer({
       workers: [makeWorker(0), makeWorker(0)],
       hand: hand5(),
@@ -453,6 +453,6 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
       ],
     })
     const result = cpuOneTurnStep(state)
-    expect(usedOwnedBuilding(state, result, 0)).toBe('製鉄所')
+    expect(usedPublicWorkplace(state, result)).toBe('製鉄所')
   })
 })

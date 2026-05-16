@@ -17,6 +17,7 @@ export function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState
   const player = getPlayer(state, playerId)
   const availableWorkers = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
   const pubBonus = availableWorkers >= 2 ? 1.3 : 1.0
+  const isStartPlayer = state.players[state.startPlayerIndex]?.id === player.id
 
   let bestScore = -Infinity
   let bestPub: PublicWorkplace | null = null
@@ -25,7 +26,7 @@ export function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState
   const drawKinds = new Set(['draw', 'discard-draw', 'draw-consumption', 'draw-if-empty'])
 
   for (const wp of pubOptions) {
-    const base = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers)
+    const base = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers, isStartPlayer)
     const soldDef = BUILDING_CARDS[wp.name]
     // 売却建物 かつ draw 系施設 → コスト連動ボーナス（コスト高いほど優先）
     const sc = (soldDef && drawKinds.has(wp.effect.kind))
@@ -36,7 +37,7 @@ export function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
     if (!def) continue
-    const base = scoreEffect(def.effect, player, state.household, state.round, availableWorkers)
+    const base = scoreEffect(def.effect, player, state.household, state.round, availableWorkers, isStartPlayer)
     // draw 系施設 → コスト連動ボーナス、build 系等 → pubBonus 適用
     const sc = drawKinds.has(def.effect.kind)
       ? base * (1.0 + def.cost * 0.2)
@@ -62,6 +63,7 @@ export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): Gam
   const player = getPlayer(state, playerId)
   const availableWorkers = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
   const pubBonus = availableWorkers >= 2 ? 1.3 : 1.0
+  const isStartPlayer = state.players[state.startPlayerIndex]?.id === player.id
 
   // Fix 2: money < wage かつ建設可能カードより高コストの自分の建物があれば直接その建物を使う
   const wage = ROUND_CARDS[state.round - 1]?.wage ?? 0
@@ -101,7 +103,7 @@ export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): Gam
   const drawKinds = new Set(['draw', 'discard-draw', 'draw-consumption', 'draw-if-empty'])
 
   for (const wp of pubOptions) {
-    const base = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers)
+    const base = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers, isStartPlayer)
     const soldDef = BUILDING_CARDS[wp.name]
     const sc = (soldDef && drawKinds.has(wp.effect.kind))
       ? base * (1.1 + soldDef.cost * 0.2)
@@ -111,7 +113,7 @@ export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): Gam
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
     if (!def) continue
-    const base = scoreEffect(def.effect, player, state.household, state.round, availableWorkers)
+    const base = scoreEffect(def.effect, player, state.household, state.round, availableWorkers, isStartPlayer)
     const sc = drawKinds.has(def.effect.kind)
       ? base * (1.0 + def.cost * 0.2)
       : base * pubBonus
