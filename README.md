@@ -9,6 +9,11 @@
 
 - [GitHub Pages でプレイ](https://kk-22.github.io/national_economy_vs_cpu/)
 
+## 目的
+
+- コードの99％をClaudeCodeに書かせる実験
+- 最小限のクリック数でサクサク遊べるゲームを作る
+
 ## 技術スタック
 
 - Vue 3 (Composition API / `<script setup>`)

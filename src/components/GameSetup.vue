@@ -121,7 +121,7 @@ const DIFFICULTY_OPTIONS: { label: string; strategy: CpuStrategy }[] = [
         </label>
       </div>
 
-      <div class="radio-group-label">CPUの難易度</div>
+      <div class="radio-group-label">CPUの強さ</div>
       <div v-if="cpuCount > 1" class="cpu-strategy-row">
         <span class="cpu-strategy-label">一括：</span>
         <div class="radio-group radio-group--horizontal">
