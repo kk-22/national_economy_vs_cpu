@@ -2,7 +2,7 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useGame } from '../composables/useGame'
 import { useLogHighlight } from '../composables/useLogHighlight'
-import type { Worker, GameEffect } from '../game/types'
+import type { Worker, GameEffect, Player } from '../game/types'
 import { bcardNameStyle, cardLabel, handCount, handDetail } from '../utils/cardDisplay'
 import { ROUND_CARDS, BUILDING_CARDS } from '../game/constants'
 import HandSortHeader from './HandSortHeader.vue'
@@ -254,9 +254,13 @@ function workerNames(workerIds: string[]): string[] {
     return p?.name ?? '?'
   })
 }
-function workerStatus(workers: Worker[]): string {
-  const available = workers.filter(w => !w.isTraining && !w.placedAt).length
-  return `${available}/${workers.length}`
+function workerAvailable(workers: Worker[]): number {
+  return workers.filter(w => !w.isTraining && !w.placedAt).length
+}
+
+function workerUnderCapacity(player: Player): boolean {
+  const shatakuCount = player.ownedBuildings.filter(b => b.name === '社宅').length
+  return shatakuCount > 0 && player.workers.length < 5 + shatakuCount
 }
 
 
@@ -345,7 +349,7 @@ function cardTooltip(name: string): string {
                 <div class="cpu-header">
                   <span class="cpu-name">{{ cpu.name }}</span>
                   <span v-if="cpu.unpaidWages > 0" class="unpaid-badge">未払い{{ cpu.unpaidWages }}</span>
-                  <span class="worker-badge">労働者{{ workerStatus(cpu.workers) }}</span>
+                  <span class="worker-badge">労働者{{ workerAvailable(cpu.workers) }}/<span :class="{ 'worker-limit-alert': workerUnderCapacity(cpu) }">{{ cpu.workers.length }}</span></span>
                   <span class="cpu-money">${{ cpu.money }}</span>
                   <span class="hand-count"><span class="hand-count-bold">手札{{ handCount(cpu.hand) }}</span>{{ handDetail(cpu.hand) }}</span>
                   <span v-if="game.startPlayerIndex === cpu.id" class="sp-badge">🚩SP</span>
@@ -413,10 +417,10 @@ function cardTooltip(name: string): string {
             <div class="player-header">
               <span class="player-name">{{ humanPlayer?.name }}</span>
               <span v-if="humanPlayer?.unpaidWages" class="unpaid-badge">未払い{{ humanPlayer.unpaidWages }}</span>
-              <span class="worker-badge">労働者{{ humanPlayer ? workerStatus(humanPlayer.workers) : '' }}</span>
+              <span class="worker-badge">労働者{{ humanPlayer ? workerAvailable(humanPlayer.workers) : '' }}/<span :class="{ 'worker-limit-alert': humanPlayer != null && workerUnderCapacity(humanPlayer) }">{{ humanPlayer?.workers.length ?? '' }}</span></span>
               <span class="wage-summary">
-                所持${{ humanPlayer?.money }} -
-                <span :class="(humanPlayer?.money ?? 0) >= (humanPlayer?.workers.length ?? 0) * currentWage ? 'wage-cost wage-cost--ok' : 'wage-cost'">必要賃金${{ (humanPlayer?.workers.length ?? 0) * currentWage }}</span>
+                所持金${{ humanPlayer?.money }} -
+                <span :class="(humanPlayer?.money ?? 0) >= (humanPlayer?.workers.length ?? 0) * currentWage ? 'wage-cost wage-cost--ok' : 'wage-cost'">賃金${{ (humanPlayer?.workers.length ?? 0) * currentWage }}</span>
               </span>
               <span v-if="game.startPlayerIndex === humanPlayer?.id" class="sp-badge">🚩SP</span>
             </div>
