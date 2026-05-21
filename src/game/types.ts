@@ -125,6 +125,7 @@ export interface GameConfig {
   cpuOnly?: boolean      // true = 全員CPU（プレイヤーなし）
   playerOrder?: number   // 0=ランダム, 1〜4=手番順（1番目が先手）
   cpuStrategies?: CpuStrategy[]  // CPU番号順（0=CPU1, 1=CPU2, ...）
+  seed?: number          // 固定シード（GA用・省略時はランダム）
 }
 
 export interface ScoreResult {

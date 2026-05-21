@@ -5,6 +5,137 @@ import { GREEDY_BUILD_EXCLUDED } from './cpu'
 import { calculateScores } from './round'
 import type { GameState, BuildingCard, GameEffect, Player, PublicWorkplace, OwnedBuilding } from './types'
 
+// ---- GA 用スコア重みパラメータ ----
+
+export interface ScoreWeights {
+  buildDouble: number
+  fillWorkers2: number
+  fillWorkers3: number
+  fillWorkers4: number
+  addWorker2: number
+  addWorker3: number
+  addWorker4: number
+  addWorkerImmediate: number
+  buildBase: number
+  buildCostMult: number
+  buildDiscountBonus: number
+  buildDrawAfterBonus: number
+  buildWorkerBonus: number
+  buildFarmFree: number
+  revealPickEarlyFew: number
+  revealPickEarlyMany: number
+  revealPickLateFew: number
+  revealPickLateMany: number
+  discardDrawBase: number
+  discardDrawWorkerMult: number
+  discardGainShortMult: number
+  discardGainNormalMult: number
+  gainSupplyMult: number
+  drawBase: number
+  drawWorkerMult: number
+  drawFactoryBonus: number
+  drawIfEmptyBase: number
+  drawBecomeStart: number
+  slashBurn: number
+  drawConsumptionFew: number
+  drawConsumptionMany: number
+  drawConsumptionToMult: number
+  pubBonus: number
+  drawCostMult: number
+  drawPubExtra: number
+}
+
+export const DEFAULT_WEIGHTS: ScoreWeights = {
+  buildDouble:            300.077,
+  fillWorkers2:           55.513,
+  fillWorkers3:           0.000,
+  fillWorkers4:           0.000,
+  addWorker2:             110.526,
+  addWorker3:             44.590,
+  addWorker4:             12.077,
+  addWorkerImmediate:     13.490,
+  buildBase:              0.000,
+  buildCostMult:          1.482,
+  buildDiscountBonus:     31.111,
+  buildDrawAfterBonus:    27.479,
+  buildWorkerBonus:       1.000,
+  buildFarmFree:          19.044,
+  revealPickEarlyFew:     74.051,
+  revealPickEarlyMany:    20.685,
+  revealPickLateFew:      50.508,
+  revealPickLateMany:     46.516,
+  discardDrawBase:        5.514,
+  discardDrawWorkerMult:  2.664,
+  discardGainShortMult:   4.465,
+  discardGainNormalMult:  2.016,
+  gainSupplyMult:         3.843,
+  drawBase:               1.493,
+  drawWorkerMult:         1.887,
+  drawFactoryBonus:       1.842,
+  drawIfEmptyBase:        11.906,
+  drawBecomeStart:        17.823,
+  slashBurn:              19.150,
+  drawConsumptionFew:     18.898,
+  drawConsumptionMany:    4.618,
+  drawConsumptionToMult:  9.575,
+  pubBonus:               1.755,
+  drawCostMult:           0.224,
+  drawPubExtra:           0.018,
+}
+
+export const WEIGHT_BOUNDS: Record<keyof ScoreWeights, [number, number]> = {
+  buildDouble:            [0, 400],
+  fillWorkers2:           [0, 300],
+  fillWorkers3:           [0, 250],
+  fillWorkers4:           [0, 200],
+  addWorker2:             [0, 300],
+  addWorker3:             [0, 150],
+  addWorker4:             [0, 80],
+  addWorkerImmediate:     [0, 200],
+  buildBase:              [0, 250],
+  buildCostMult:          [0, 15],
+  buildDiscountBonus:     [0, 50],
+  buildDrawAfterBonus:    [0, 50],
+  buildWorkerBonus:       [1.0, 2.5],
+  buildFarmFree:          [0, 200],
+  revealPickEarlyFew:     [0, 200],
+  revealPickEarlyMany:    [0, 180],
+  revealPickLateFew:      [0, 180],
+  revealPickLateMany:     [0, 160],
+  discardDrawBase:        [0, 30],
+  discardDrawWorkerMult:  [0, 8],
+  discardGainShortMult:   [0, 8],
+  discardGainNormalMult:  [0, 3],
+  gainSupplyMult:         [0, 12],
+  drawBase:               [0, 25],
+  drawWorkerMult:         [0, 8],
+  drawFactoryBonus:       [1.0, 3.0],
+  drawIfEmptyBase:        [0, 25],
+  drawBecomeStart:        [0, 80],
+  slashBurn:              [0, 100],
+  drawConsumptionFew:     [0, 50],
+  drawConsumptionMany:    [0, 40],
+  drawConsumptionToMult:  [0, 15],
+  pubBonus:               [1.0, 2.5],
+  drawCostMult:           [0, 1.0],
+  drawPubExtra:           [0, 0.5],
+}
+
+// プレイヤー別重みストア（GA 用）
+const _playerWeights = new Map<number, ScoreWeights>()
+
+export function setPlayerWeights(playerId: number, weights: ScoreWeights): void {
+  _playerWeights.set(playerId, weights)
+}
+
+export function clearPlayerWeights(): void {
+  _playerWeights.clear()
+}
+
+export function getPlayerWeights(playerId: number): ScoreWeights {
+  return _playerWeights.get(playerId) ?? DEFAULT_WEIGHTS
+}
+
 export const BEAM_WIDTH = 7
 
 export type ActionOption = { type: 'pub'; id: string } | { type: 'bld'; id: string }
@@ -34,13 +165,14 @@ export function filterDominatedWorkplaces(
   return { pubOptions: filteredPub, bldOptions: filteredBld }
 }
 
-export function scoreEffect(effect: GameEffect, player: Player, household: number, round: number, availWorkers: number = 1, isStartPlayer: boolean = false): number {
+export function scoreEffect(effect: GameEffect, player: Player, household: number, round: number, availWorkers: number = 1, isStartPlayer: boolean = false, weights: ScoreWeights = DEFAULT_WEIGHTS): number {
+  const w = weights
   const workerCount = player.workers.length
   const wage = ROUND_CARDS[round - 1]?.wage ?? 0
   const expectedWage = workerCount * wage
 
   switch (effect.kind) {
-    case 'build-double': return 160
+    case 'build-double': return w.buildDouble
     case 'build': {
       // 労働者1人しか残っておらず賃金も払えない場合のみ建設を諦める
       if (availWorkers < 2 && player.money < expectedWage) return -Infinity
@@ -83,16 +215,16 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
       }
       // 大工 < 建設会社 < ゼネコン < 二胡市建設 の優先度順にスコアを上げる
       // discount=1(建設会社)+15, drawAfter=2(ゼネコン)+30 で確実に順序を保証
-      return (85 + maxCost * 3) * (availWorkers >= 2 ? 1.2 : 1.0) + effect.discount * 15 + effect.drawAfter * 15
+      return (w.buildBase + maxCost * w.buildCostMult) * (availWorkers >= 2 ? w.buildWorkerBonus : 1.0) + effect.discount * w.buildDiscountBonus + effect.drawAfter * w.buildDrawAfterBonus
     }
-    case 'build-farm-free': return 70
+    case 'build-farm-free': return w.buildFarmFree
     case 'fill-workers': {
       if (workerCount >= effect.target) return -Infinity
       if (round >= 7) return -Infinity
       // 5人目になる場合のみ賃金持続性チェック
       if (effect.target >= 5 && (player.unpaidWages > 0 || player.money < effect.target * wage)) return -Infinity
       // 労働者が少ないほど増員価値が高い（2人時は最優先・pubBonus込みでビルド系に勝つ）
-      const fillBase = workerCount <= 2 ? 135 : (workerCount <= 3 ? 100 : 80)
+      const fillBase = workerCount <= 2 ? w.fillWorkers2 : (workerCount <= 3 ? w.fillWorkers3 : w.fillWorkers4)
       return fillBase * (1 - (round - 1) / 9)
     }
     case 'add-worker': {
@@ -102,72 +234,74 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
         // 5人目になる場合のみ賃金持続性チェック
         if (workerCount + 1 >= 5 && (player.unpaidWages > 0 || player.money < (workerCount + 1) * wage)) return -Infinity
         // 2人→3人は最優先、4人・5人は段階的に下げる
-        const addBase = workerCount <= 2 ? 130 : (workerCount <= 3 ? 40 : 18)
+        const addBase = workerCount <= 2 ? w.addWorker2 : (workerCount <= 3 ? w.addWorker3 : w.addWorker4)
         return addBase * (1 - (round - 1) / 9)
       }
       // immediate add-worker（専門学校）: 5人目の場合のみ賃金チェック
       if (workerCount + 1 >= 5 && (player.unpaidWages > 0 || player.money < (workerCount + 1) * wage)) return -Infinity
-      return 70
+      return w.addWorkerImmediate
     }
     case 'reveal-pick': {
-      if (round <= 3) return player.hand.length < 5 ? 85 : 65
-      return player.hand.length < 3 ? 70 : 55
+      if (round <= 3) return player.hand.length < 5 ? w.revealPickEarlyFew : w.revealPickEarlyMany
+      return player.hand.length < 3 ? w.revealPickLateFew : w.revealPickLateMany
     }
     case 'discard-draw': {
       if (player.hand.length < effect.discard) return -Infinity
-      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.draw * 2
-      const ddWorkerBonus = (player.workers.length - 1) * 2
-      return effect.draw * (8 + ddWorkerBonus)
+      // R9後半: カードの価値はなく純粋な net draw 枚数 × 2 で評価
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return (effect.draw - effect.discard) * 2
+      const netDraw = effect.draw - effect.discard
+      const ddWorkerBonus = (player.workers.length - 1) * w.discardDrawWorkerMult
+      return netDraw * (w.discardDrawBase + ddWorkerBonus)
     }
     case 'discard-gain': {
       if (player.hand.length < effect.discard || household < effect.gain) return -Infinity
-      // ラウンド9後半: 手札→得点の変換機会がないため、gain そのものを得点価値として評価
+      // ラウンド9後半: 手札は得点にならないので discard コストはゼロ、gain のみ評価
       if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.gain * 3
       const dgWage = ROUND_CARDS[round - 1]?.wage ?? 0
       const dgExpectedWage = player.workers.length * dgWage
       const dgShortfall = Math.max(0, dgExpectedWage - player.money)
       // お金不足時は市場系施設を鉱山より優先するためスコアを引き上げる
-      const dgMultiplier = dgShortfall > 0 ? 2.0 : 0.2
-      return effect.gain * dgMultiplier
+      const dgMultiplier = dgShortfall > 0 ? w.discardGainShortMult : w.discardGainNormalMult
+      // 捨て枚数を機会コストとして差し引く
+      const cardValue = w.drawBase + (player.workers.length - 1) * w.drawWorkerMult
+      return (effect.gain - effect.discard * cardValue) * dgMultiplier
     }
     case 'gain-supply': {
       if (household < effect.n) return -Infinity
       if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.n * 3
-      const gsScore = effect.n * 3
-      return gsScore
+      return effect.n * w.gainSupplyMult
     }
     case 'draw': {
       // ラウンド9後半: 手札を増やしても得点にならないため大幅に減点
       if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.n * 2
-      const drawWorkerBonus = (player.workers.length - 1) * 2
-      const drawBase = effect.n * (7 + drawWorkerBonus)
+      const drawWorkerBonus = (player.workers.length - 1) * w.drawWorkerMult
+      const drawBaseScore = effect.n * (w.drawBase + drawWorkerBonus)
       const availableNow = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
       const hasDrawFactory = player.ownedBuildings.some(b => BUILDING_CARDS[b.name]?.effect.kind === 'discard-draw')
-      const drawScore = (hasDrawFactory && availableNow >= 3) ? drawBase * 1.4 : drawBase
-      return drawScore
+      return (hasDrawFactory && availableNow >= 3) ? drawBaseScore * w.drawFactoryBonus : drawBaseScore
     }
     case 'draw-if-empty': {
       if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return 0
-      const diWorkerBonus = (player.workers.length - 1) * 2
+      const diWorkerBonus = (player.workers.length - 1) * w.drawWorkerMult
       return player.hand.length === 0
-        ? effect.empty * (10 + diWorkerBonus)
-        : effect.normal * (10 + diWorkerBonus)
+        ? effect.empty * (w.drawIfEmptyBase + diWorkerBonus)
+        : effect.normal * (w.drawIfEmptyBase + diWorkerBonus)
     }
     case 'draw-become-start': {
       if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return 2
       // すでにスタートプレイヤーなら SP 効果はゼロ。draw n=1 相当のみ評価
-      if (isStartPlayer) return Math.floor(1 * (7 + (player.workers.length - 1) * 2))
-      return 30
+      if (isStartPlayer) return Math.floor(1 * (w.drawBase + (player.workers.length - 1) * w.drawWorkerMult))
+      return w.drawBecomeStart
     }
-    case 'slash-burn': return 25
+    case 'slash-burn': return w.slashBurn
     case 'draw-consumption':
       // ラウンド9後半: 消費財を増やしても得点にならないため大幅に減点
       if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.n * 2
       // hand>3 でも施設としての価値を反映（discard-gain を常に上回るよう引き上げ）
-      return player.hand.length <= 3 ? effect.n * 16 : effect.n * 12
+      return player.hand.length <= 3 ? effect.n * w.drawConsumptionFew : effect.n * w.drawConsumptionMany
     case 'draw-consumption-to':
       if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return -Infinity
-      return player.hand.length >= effect.target ? -Infinity : (effect.target - player.hand.length) * 4
+      return player.hand.length >= effect.target ? -Infinity : (effect.target - player.hand.length) * w.drawConsumptionToMult
     case 'none': return 5
     default: return 10
   }

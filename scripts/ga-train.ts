@@ -1,0 +1,278 @@
+/**
+ * 遺伝的アルゴリズムで ScoreWeights を最適化するスクリプト。
+ *
+ * 実行方法:
+ *   npx tsx scripts/ga-train.ts [--gen N] [--seeds N]
+ *
+ * オプション:
+ *   --gen N    世代数（デフォルト: 100）
+ *   --seeds N  1世代あたりの評価シード数（デフォルト: 10）
+ *
+ * 設計:
+ *   - 4人全CPU戦、プレイヤー0 が候補個体・プレイヤー1-3 がデフォルト重みの greedy
+ *   - 固定シードを世代ごとに更新して評価（同一世代内は全個体が同じシードで比較）
+ *   - 適応度: 1位=2点、2位=1点、3-4位=0点 の合計（seeds分）
+ *   - 単調制約: fillWorkers2≥3≥4, addWorker2≥3≥4, drawConsumptionFew≥Many を個体修正で強制
+ */
+
+import { createGame } from '../src/game/init.ts'
+import { processCpuTurns } from '../src/game/turns.ts'
+import { calculateScores } from '../src/game/round.ts'
+import {
+  DEFAULT_WEIGHTS,
+  WEIGHT_BOUNDS,
+  setPlayerWeights,
+  clearPlayerWeights,
+  type ScoreWeights,
+} from '../src/game/cpu-scoring.ts'
+import { makeSeed } from '../src/game/random.ts'
+
+// ---- コマンドライン引数のパース ----
+function parseArgs(): { generations: number; seedsPerGen: number } {
+  const args = process.argv.slice(2)
+  let generations = 100
+  let seedsPerGen = 10
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--gen' && args[i + 1]) {
+      const v = parseInt(args[i + 1])
+      if (!isNaN(v) && v > 0) generations = v
+      i++
+    } else if (args[i] === '--seeds' && args[i + 1]) {
+      const v = parseInt(args[i + 1])
+      if (!isNaN(v) && v > 0) seedsPerGen = v
+      i++
+    }
+  }
+  return { generations, seedsPerGen }
+}
+
+// ---- GA ハイパーパラメータ ----
+const POP_SIZE       = 30    // 集団サイズ
+const TOURNAMENT_K   = 3     // トーナメント選択のサイズ
+const CROSSOVER_RATE = 0.7   // 交叉確率
+const MUTATION_SIGMA = 0.08  // 突然変異の標準偏差（遺伝子範囲に対する割合）
+const ELITE_COUNT    = 2     // エリート保存数
+
+// ---- 型 ----
+type Gene = keyof ScoreWeights
+const GENES = Object.keys(DEFAULT_WEIGHTS) as Gene[]
+
+// ---- 個体のクランプと単調制約修正 ----
+function repair(w: ScoreWeights): ScoreWeights {
+  const result = { ...w }
+
+  // 各遺伝子を範囲内にクランプ
+  for (const key of GENES) {
+    const [lo, hi] = WEIGHT_BOUNDS[key]
+    result[key] = Math.max(lo, Math.min(hi, result[key])) as never
+  }
+
+  // 単調制約: fillWorkers2 ≥ fillWorkers3 ≥ fillWorkers4
+  result.fillWorkers3 = Math.min(result.fillWorkers3, result.fillWorkers2)
+  result.fillWorkers4 = Math.min(result.fillWorkers4, result.fillWorkers3)
+
+  // 単調制約: addWorker2 ≥ addWorker3 ≥ addWorker4
+  result.addWorker3 = Math.min(result.addWorker3, result.addWorker2)
+  result.addWorker4 = Math.min(result.addWorker4, result.addWorker3)
+
+  // 単調制約: drawConsumptionFew ≥ drawConsumptionMany
+  result.drawConsumptionMany = Math.min(result.drawConsumptionMany, result.drawConsumptionFew)
+
+  return result
+}
+
+// ---- 個体生成（DEFAULT_WEIGHTS にガウスノイズを加えた初期集団） ----
+function randomIndividual(): ScoreWeights {
+  const w = { ...DEFAULT_WEIGHTS }
+  for (const key of GENES) {
+    const [lo, hi] = WEIGHT_BOUNDS[key]
+    const range = hi - lo
+    const noise = (Math.random() * 2 - 1) * range * 0.3
+    ;(w as Record<string, number>)[key] = w[key] + noise
+  }
+  return repair(w)
+}
+
+// ---- 突然変異 ----
+function mutate(w: ScoreWeights): ScoreWeights {
+  const result = { ...w }
+  for (const key of GENES) {
+    const [lo, hi] = WEIGHT_BOUNDS[key]
+    const range = hi - lo
+    const noise = randn() * range * MUTATION_SIGMA
+    ;(result as Record<string, number>)[key] = result[key] + noise
+  }
+  return repair(result)
+}
+
+// ---- 一様交叉 ----
+function crossover(a: ScoreWeights, b: ScoreWeights): ScoreWeights {
+  const child = { ...a }
+  for (const key of GENES) {
+    if (Math.random() < 0.5) {
+      ;(child as Record<string, number>)[key] = b[key]
+    }
+  }
+  return repair(child)
+}
+
+// ---- 標準正規分布（Box-Muller法） ----
+function randn(): number {
+  const u = 1 - Math.random()
+  const v = 1 - Math.random()
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
+}
+
+// ---- 1試合シミュレーション（プレイヤー0が候補個体、1-3がデフォルト） ----
+function runGame(weights: ScoreWeights, seed: number): number[] {
+  setPlayerWeights(0, weights)
+  try {
+    let state = createGame({
+      humanName: '',
+      cpuCount: 4,
+      cpuOnly: true,
+      seed,
+      cpuStrategies: ['greedy', 'greedy', 'greedy', 'greedy'],
+    })
+    state = processCpuTurns(state)
+    const scores = calculateScores(state)
+    return scores
+      .sort((a, b) => a.playerId - b.playerId)
+      .map(s => s.total)
+  } finally {
+    clearPlayerWeights()
+  }
+}
+
+// ---- 適応度評価（固定シードセットで複数試合） ----
+function evaluate(weights: ScoreWeights, seeds: number[]): number {
+  let fitness = 0
+  for (const seed of seeds) {
+    const totals = runGame(weights, seed)
+    // プレイヤー0の順位を求める（0-indexed: 0=1位）
+    const myScore = totals[0]
+    const rank = totals.filter(s => s > myScore).length  // 自分より高いスコアの数
+    if (rank === 0) fitness += 2   // 1位
+    else if (rank === 1) fitness += 1  // 2位
+  }
+  return fitness
+}
+
+// ---- トーナメント選択 ----
+function tournament(pop: ScoreWeights[], fitnesses: number[]): ScoreWeights {
+  let best = Math.floor(Math.random() * pop.length)
+  for (let i = 1; i < TOURNAMENT_K; i++) {
+    const challenger = Math.floor(Math.random() * pop.length)
+    if (fitnesses[challenger] > fitnesses[best]) best = challenger
+  }
+  return pop[best]
+}
+
+// ---- 結果フォーマット ----
+function formatDiff(w: ScoreWeights): string {
+  const lines: string[] = []
+  for (const key of GENES) {
+    const def = DEFAULT_WEIGHTS[key]
+    const cur = w[key]
+    const diff = cur - def
+    const pct = def !== 0 ? ((diff / def) * 100).toFixed(1) : '---'
+    lines.push(`  ${key.padEnd(24)} ${String(cur.toFixed(2)).padStart(8)}  (default: ${String(def).padStart(6)}, ${diff >= 0 ? '+' : ''}${pct}%)`)
+  }
+  return lines.join('\n')
+}
+
+// ---- メインループ ----
+async function main() {
+  const { generations, seedsPerGen } = parseArgs()
+  const maxFitness = seedsPerGen * 2
+
+  console.log(`GA開始: 集団${POP_SIZE}個体 × ${generations}世代, シード${seedsPerGen}本/世代`)
+  console.log(`遺伝子数: ${GENES.length}`)
+  console.log()
+
+  // 初期集団（DEFAULT_WEIGHTSを1個体として含める）
+  let population: ScoreWeights[] = [
+    { ...DEFAULT_WEIGHTS },
+    ...Array.from({ length: POP_SIZE - 1 }, randomIndividual),
+  ]
+
+  let bestFitness = -Infinity
+  let bestWeights = { ...DEFAULT_WEIGHTS }
+  const startTime = Date.now()
+
+  for (let gen = 0; gen < generations; gen++) {
+    // 世代ごとに固定シードセットを生成
+    const seeds = Array.from({ length: seedsPerGen }, () => makeSeed())
+
+    // 全個体を評価
+    const fitnesses = population.map(w => evaluate(w, seeds))
+    const maxFit = Math.max(...fitnesses)
+    const avgFit = fitnesses.reduce((a, b) => a + b, 0) / fitnesses.length
+    const bestIdx = fitnesses.indexOf(maxFit)
+
+    if (maxFit > bestFitness) {
+      bestFitness = maxFit
+      bestWeights = { ...population[bestIdx] }
+      console.log(`★ Gen ${String(gen + 1).padStart(3)}: 最良 ${maxFit}/${maxFitness} 平均 ${avgFit.toFixed(2)} [更新]`)
+    } else if ((gen + 1) % 10 === 0) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(0)
+      console.log(`  Gen ${String(gen + 1).padStart(3)}: 最良 ${maxFit}/${maxFitness} 平均 ${avgFit.toFixed(2)} (${elapsed}s)`)
+    }
+
+    // エリート保存
+    const sortedIdx = fitnesses
+      .map((f, i) => ({ f, i }))
+      .sort((a, b) => b.f - a.f)
+      .map(x => x.i)
+    const elites = sortedIdx.slice(0, ELITE_COUNT).map(i => population[i])
+
+    // 次世代生成
+    const nextPop: ScoreWeights[] = [...elites]
+    while (nextPop.length < POP_SIZE) {
+      const parent1 = tournament(population, fitnesses)
+      let child: ScoreWeights
+      if (Math.random() < CROSSOVER_RATE) {
+        const parent2 = tournament(population, fitnesses)
+        child = crossover(parent1, parent2)
+      } else {
+        child = { ...parent1 }
+      }
+      nextPop.push(mutate(child))
+    }
+    population = nextPop
+  }
+
+  // 最終評価（シードを増やして精度を上げる）
+  const finalSeedCount = Math.max(30, seedsPerGen * 2)
+  const finalSeeds = Array.from({ length: finalSeedCount }, () => makeSeed())
+  const finalFitness = evaluate(bestWeights, finalSeeds)
+  const defaultFitness = evaluate({ ...DEFAULT_WEIGHTS }, finalSeeds)
+  const finalMax = finalSeedCount * 2
+
+  console.log()
+  console.log('='.repeat(60))
+  console.log('GA完了')
+  console.log('='.repeat(60))
+  console.log(`最終評価（${finalSeedCount}シード）:`)
+  console.log(`  候補個体:           ${finalFitness}/${finalMax} (${(finalFitness / finalMax * 100).toFixed(1)}%)`)
+  console.log(`  デフォルト重み:     ${defaultFitness}/${finalMax} (${(defaultFitness / finalMax * 100).toFixed(1)}%)`)
+  console.log()
+  console.log('最適化後の重み（DEFAULT_WEIGHTSとの差分）:')
+  console.log(formatDiff(bestWeights))
+  console.log()
+  console.log('TypeScript定数として貼り付け用:')
+  console.log('export const OPTIMIZED_WEIGHTS: ScoreWeights = {')
+  for (const key of GENES) {
+    console.log(`  ${key.padEnd(24)}: ${bestWeights[key].toFixed(3)},`)
+  }
+  console.log('}')
+
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+  console.log()
+  console.log(`実行時間: ${elapsed}秒`)
+}
+
+main().catch(err => {
+  console.error(err)
+  process.exit(1)
+})

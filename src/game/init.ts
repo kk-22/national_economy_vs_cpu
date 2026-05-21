@@ -6,7 +6,7 @@ import type { GameState, GameConfig, Player, BuildingCard } from './types'
 
 export function createGame(config: GameConfig): GameState {
   const playerCount = config.cpuOnly ? config.cpuCount : 1 + config.cpuCount
-  const seed = makeSeed()
+  const seed = config.seed ?? makeSeed()
 
   let state: GameState = {
     round: 1,
