@@ -190,7 +190,8 @@ describe('greedy: 残り1ワーカー・建設か市場か', () => {
 
 describe('greedy: 残り2ワーカー・建設か既存施設使用か', () => {
   test('money が賃金以上なら大工で建物を建てる', () => {
-    // money=8 >= expectedWage=4 → build は -Infinity にならない（大工スコア≈142）
+    // money=8 >= expectedWage=4 → build は -Infinity にならない
+    // 大工のみ選択肢にある状況で build を選ぶことを確認
     const cpu = makePlayer({
       workers: [makeWorker(0), makeWorker(0)],
       hand: [makeBuildingCard('工場'), makeConsumptionCard(), makeConsumptionCard()],
@@ -200,7 +201,6 @@ describe('greedy: 残り2ワーカー・建設か既存施設使用か', () => {
       round: 1,
       publicWorkplaces: [
         makePublicWorkplace('大工', { kind: 'build', discount: 0, drawAfter: 0 }),
-        makePublicWorkplace('露店', { kind: 'discard-gain', discard: 1, gain: 6 }),
       ],
     })
 
@@ -256,7 +256,6 @@ describe('greedy: 残り2ワーカー・建設か既存施設使用か', () => {
       buildingDeck: [],  // 空 → draw 時は消費財が生成される
       publicWorkplaces: [
         makePublicWorkplace('大工', { kind: 'build', discount: 0, drawAfter: 0 }),
-        makePublicWorkplace('露店', { kind: 'discard-gain', discard: 1, gain: 6 }),
       ],
     })
 
@@ -351,11 +350,10 @@ describe('greedy: 建設対象外の建物を建設しない', () => {
 // ============================================================
 //
 // 期待する優先度（右＝より優先）:
-//   露店 ＜ 万博
-//   ＜ 自分の場の低コスト施設
-//   ＜ 一般職場の低コスト施設
-//   ＜ 自分の場の高コスト施設
-//   ＜ 一般職場の高コスト施設
+//   露店 ＜ 自分の場の農場（hand多め）
+//   ＜ 一般職場の農場（同名ブロック優先）
+//   ＜ 万博
+//   ＜ 自分の場の高コスト施設（製鉄所 owned）
 //
 // ※ スコアの具体値には依存せず大小比較のみ検証する。
 //   「AよりBを選んだ」= B が available な状況で CPU が B を選択したことで確認。
@@ -388,8 +386,9 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
     expect(usedPublicWorkplace(state, result)).toBe('万博')
   })
 
-  test('discard-gain より自分の場の施設を優先する（万博 < 農場 owned）', () => {
-    // 最大 gain の万博があっても、自分の場の農場(draw-consumption)を先に使う
+  test('discard-gain より自分の場の施設を優先する（露店 < 農場 owned）', () => {
+    // 露店(discard-gain)があっても、自分の場の農場(draw-consumption)を先に使う
+    // ※ 万博(gain=30)は農場より高スコアになるため露店で比較する
     const cpu = makePlayer({
       workers: [makeWorker(0), makeWorker(0)],
       hand: hand5(),
@@ -398,7 +397,7 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
     })
     const state = makeState([cpu, makeHumanGuard()], {
       publicWorkplaces: [
-        makePublicWorkplace('万博', { kind: 'discard-gain', discard: 5, gain: 30 }),
+        makePublicWorkplace('露店', { kind: 'discard-gain', discard: 1, gain: 6 }),
       ],
     })
     const result = cpuOneTurnStep(state)
