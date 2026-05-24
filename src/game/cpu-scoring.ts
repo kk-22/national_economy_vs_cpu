@@ -43,6 +43,16 @@ export interface ScoreWeights {
   pubBonus: number
   drawCostMult: number
   drawPubExtra: number
+  r9LateThresholdFrac: number
+  r9DrawMult: number
+  r9DiscardDrawMult: number
+  r9GainMult: number
+  r9DrawConsumptionMult: number
+  r9DrawIfEmptyScore: number
+  r9DrawBecomeStartScore: number
+  drawFactoryMinWorkers: number
+  noneScore: number
+  defaultScore: number
 }
 
 export const DEFAULT_WEIGHTS: ScoreWeights = {
@@ -81,6 +91,16 @@ export const DEFAULT_WEIGHTS: ScoreWeights = {
   pubBonus:               1.755,
   drawCostMult:           0.224,
   drawPubExtra:           0.018,
+  r9LateThresholdFrac:    0.500,
+  r9DrawMult:             2.000,
+  r9DiscardDrawMult:      2.000,
+  r9GainMult:             3.000,
+  r9DrawConsumptionMult:  2.000,
+  r9DrawIfEmptyScore:     0.000,
+  r9DrawBecomeStartScore: 2.000,
+  drawFactoryMinWorkers:  3.000,
+  noneScore:              5.000,
+  defaultScore:           10.000,
 }
 
 export const WEIGHT_BOUNDS: Record<keyof ScoreWeights, [number, number]> = {
@@ -119,6 +139,16 @@ export const WEIGHT_BOUNDS: Record<keyof ScoreWeights, [number, number]> = {
   pubBonus:               [1.0, 2.5],
   drawCostMult:           [0, 1.0],
   drawPubExtra:           [0, 0.5],
+  r9LateThresholdFrac:    [0.1, 1.0],
+  r9DrawMult:             [0, 8],
+  r9DiscardDrawMult:      [0, 8],
+  r9GainMult:             [0, 10],
+  r9DrawConsumptionMult:  [0, 8],
+  r9DrawIfEmptyScore:     [0, 15],
+  r9DrawBecomeStartScore: [0, 10],
+  drawFactoryMinWorkers:  [1, 5],
+  noneScore:              [0, 20],
+  defaultScore:           [0, 20],
 }
 
 // プレイヤー別重みストア（GA 用）
@@ -247,8 +277,8 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
     }
     case 'discard-draw': {
       if (player.hand.length < effect.discard) return -Infinity
-      // R9後半: カードの価値はなく純粋な net draw 枚数 × 2 で評価
-      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return (effect.draw - effect.discard) * 2
+      // R9後半: カードの価値はなく純粋な net draw 枚数で評価
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return (effect.draw - effect.discard) * w.r9DiscardDrawMult
       const netDraw = effect.draw - effect.discard
       const ddWorkerBonus = (player.workers.length - 1) * w.discardDrawWorkerMult
       return netDraw * (w.discardDrawBase + ddWorkerBonus)
@@ -256,7 +286,7 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
     case 'discard-gain': {
       if (player.hand.length < effect.discard || household < effect.gain) return -Infinity
       // ラウンド9後半: 手札は得点にならないので discard コストはゼロ、gain のみ評価
-      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.gain * 3
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return effect.gain * w.r9GainMult
       const dgWage = ROUND_CARDS[round - 1]?.wage ?? 0
       const dgExpectedWage = player.workers.length * dgWage
       const dgShortfall = Math.max(0, dgExpectedWage - player.money)
@@ -268,27 +298,27 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
     }
     case 'gain-supply': {
       if (household < effect.n) return -Infinity
-      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.n * 3
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return effect.n * w.r9GainMult
       return effect.n * w.gainSupplyMult
     }
     case 'draw': {
       // ラウンド9後半: 手札を増やしても得点にならないため大幅に減点
-      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.n * 2
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return effect.n * w.r9DrawMult
       const drawWorkerBonus = (player.workers.length - 1) * w.drawWorkerMult
       const drawBaseScore = effect.n * (w.drawBase + drawWorkerBonus)
       const availableNow = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
       const hasDrawFactory = player.ownedBuildings.some(b => BUILDING_CARDS[b.name]?.effect.kind === 'discard-draw')
-      return (hasDrawFactory && availableNow >= 3) ? drawBaseScore * w.drawFactoryBonus : drawBaseScore
+      return (hasDrawFactory && availableNow >= Math.round(w.drawFactoryMinWorkers)) ? drawBaseScore * w.drawFactoryBonus : drawBaseScore
     }
     case 'draw-if-empty': {
-      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return 0
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return w.r9DrawIfEmptyScore
       const diWorkerBonus = (player.workers.length - 1) * w.drawWorkerMult
       return player.hand.length === 0
         ? effect.empty * (w.drawIfEmptyBase + diWorkerBonus)
         : effect.normal * (w.drawIfEmptyBase + diWorkerBonus)
     }
     case 'draw-become-start': {
-      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return 2
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return w.r9DrawBecomeStartScore
       // すでにスタートプレイヤーなら SP 効果はゼロ。draw n=1 相当のみ評価
       if (isStartPlayer) return Math.floor(1 * (w.drawBase + (player.workers.length - 1) * w.drawWorkerMult))
       return w.drawBecomeStart
@@ -296,14 +326,14 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
     case 'slash-burn': return w.slashBurn
     case 'draw-consumption':
       // ラウンド9後半: 消費財を増やしても得点にならないため大幅に減点
-      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return effect.n * 2
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return effect.n * w.r9DrawConsumptionMult
       // hand>3 でも施設としての価値を反映（discard-gain を常に上回るよう引き上げ）
       return player.hand.length <= 3 ? effect.n * w.drawConsumptionFew : effect.n * w.drawConsumptionMany
     case 'draw-consumption-to':
-      if (round === 9 && availWorkers <= Math.floor(player.workers.length / 2)) return -Infinity
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return -Infinity
       return player.hand.length >= effect.target ? -Infinity : (effect.target - player.hand.length) * w.drawConsumptionToMult
-    case 'none': return 5
-    default: return 10
+    case 'none': return w.noneScore
+    default: return w.defaultScore
   }
 }
 
@@ -337,26 +367,27 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
     getAvailableOwnedBuildings(state, playerId),
   )
   const avail = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
-  const pubBonus = avail >= 2 ? 1.3 : 1.0
+  const weights = getPlayerWeights(playerId)
+  const pubBonus = avail >= 2 ? weights.pubBonus : 1.0
   const drawKinds = new Set(['draw', 'discard-draw', 'draw-consumption', 'draw-if-empty'])
   const isStartPlayer = state.players[state.startPlayerIndex]?.id === player.id
 
   const scored: Array<{ option: ActionOption; score: number; name: string }> = []
 
   for (const wp of pubOptions) {
-    const base = scoreEffect(wp.effect, player, state.household, state.round, avail, isStartPlayer)
+    const base = scoreEffect(wp.effect, player, state.household, state.round, avail, isStartPlayer, weights)
     const soldDef = BUILDING_CARDS[wp.name]
     const sc = (soldDef && drawKinds.has(wp.effect.kind))
-      ? base * (1.1 + soldDef.cost * 0.2)
+      ? base * (1.0 + weights.drawPubExtra + soldDef.cost * weights.drawCostMult)
       : base * pubBonus
     scored.push({ option: { type: 'pub', id: wp.id }, score: sc, name: wp.name })
   }
   for (const bld of bldOptions) {
     const def = BUILDING_CARDS[bld.name]
     if (!def) continue
-    const base = scoreEffect(def.effect, player, state.household, state.round, avail, isStartPlayer)
+    const base = scoreEffect(def.effect, player, state.household, state.round, avail, isStartPlayer, weights)
     const sc = drawKinds.has(def.effect.kind)
-      ? base * (1.0 + def.cost * 0.2)
+      ? base * (1.0 + def.cost * weights.drawCostMult)
       : base * pubBonus
     scored.push({ option: { type: 'bld', id: bld.id }, score: sc, name: bld.name })
   }
