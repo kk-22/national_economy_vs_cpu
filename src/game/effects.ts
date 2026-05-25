@@ -1,5 +1,5 @@
-import { getPlayer, drawCards, drawConsumption, shuffle, nextId, updatePlayer, workerCount, getMaxWorkers, addLog } from './primitives'
-import { getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards, getNoSellBuildableCards, getFreeBuildableCards } from './build'
+import { getPlayer, drawCards, drawConsumption, shuffle, nextId, updatePlayer, workerCount, getMaxWorkers, addLog, ALL_BUILDING_CARDS } from './primitives'
+import { getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards, getNoSellBuildableCards, getFreeBuildableCards, getConstructionDiscount } from './build'
 import { cpuRevealPick, cpuDiscardDraw, cpuDiscardGain, cpuBuild, cpuBuildFarmFree, cpuBuildDouble, cpuBuildNoSell, cpuBuildFree, cpuBuildTwo } from './cpu'
 import type { GameState, GameEffect, Worker, HandCard, BuildingCard, CpuStrategy } from './types'
 
@@ -203,7 +203,19 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
 
     case 'build-two': {
       if (isCpu) return cpuBuildTwo(state, playerId, strategy)
-      if (player.hand.filter(c => c.kind === 'building').length < 2) return state
+      const buildings = player.hand.filter(c => c.kind === 'building')
+      if (buildings.length < 2) return state
+      // 支払い可能なペアが存在しない場合は何もしない
+      const hasPair = buildings.some((c1, i) =>
+        buildings.slice(i + 1).some(c2 => {
+          if (c1.kind !== 'building' || c2.kind !== 'building') return false
+          const d1 = getConstructionDiscount(state, playerId, c1.name)
+          const d2 = getConstructionDiscount(state, playerId, c2.name)
+          const totalCost = Math.max(0, (ALL_BUILDING_CARDS[c1.name]?.cost ?? 0) - d1) + Math.max(0, (ALL_BUILDING_CARDS[c2.name]?.cost ?? 0) - d2)
+          return player.hand.length - 2 >= totalCost
+        })
+      )
+      if (!hasPair) return state
       return { ...state, pendingAction: { kind: 'choose-build-two-first', playerId } }
     }
 

@@ -13,6 +13,7 @@ import {
 import {
   selectBuildTarget, selectDoubleFirst, selectDoubleSecond,
   cancelBuildChoice, cancelBuildPayment, cancelDoubleSecond, cancelDoublePayment,
+  cancelBuildTwoPayment,
   getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards,
   getNoSellBuildableCards, getFreeBuildableCards,
 } from '../game/build'
@@ -565,6 +566,12 @@ export function useGame() {
     }
   }
 
+  function clickCancelBuildTwoPayment() {
+    if (!state.game) return
+    paymentSelectedIds.value = []
+    state.game = cancelBuildTwoPayment(state.game)
+  }
+
   function clickBuildTwoPayment(cardId: string) {
     if (!state.game) return
     const pa = state.game.pendingAction
@@ -746,6 +753,7 @@ export function useGame() {
     clickSellOption,
     clickBuildTwoConfirm,
     clickBuildTwoPayment,
+    clickCancelBuildTwoPayment,
     clickFreeBuildCard,
     clickNoSellBuildCard,
     undo,

@@ -390,7 +390,7 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
       return player.hand.length <= 3 ? n * w.drawConsumptionFew : n * w.drawConsumptionMany
     }
     case 'discard-draw-min-hand': {
-      if (player.hand.length <= effect.minHand) return -Infinity
+      if (player.hand.length < effect.minHand) return -Infinity
       if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return (effect.draw - effect.discard) * w.r9DiscardDrawMult
       return (effect.draw - effect.discard) * (w.discardDrawBase + (player.workers.length - 1) * w.discardDrawWorkerMult)
     }

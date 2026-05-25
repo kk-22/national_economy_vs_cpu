@@ -174,16 +174,28 @@ export function selectDoubleSecond(state: GameState, cardId: string): GameState 
 export function cancelBuildChoice(state: GameState): GameState {
   const pa = state.pendingAction
   if (!pa) return state
-  if (pa.kind !== 'choose-build-target' && pa.kind !== 'choose-farm-build' && pa.kind !== 'choose-double-first') return state
+  if (pa.kind !== 'choose-build-target' && pa.kind !== 'choose-farm-build' && pa.kind !== 'choose-double-first'
+    && pa.kind !== 'choose-build-two-first' && pa.kind !== 'choose-free-build' && pa.kind !== 'choose-no-sell-build') return state
   const player = getPlayer(state, pa.playerId)
-  let s = undoWorkerPlacement(state, pa.playerId, ['build', 'build-farm-free', 'build-double'], pa.sourceId)
+  let s = undoWorkerPlacement(state, pa.playerId, ['build', 'build-farm-free', 'build-double', 'build-two', 'build-free-if-cheap', 'build-no-sell'], pa.sourceId)
   return addLog(s, `${player.name}: ${pa.sourceName ?? ''} → キャンセル`)
 }
 
 export function cancelBuildPayment(state: GameState): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-build-payment') return state
+  // 建築会社（build-no-sell）経由の場合は choose-no-sell-build へ戻る
+  const sourceEffect = action.sourceName ? ALL_BUILDING_CARDS[action.sourceName]?.effect : undefined
+  if (sourceEffect?.kind === 'build-no-sell') {
+    return { ...state, pendingAction: { kind: 'choose-no-sell-build', playerId: action.playerId, drawAfter: sourceEffect.drawAfter, sourceName: action.sourceName, sourceId: action.sourceId } }
+  }
   return { ...state, pendingAction: { kind: 'choose-build-target', playerId: action.playerId, discount: action.discount, drawAfter: action.drawAfter, sourceName: action.sourceName, sourceId: action.sourceId } }
+}
+
+export function cancelBuildTwoPayment(state: GameState): GameState {
+  const action = state.pendingAction
+  if (!action || action.kind !== 'choose-build-two-payment') return state
+  return { ...state, pendingAction: { kind: 'choose-build-two-first', playerId: action.playerId, sourceName: action.sourceName, sourceId: action.sourceId } }
 }
 
 export function cancelDoubleSecond(state: GameState): GameState {

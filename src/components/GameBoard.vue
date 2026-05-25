@@ -37,7 +37,7 @@ const {
   clickBuildTarget, clickPaymentCard, clickCancelBuildChoice, clickCancelBuildPayment,
   clickCancelDoublePayment, clickDoubleConfirm,
   clickDiscardCard, clickCancelDiscardChoice, clickRevealedCard, clickHandLimitCard, clickToggleSellBuilding, clickSellOption,
-  clickBuildTwoConfirm, clickBuildTwoPayment, clickFreeBuildCard, clickNoSellBuildCard,
+  clickBuildTwoConfirm, clickBuildTwoPayment, clickCancelBuildTwoPayment, clickFreeBuildCard, clickNoSellBuildCard,
   undo, redo, canUndo, canRedo, cpuPaused,
 } = useGame()
 
@@ -700,6 +700,7 @@ function cardTooltip(name: string): string {
                     <HCard :card="card" />
                   </button>
                 </div>
+                <button class="btn-cancel" @click="clickCancelBuildChoice">キャンセル</button>
               </template>
 
               <!-- 地球建設: 支払い選択 -->
@@ -723,6 +724,7 @@ function cardTooltip(name: string): string {
                     <HCard :card="card" />
                   </button>
                 </div>
+                <button class="btn-cancel" @click="clickCancelBuildTwoPayment">戻る</button>
               </template>
 
               <!-- プレハブ工務店: コスト以下の建物を無料建設 -->
@@ -740,6 +742,7 @@ function cardTooltip(name: string): string {
                     <HCard :card="card" />
                   </button>
                 </div>
+                <button class="btn-cancel" @click="clickCancelBuildChoice">キャンセル</button>
               </template>
 
               <!-- 建築会社: 売却禁止建物を選択して建設 -->
@@ -757,6 +760,7 @@ function cardTooltip(name: string): string {
                     <HCard :card="card" />
                   </button>
                 </div>
+                <button class="btn-cancel" @click="clickCancelBuildChoice">キャンセル</button>
               </template>
 
             </div>

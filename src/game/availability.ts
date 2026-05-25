@@ -62,7 +62,20 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity, 
     case 'build-free-if-cheap':      return player.hand.some(c =>
       c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.assetValue ?? Infinity) <= effect.maxAsset
     )
-    case 'build-two':                return player.hand.filter(c => c.kind === 'building').length >= 2
+    case 'build-two': {
+      const buildings = player.hand.filter(c => c.kind === 'building')
+      if (buildings.length < 2) return false
+      // 支払い可能なペアが1つ以上存在するか確認
+      return buildings.some((c1, i) =>
+        buildings.slice(i + 1).some(c2 => {
+          if (c1.kind !== 'building' || c2.kind !== 'building') return false
+          const d1 = state ? getConstructionDiscount(state, player.id, c1.name) : 0
+          const d2 = state ? getConstructionDiscount(state, player.id, c2.name) : 0
+          const totalCost = Math.max(0, (ALL_BUILDING_CARDS[c1.name]?.cost ?? 0) - d1) + Math.max(0, (ALL_BUILDING_CARDS[c2.name]?.cost ?? 0) - d2)
+          return player.hand.length - 2 >= totalCost
+        })
+      )
+    }
     case 'build-gain-vp':            return player.hand.some(c => {
       if (c.kind !== 'building') return false
       const def = ALL_BUILDING_CARDS[c.name]

@@ -318,14 +318,16 @@ export function cpuBuildTwo(state: GameState, playerId: number, strategy: CpuStr
   let s = state
 
   if (strategy === 'greedy' || strategy === 'beam') {
-    // assetValue最大の2枚を選ぶ（合計コストが払えるか確認）
+    // assetValue最大の2枚を選ぶ（合計コストが払えるか確認、割引を考慮）
     const sorted = [...buildings].sort((a, b) => (ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0) - (ALL_BUILDING_CARDS[a.name]?.assetValue ?? 0))
     // 支払い可能な組み合わせを探す
     let found = false
     for (let i = 0; i < sorted.length && !found; i++) {
       for (let j = i + 1; j < sorted.length && !found; j++) {
         const c1 = sorted[i], c2 = sorted[j]
-        const totalCost = (ALL_BUILDING_CARDS[c1.name]?.cost ?? 0) + (ALL_BUILDING_CARDS[c2.name]?.cost ?? 0)
+        const d1 = getConstructionDiscount(state, playerId, c1.name)
+        const d2 = getConstructionDiscount(state, playerId, c2.name)
+        const totalCost = Math.max(0, (ALL_BUILDING_CARDS[c1.name]?.cost ?? 0) - d1) + Math.max(0, (ALL_BUILDING_CARDS[c2.name]?.cost ?? 0) - d2)
         if (buildings.length - 2 >= totalCost) {
           first = c1; second = c2; found = true
         }
@@ -341,10 +343,14 @@ export function cpuBuildTwo(state: GameState, playerId: number, strategy: CpuStr
     if (i2 >= i1) i2++
     first = buildings[i1]
     second = buildings[i2]
-    const totalCost = (ALL_BUILDING_CARDS[first.name]?.cost ?? 0) + (ALL_BUILDING_CARDS[second.name]?.cost ?? 0)
+    const d1 = getConstructionDiscount(state, playerId, first.name)
+    const d2 = getConstructionDiscount(state, playerId, second.name)
+    const totalCost = Math.max(0, (ALL_BUILDING_CARDS[first.name]?.cost ?? 0) - d1) + Math.max(0, (ALL_BUILDING_CARDS[second.name]?.cost ?? 0) - d2)
     if (buildings.length - 2 < totalCost) return state
   }
-  const totalCost = (ALL_BUILDING_CARDS[first!.name]?.cost ?? 0) + (ALL_BUILDING_CARDS[second!.name]?.cost ?? 0)
+  const d1Final = getConstructionDiscount(s, playerId, first!.name)
+  const d2Final = getConstructionDiscount(s, playerId, second!.name)
+  const totalCost = Math.max(0, (ALL_BUILDING_CARDS[first!.name]?.cost ?? 0) - d1Final) + Math.max(0, (ALL_BUILDING_CARDS[second!.name]?.cost ?? 0) - d2Final)
   const payment = player.hand.filter(c => c.id !== first!.id && c.id !== second!.id).slice(0, totalCost).map(c => c.id)
   ;[s] = constructBuilding(s, playerId, first!.id, payment, 0)
   ;[s] = constructBuilding(s, playerId, second!.id, [], 0)
