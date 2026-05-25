@@ -379,8 +379,8 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
       return gain * w.gainSupplyMult
     }
     case 'draw-if-mine': {
-      const isAtMine = false  // CPU のスコアリング時は配置可否は availability で判定済み
-      if (!isAtMine) return w.defaultScore  // availability 通過済みなら OK として評価
+      // availability 通過済み = 鉱山に配置済みなので、ドロースコアで評価
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return effect.n * w.r9DrawMult
       return effect.n * (w.drawBase + (player.workers.length - 1) * w.drawWorkerMult)
     }
     case 'draw-consumption-if-have': {
@@ -406,7 +406,7 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
     }
     case 'build-free-if-cheap': {
       // プレハブ工務店: 安い建物無料建設
-      const freeable = player.hand.some(c => c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.cost ?? Infinity) <= effect.maxCost)
+      const freeable = player.hand.some(c => c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.assetValue ?? Infinity) <= effect.maxAsset)
       if (!freeable) return -Infinity
       return w.buildFarmFree  // farmFreeと同等の評価
     }

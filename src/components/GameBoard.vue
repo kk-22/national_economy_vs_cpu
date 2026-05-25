@@ -37,7 +37,7 @@ const {
   clickBuildTarget, clickPaymentCard, clickCancelBuildChoice, clickCancelBuildPayment,
   clickCancelDoublePayment, clickDoubleConfirm,
   clickDiscardCard, clickCancelDiscardChoice, clickRevealedCard, clickHandLimitCard, clickToggleSellBuilding, clickSellOption,
-  clickBuildTwoCard, clickBuildTwoPayment, clickFreeBuildCard, clickNoSellBuildCard,
+  clickBuildTwoConfirm, clickBuildTwoPayment, clickFreeBuildCard, clickNoSellBuildCard,
   undo, redo, canUndo, canRedo, cpuPaused,
 } = useGame()
 
@@ -177,6 +177,29 @@ function cancelDoubleSelect() {
   clickCancelBuildChoice()
 }
 
+// ---- 地球建設 2枚同時選択 ----
+const buildTwoSelectedIds = ref<string[]>([])
+
+function clickBuildTwoSelect(cardId: string) {
+  const idx = buildTwoSelectedIds.value.indexOf(cardId)
+  if (idx >= 0) {
+    buildTwoSelectedIds.value.splice(idx, 1)
+    return
+  }
+  if (buildTwoSelectedIds.value.length === 0) {
+    buildTwoSelectedIds.value = [cardId]
+    return
+  }
+  const firstId = buildTwoSelectedIds.value[0]
+  buildTwoSelectedIds.value = []
+  clickBuildTwoConfirm(firstId, cardId)
+}
+
+function handCardName(cardId: string): string {
+  const card = humanPlayer.value?.hand.find(c => c.id === cardId)
+  return card?.kind === 'building' ? card.name : ''
+}
+
 // ---- 建物売却選択 ----
 const sellBuildingError = ref<string | null>(null)
 
@@ -303,38 +326,51 @@ function effectDesc(effect: GameEffect): string {
     case 'draw-consumption-if-have': return `手札に消費財あり→${effect.withConsumption}枚、なし→${effect.without}枚引く`
     case 'gain-per-consumption':     return `手札の消費財1枚につき家計から$${effect.perCard}もらう`
     case 'gain-household':           return `家計から$${effect.net}もらう（家計$${effect.minHousehold}以上必要）`
-    case 'build-free-if-cheap':      return `コスト${effect.maxCost}以下の建物を1棟無料建設`
-    case 'build-two':                return `建物2棟を合計コスト分の手札を払って同時建設`
-    case 'draw-consumption-hold':    return `消費財${effect.n}枚をこの建物の上に置く（次ラウンド開始時に手札へ）`
+    case 'build-free-if-cheap':      return `資産価値${effect.maxAsset}以下の建物を1棟無料建設`
+    case 'build-two':                return `建物2棟を合計コストを支払って同時建設`
+    case 'draw-consumption-hold':    return `消費財${effect.n}枚を次のラウンド開始時に手札に加える`
     case 'discard-draw-min-hand':    return `手札${effect.discard}枚捨てて${effect.draw}枚引く（手札${effect.minHand}枚以下は配置不可）`
-    case 'draw-with-build-discount': return `建物カードを${effect.n}枚引く（所有factory建物数×コスト割引）`
+    case 'draw-with-build-discount': return `建物カードを${effect.n}枚引く\n建設割引：所有する工業マーク建物１つにつき建設コスト-1`
     case 'discard-gain-household-min': return `手札${effect.discard}枚捨てて家計から$${effect.gain}もらう（家計$${effect.minHousehold}以上必要）`
-    case 'build-no-sell':            return `売却禁止建物をコスト分の手札で建設し${effect.drawAfter}枚引く`
+    case 'build-no-sell':            return `売却不可建物をコストを支払って建設し、建物カードを${effect.drawAfter}枚引く`
     case 'p-if-empty-hand':          return `ゲーム終了時、手札0枚なら資産価値+${effect.bonus}`
     case 'p-vp-double':              return `ゲーム終了時、勝利点カードの得点が2倍`
     case 'p-if-own-n-buildings':     return `ゲーム終了時、所有建物${effect.threshold}棟以上なら資産価値+${effect.bonus}`
     case 'p-if-tag-n':               return `ゲーム終了時、${effect.tag === 'farm' ? '農業' : '工業'}建物${effect.threshold}棟以上なら資産価値+${effect.bonus}`
-    case 'p-if-no-sell-n':           return `ゲーム終了時、売却禁止建物${effect.threshold}棟以上なら資産価値+${effect.bonus}`
+    case 'p-if-no-sell-n':           return `ゲーム終了時、売却不可建物${effect.threshold}棟以上なら資産価値+${effect.bonus}`
     case 'p-vp-build-discount':      return `勝利点${effect.vpThreshold}枚以上で建設コスト${effect.discount}割引（建設時判定）`
     case 'none':               return `効果なし`
     default:                   return ''
   }
 }
+function constructionDiscountDesc(name: string): string {
+  const cd = getBuildingDef(name)?.constructionDiscount
+  if (!cd) return ''
+  if (cd.condition === 'own-tag') {
+    const tagLabel = cd.tag === 'farm' ? '農業マーク' : '工業マーク'
+    return `建設割引：${tagLabel}建物を所有していれば建設コスト-${cd.discount}`
+  }
+  if (cd.condition === 'own-vp-min') {
+    return `建設割引：勝利点カード${cd.minVp}枚以上でコスト-${cd.discount}`
+  }
+  return ''
+}
+
 function cardTooltip(name: string): string {
   const d = getBuildingDef(name)
   if (!d) return ''
-  const desc = effectDesc(d.effect)
+  const lines: string[] = [effectDesc(d.effect)]
+  const discountDesc = constructionDiscountDesc(name)
+  if (discountDesc) lines.push(discountDesc)
   const tags: string[] = []
-  if (d.tags.includes('farm')) tags.push('農園マーク')
-  if (d.tags.includes('factory')) tags.push('工場マーク')
+  if (d.tags.includes('farm')) tags.push('農業マーク')
+  if (d.tags.includes('factory')) tags.push('工業マーク')
   const attrs: string[] = []
   if (!d.canSell) attrs.push('売却不可')
   if (!d.isWorkplace) attrs.push('使用不可')
-  const parts: string[] = []
-  if (tags.length > 0) parts.push('タイプ：' + tags.join(' / '))
-  if (attrs.length > 0) parts.push(attrs.join(' / '))
-  if (parts.length === 0) return desc
-  return desc + '\n' + parts.join(' / ')
+  if (tags.length > 0) lines.push('タイプ：' + tags.join(' / '))
+  if (attrs.length > 0) lines.push(attrs.join(' / '))
+  return lines.filter(Boolean).join('\n')
 }
 </script>
 
@@ -388,7 +424,7 @@ function cardTooltip(name: string): string {
                       <span v-if="b.workerHereId !== null" class="bcard-used-label">使用済</span>
                       <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
                       <span class="bcard-name" :style="bcardNameStyle(b.name, true)">{{ b.name }}</span>
-                      <span v-if="b.storedConsumption" class="bcard-stored">消費財{{ b.storedConsumption }}枚</span>
+
                       <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
                     </div>
                   </div>
@@ -632,23 +668,24 @@ function cardTooltip(name: string): string {
                 </div>
               </template>
 
-              <!-- 地球建設: 1棟目・2棟目選択 -->
-              <template v-else-if="pendingAction.kind === 'choose-build-two-first' || pendingAction.kind === 'choose-build-two-second'">
+              <!-- 地球建設: 2棟同時選択 -->
+              <template v-else-if="pendingAction.kind === 'choose-build-two-first'">
                 <div class="hand-label-row">
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">
-                    {{ pendingAction.sourceName }}で2棟同時建設
-                    {{ pendingAction.kind === 'choose-build-two-first' ? '（1棟目を選択）' : '（2棟目を選択）' }}
+                    {{ pendingAction.sourceName }}：建設する建物を2棟選択
+                    ({{ buildTwoSelectedIds.length }}/2)
                   </span>
                 </div>
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
                     :class="['hcard', 'selectable', {
-                      'card-disabled': card.kind !== 'building' || (pendingAction.kind === 'choose-build-two-second' && card.id === pendingAction.firstId)
+                      selected: buildTwoSelectedIds.includes(card.id),
+                      'card-disabled': card.kind !== 'building',
                     }]"
                     @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="tipLeave"
-                    @click="clickBuildTwoCard(card.id)">
+                    @click="clickBuildTwoSelect(card.id)">
                     <HCard :card="card" />
                   </button>
                 </div>
@@ -659,7 +696,7 @@ function cardTooltip(name: string): string {
                 <div class="hand-label-row">
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">
-                    {{ pendingAction.sourceName }}の建設コスト合計{{ pendingAction.totalCost }}枚を選択
+                    {{ handCardName(pendingAction.firstId) }}と{{ handCardName(pendingAction.secondId) }}の建設コスト合計{{ pendingAction.totalCost }}枚を選択
                     ({{ paymentSelected.length }}/{{ pendingAction.totalCost }})
                   </span>
                 </div>
@@ -679,7 +716,7 @@ function cardTooltip(name: string): string {
               <template v-else-if="pendingAction.kind === 'choose-free-build'">
                 <div class="hand-label-row">
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
-                  <span class="pending-title">{{ pendingAction.sourceName }}：コスト{{ pendingAction.maxCost }}以下の建物を無料建設</span>
+                  <span class="pending-title">{{ pendingAction.sourceName }}：資産価値{{ pendingAction.maxAsset }}以下の建物を無料建設</span>
                 </div>
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
@@ -696,7 +733,7 @@ function cardTooltip(name: string): string {
               <template v-else-if="pendingAction.kind === 'choose-no-sell-build'">
                 <div class="hand-label-row">
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
-                  <span class="pending-title">{{ pendingAction.sourceName }}：売却禁止の建物を選択して建設</span>
+                  <span class="pending-title">{{ pendingAction.sourceName }}：売却不可の建物を選択して建設</span>
                 </div>
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
@@ -724,7 +761,7 @@ function cardTooltip(name: string): string {
                       <span v-if="b.workerHereId !== null" class="bcard-used-label">使用済</span>
                       <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
                       <span class="bcard-name" :style="bcardNameStyle(b.name)">{{ b.name }}</span>
-                      <span v-if="b.storedConsumption" class="bcard-stored">消費財{{ b.storedConsumption }}枚</span>
+
                       <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
                     </div>
                   </div>

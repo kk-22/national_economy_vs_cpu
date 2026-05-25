@@ -148,8 +148,14 @@ export function createDebugGame(cpuCount: number = 3, series: GameSeries = 'prog
 
   // シリーズの全建物カードを各プレイヤーの建設済み建物と手札に配置
   const cardDefs = getCardDefs(state)
+  const sortedCardDefs = Object.values(cardDefs).sort((a, b) =>
+    a.cost - b.cost
+    || (a.canSell === b.canSell ? 0 : a.canSell ? -1 : 1)
+    || (a.isWorkplace === b.isWorkplace ? 0 : a.isWorkplace ? -1 : 1)
+    || a.assetValue - b.assetValue
+  )
   for (const p of state.players) {
-    for (const def of Object.values(cardDefs)) {
+    for (const def of sortedCardDefs) {
       let bId: string
       ;[state, bId] = genId(state, 'b-')
       state = updatePlayer(state, p.id, pl => ({
@@ -189,9 +195,7 @@ export function createDebugGame(cpuCount: number = 3, series: GameSeries = 'prog
   }
 
   // シリーズの売却可能な全建物カードを公共職場として追加
-  const canSellDefs = Object.values(cardDefs)
-    .filter(d => d.canSell)
-    .sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name))
+  const canSellDefs = sortedCardDefs.filter(d => d.canSell)
   for (const def of canSellDefs) {
     let wpId: string
     ;[state, wpId] = genId(state, 'wp-dbg-bld-')

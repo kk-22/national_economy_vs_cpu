@@ -2,8 +2,9 @@ export type Tag = 'farm' | 'factory'
 
 // 建物の建設コストに対する条件付き割引
 export type ConditionalDiscount =
-  | { condition: 'own-tag'; tag: Tag; discount: number }       // 指定タグの建物を所有していればコスト割引
-  | { condition: 'own-vp-min'; minVp: number; discount: number } // 勝利点カードがminVp枚以上あればコスト割引
+  | { condition: 'own-tag'; tag: Tag; discount: number }                          // 指定タグの建物を1つでも所有していればコスト割引
+  | { condition: 'own-vp-min'; minVp: number; discount: number }                  // 勝利点カードがminVp枚以上あればコスト割引
+  | { condition: 'per-owned-tag'; tag: Tag; discountPerTag: number }              // 指定タグの所有建物1棟につきコスト割引
 
 export type CpuStrategy = 'random' | 'greedy' | 'beam' | 'mcts' | 'disruptive'
 
@@ -53,11 +54,11 @@ export type GameEffect =
   | { kind: 'draw-consumption-if-have'; withConsumption: number; without: number }
   | { kind: 'gain-per-consumption'; perCard: number }
   | { kind: 'gain-household'; net: number; take: number; minHousehold: number }
-  | { kind: 'build-free-if-cheap'; maxCost: number }
+  | { kind: 'build-free-if-cheap'; maxAsset: number }
   | { kind: 'build-two' }
   | { kind: 'draw-consumption-hold'; n: number }
   | { kind: 'discard-draw-min-hand'; discard: number; draw: number; minHand: number }
-  | { kind: 'draw-with-build-discount'; n: number; discountTag: Tag }
+  | { kind: 'draw-with-build-discount'; n: number }
   | { kind: 'discard-gain-household-min'; discard: number; gain: number; minHousehold: number }
   | { kind: 'p-if-empty-hand'; bonus: number }
   | { kind: 'p-vp-double' }
@@ -131,7 +132,7 @@ export type PendingAction =
   | { kind: 'choose-build-two-first'; playerId: number; sourceName?: string; sourceId?: string }
   | { kind: 'choose-build-two-second'; playerId: number; firstId: string; firstCost: number; sourceName?: string; sourceId?: string }
   | { kind: 'choose-build-two-payment'; playerId: number; firstId: string; secondId: string; totalCost: number; sourceName?: string; sourceId?: string }
-  | { kind: 'choose-free-build'; playerId: number; maxCost: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-free-build'; playerId: number; maxAsset: number; sourceName?: string; sourceId?: string }
   | { kind: 'choose-no-sell-build'; playerId: number; drawAfter: number; sourceName?: string; sourceId?: string }
 
 export type GamePhase = 'placement' | 'game-over'

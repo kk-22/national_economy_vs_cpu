@@ -469,7 +469,7 @@ export function useGame() {
     if (pa.kind === 'choose-double-first' || pa.kind === 'choose-double-second') return getDoubleBuildableFirstCards(state.game, pa.playerId)
     if (pa.kind === 'choose-build-two-first' || pa.kind === 'choose-build-two-second') return state.game.players.find(p => p.id === pa.playerId)?.hand.filter(c => c.kind === 'building') ?? []
     if (pa.kind === 'choose-no-sell-build') return getNoSellBuildableCards(state.game, pa.playerId)
-    if (pa.kind === 'choose-free-build') return getFreeBuildableCards(state.game, pa.playerId, pa.maxCost)
+    if (pa.kind === 'choose-free-build') return getFreeBuildableCards(state.game, pa.playerId, pa.maxAsset)
     return []
   })
 
@@ -533,24 +533,19 @@ export function useGame() {
 
   // ---- メセナ用ペンディングアクション ----
 
-  function clickBuildTwoCard(cardId: string) {
+  function clickBuildTwoConfirm(firstId: string, secondId: string) {
     if (!state.game) return
-    const pa = state.game.pendingAction
-    if (!pa) return
-    if (pa.kind === 'choose-build-two-first') {
-      state.game = selectBuildTwoFirstCard(state.game, cardId)
-    } else if (pa.kind === 'choose-build-two-second') {
-      state.game = selectBuildTwoSecondCard(state.game, cardId)
-      const newPa = state.game.pendingAction
-      if (newPa?.kind === 'choose-build-two-payment') {
-        const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
-        const payable = hand.filter(c => c.id !== newPa.firstId && c.id !== newPa.secondId)
-        if (payable.length === newPa.totalCost) {
-          state.game = confirmBuildTwoCards(state.game, payable.map(c => c.id))
-        } else {
-          paymentSelectedIds.value = payable.filter(c => c.kind === 'consumption')
-            .slice(0, Math.max(0, newPa.totalCost - 1)).map(c => c.id)
-        }
+    state.game = selectBuildTwoFirstCard(state.game, firstId)
+    state.game = selectBuildTwoSecondCard(state.game, secondId)
+    const newPa = state.game.pendingAction
+    if (newPa?.kind === 'choose-build-two-payment') {
+      const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
+      const payable = hand.filter(c => c.id !== newPa.firstId && c.id !== newPa.secondId)
+      if (payable.length === newPa.totalCost) {
+        state.game = confirmBuildTwoCards(state.game, payable.map(c => c.id))
+      } else {
+        paymentSelectedIds.value = payable.filter(c => c.kind === 'consumption')
+          .slice(0, Math.max(0, newPa.totalCost - 1)).map(c => c.id)
       }
     }
   }
@@ -703,7 +698,7 @@ export function useGame() {
     clickHandLimitCard,
     clickToggleSellBuilding,
     clickSellOption,
-    clickBuildTwoCard,
+    clickBuildTwoConfirm,
     clickBuildTwoPayment,
     clickFreeBuildCard,
     clickNoSellBuildCard,

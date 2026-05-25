@@ -20,6 +20,10 @@ export function getConstructionDiscountForPlayer(player: { ownedBuildings: { nam
   if (cd.condition === 'own-vp-min') {
     return player.victoryPoints >= cd.minVp ? cd.discount : 0
   }
+  if (cd.condition === 'per-owned-tag') {
+    const count = player.ownedBuildings.filter(b => ALL_BUILDING_CARDS[b.name]?.tags.includes(cd.tag)).length
+    return count * cd.discountPerTag
+  }
   return 0
 }
 
@@ -280,11 +284,11 @@ export function cpuBuildNoSell(state: GameState, playerId: number, drawAfter: nu
   return s
 }
 
-// プレハブ工務店: 建設コストmaxCost以下の建物を無料建設
-export function cpuBuildFree(state: GameState, playerId: number, maxCost: number, strategy: CpuStrategy = 'random'): GameState {
+// プレハブ工務店: 資産価値maxAsset以下の建物を無料建設
+export function cpuBuildFree(state: GameState, playerId: number, maxAsset: number, strategy: CpuStrategy = 'random'): GameState {
   const player = getPlayer(state, playerId)
   const buildable = player.hand.filter(c =>
-    c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.cost ?? Infinity) <= maxCost
+    c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.assetValue ?? Infinity) <= maxAsset
   ) as (BuildingCard & { kind: 'building' })[]
   if (buildable.length === 0) return state
 

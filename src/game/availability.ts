@@ -60,7 +60,7 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity, 
       return player.hand.length - 1 >= cost
     })
     case 'build-free-if-cheap':      return player.hand.some(c =>
-      c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.cost ?? Infinity) <= effect.maxCost
+      c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.assetValue ?? Infinity) <= effect.maxAsset
     )
     case 'build-two':                return player.hand.filter(c => c.kind === 'building').length >= 2
     case 'build-gain-vp':            return player.hand.some(c => {

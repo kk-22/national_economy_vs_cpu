@@ -196,9 +196,9 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'build-free-if-cheap': {
-      if (isCpu) return cpuBuildFree(state, playerId, effect.maxCost, strategy)
-      if (getFreeBuildableCards(state, playerId, effect.maxCost).length === 0) return state
-      return { ...state, pendingAction: { kind: 'choose-free-build', playerId, maxCost: effect.maxCost } }
+      if (isCpu) return cpuBuildFree(state, playerId, effect.maxAsset, strategy)
+      if (getFreeBuildableCards(state, playerId, effect.maxAsset).length === 0) return state
+      return { ...state, pendingAction: { kind: 'choose-free-build', playerId, maxAsset: effect.maxAsset } }
     }
 
     case 'build-two': {
@@ -229,7 +229,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'draw-with-build-discount': {
-      // N枚ドロー。工業団地の場合は建設コスト割引（availability ではなく CPU build 判定側で使用）
+      // N枚ドロー。建設割引は constructionDiscount で定義（建設時に getConstructionDiscount で計算）
       return drawCards(state, playerId, effect.n)
     }
 

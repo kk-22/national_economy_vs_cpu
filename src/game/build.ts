@@ -13,6 +13,10 @@ export function getConstructionDiscount(state: GameState, playerId: number, card
   if (cd.condition === 'own-vp-min') {
     return player.victoryPoints >= cd.minVp ? cd.discount : 0
   }
+  if (cd.condition === 'per-owned-tag') {
+    const count = player.ownedBuildings.filter(b => ALL_BUILDING_CARDS[b.name]?.tags.includes(cd.tag)).length
+    return count * cd.discountPerTag
+  }
   return 0
 }
 
@@ -209,12 +213,15 @@ export function getNoSellBuildableCards(state: GameState, playerId: number): (Ha
   }) as (HandCard & { kind: 'building' })[]
 }
 
-// 建設コストがmaxCost以下の建物（無料建設対象）
-export function getFreeBuildableCards(state: GameState, playerId: number, maxCost: number): (HandCard & { kind: 'building' })[] {
+// 資産価値がmaxAsset以下の建物（無料建設対象）
+export function getFreeBuildableCards(state: GameState, playerId: number, maxAsset: number): (HandCard & { kind: 'building' })[] {
   const player = getPlayer(state, playerId)
-  return player.hand.filter(c =>
-    c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.cost ?? Infinity) <= maxCost
-  ) as (HandCard & { kind: 'building' })[]
+  return player.hand.filter(c => {
+    if (c.kind !== 'building') return false
+    const def = ALL_BUILDING_CARDS[c.name]
+    if (!def) return false
+    return def.assetValue <= maxAsset
+  }) as (HandCard & { kind: 'building' })[]
 }
 
 // 地球建設: 1棟目選択
@@ -269,7 +276,7 @@ export function confirmBuildTwoPayment(state: GameState, paymentIds: string[]): 
   return s
 }
 
-// プレハブ工務店: 建設コストmaxCost以下の建物を無料建設
+// プレハブ工務店: 資産価値maxAsset以下の建物を無料建設
 export function confirmFreeBuild(state: GameState, cardId: string): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-free-build') return state
@@ -277,7 +284,7 @@ export function confirmFreeBuild(state: GameState, cardId: string): GameState {
   const card = beforePlayer.hand.find(c => c.id === cardId)
   if (!card || card.kind !== 'building') return state
   const def = ALL_BUILDING_CARDS[card.name]
-  if (!def || def.cost > action.maxCost) return state
+  if (!def || def.assetValue > action.maxAsset) return state
   let s: GameState
   ;[s] = constructBuilding(state, action.playerId, card.id, [], 0)
   s = { ...s, pendingAction: null }
