@@ -411,10 +411,10 @@ function replayGame() {
   const isAllCpu = !game.value!.players.some(p => !p.isCpu)
   suppressHandAnim = true
   if (isAllCpu) {
-    startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies })
+    startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies, series: setupSeries.value })
     scheduleInitialCpuRun()
   } else {
-    startGame({ humanName: humanPlayer.value?.name ?? 'プレイヤー', cpuCount, playerOrder: setupPlayerOrder.value, cpuStrategies })
+    startGame({ humanName: humanPlayer.value?.name ?? 'プレイヤー', cpuCount, playerOrder: setupPlayerOrder.value, cpuStrategies, series: setupSeries.value })
   }
 }
 </script>

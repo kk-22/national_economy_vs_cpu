@@ -654,14 +654,15 @@ function cardTooltip(name: string): string {
                 <div class="sell-buildings-row">
                   <div class="card-wrap">
                     <button
-                      v-for="id in pendingAction.sellableIds" :key="id"
-                      :class="['bcard', 'selectable', { selected: pendingAction.selected.includes(id) }]"
-                      @mouseenter="tipEnter($event, cardTooltip(sellBuildingName(id)))"
+                      v-for="b in humanPlayer?.ownedBuildings ?? []" :key="b.id"
+                      :class="['bcard', pendingAction.sellableIds.includes(b.id) ? 'selectable' : 'card-disabled', { selected: pendingAction.selected.includes(b.id) }]"
+                      :disabled="!pendingAction.sellableIds.includes(b.id)"
+                      @mouseenter="tipEnter($event, cardTooltip(b.name))"
                       @mouseleave="tipLeave"
-                      @click="clickToggleSellBuilding(id)">
-                      <span class="bcard-cost">{{ getBuildingDef(sellBuildingName(id))?.cost }}</span>
-                      <span class="bcard-name" :style="bcardNameStyle(sellBuildingName(id))">{{ sellBuildingName(id) }}</span>
-                      <span class="bcard-asset">{{ getBuildingDef(sellBuildingName(id))?.assetValue }}</span>
+                      @click="pendingAction.sellableIds.includes(b.id) && clickToggleSellBuilding(b.id)">
+                      <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
+                      <span class="bcard-name" :style="bcardNameStyle(b.name)">{{ b.name }}</span>
+                      <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
                     </button>
                   </div>
                   <div class="sell-confirm-col">
