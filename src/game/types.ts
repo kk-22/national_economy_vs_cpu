@@ -115,6 +115,7 @@ export interface Player {
   workers: Worker[]
   unpaidWages: number
   victoryPoints: number  // 勝利点カード枚数（プログレスでは常に0）
+  pendingConsumption?: number  // 醸造所（一般職場）が保留する消費財枚数
 }
 
 export type PendingAction =

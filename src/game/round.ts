@@ -96,9 +96,11 @@ function autoSellForWages(state: GameState, playerId: number, idsToSell: string[
   const buildings = getPlayer(s, playerId).ownedBuildings.filter(b => idsToSell.includes(b.id))
   for (const b of buildings) {
     const def = ALL_BUILDING_CARDS[b.name]!
+    const carried = b.storedConsumption ?? 0
     s = updatePlayer(s, playerId, p => ({
       ...p, money: p.money + def.assetValue,
       ownedBuildings: p.ownedBuildings.filter(ob => ob.id !== b.id),
+      pendingConsumption: (p.pendingConsumption ?? 0) + carried,
     }))
     if (def.isWorkplace) {
       let wpId: string
@@ -281,7 +283,7 @@ export function startNextRound(state: GameState, noCpu: boolean): GameState {
     }
   }
 
-  // 醸造所の storedConsumption を手札に加える（次ラウンド開始時）
+  // 醸造所の storedConsumption / pendingConsumption を手札に加える（次ラウンド開始時）
   for (const player of s.players) {
     for (const b of player.ownedBuildings) {
       if (b.storedConsumption && b.storedConsumption > 0) {
@@ -300,6 +302,19 @@ export function startNextRound(state: GameState, noCpu: boolean): GameState {
         }
         s = addLog(s, `${getPlayer(s, player.id).name} の醸造所から消費財${count}枚を手札に加えた`)
       }
+    }
+    const pending = player.pendingConsumption ?? 0
+    if (pending > 0) {
+      s = updatePlayer(s, player.id, p => ({ ...p, pendingConsumption: 0 }))
+      for (let i = 0; i < pending; i++) {
+        let cId: string
+        ;[s, cId] = genId(s, 'c-')
+        s = updatePlayer(s, player.id, p => ({
+          ...p,
+          hand: [...p.hand, { kind: 'consumption' as const, id: cId }],
+        }))
+      }
+      s = addLog(s, `${getPlayer(s, player.id).name} の醸造所から消費財${pending}枚を手札に加えた`)
     }
   }
 

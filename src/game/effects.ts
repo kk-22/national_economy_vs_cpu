@@ -208,14 +208,21 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'draw-consumption-hold': {
-      // 消費財をN枚引いて醸造所の上に置く（次ラウンド開始時に手札に加える）
+      // 消費財をN枚引いて次ラウンド開始時に手札に加える
       const brewBuilding = player.ownedBuildings.find(b => b.name === '醸造所' && b.workerHereId !== null)
-      if (!brewBuilding) return state
+      if (brewBuilding) {
+        // 自分の所有建物の醸造所
+        return updatePlayer(state, playerId, p => ({
+          ...p,
+          ownedBuildings: p.ownedBuildings.map(b =>
+            b.id === brewBuilding.id ? { ...b, storedConsumption: (b.storedConsumption ?? 0) + effect.n } : b
+          ),
+        }))
+      }
+      // 一般職場（売却済み）の醸造所: プレイヤーに直接保留
       return updatePlayer(state, playerId, p => ({
         ...p,
-        ownedBuildings: p.ownedBuildings.map(b =>
-          b.id === brewBuilding.id ? { ...b, storedConsumption: (b.storedConsumption ?? 0) + effect.n } : b
-        ),
+        pendingConsumption: (p.pendingConsumption ?? 0) + effect.n,
       }))
     }
 
