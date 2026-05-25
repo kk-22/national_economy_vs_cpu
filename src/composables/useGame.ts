@@ -533,15 +533,30 @@ export function useGame() {
 
   // ---- メセナ用ペンディングアクション ----
 
+  // NOTE: pendingEntry への builtCard/secondBuiltCard/paymentCards 記録は undo リプレイに必須。
+  // replay.ts の resolvePending で choose-build-two-* を解決するために使われる。
+  // ここでの記録漏れは「undo 後に建物選択画面に戻る」バグを引き起こす。
+
   function clickBuildTwoConfirm(firstId: string, secondId: string) {
     if (!state.game) return
     state.game = selectBuildTwoFirstCard(state.game, firstId)
     state.game = selectBuildTwoSecondCard(state.game, secondId)
     const newPa = state.game.pendingAction
     if (newPa?.kind === 'choose-build-two-payment') {
+      // pendingEntry に建設対象を記録（undo リプレイで choose-build-two-first/second を解決するため）
+      if (pendingEntry) {
+        const player = state.game.players.find(p => p.id === newPa.playerId)
+        const findName = (id: string) => { const c = player?.hand.find(h => h.id === id); return c?.kind === 'building' ? c.name : id }
+        pendingEntry.builtCard = { id: newPa.firstId, name: findName(newPa.firstId) }
+        pendingEntry.secondBuiltCard = { id: newPa.secondId, name: findName(newPa.secondId) }
+      }
       const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
       const payable = hand.filter(c => c.id !== newPa.firstId && c.id !== newPa.secondId)
       if (payable.length === newPa.totalCost) {
+        // 支払いカードが残り手札と一致する場合は自動確定
+        if (pendingEntry) {
+          pendingEntry.paymentCards = payable.map(c => ({ id: c.id, name: c.kind === 'building' ? c.name : '消費財' }))
+        }
         state.game = confirmBuildTwoCards(state.game, payable.map(c => c.id))
       } else {
         paymentSelectedIds.value = payable.filter(c => c.kind === 'consumption')
@@ -560,25 +575,56 @@ export function useGame() {
     if (paymentSelectedIds.value.length === pa.totalCost) {
       const ids = [...paymentSelectedIds.value]
       paymentSelectedIds.value = []
+      // pendingEntry に建設対象と支払いを記録（undo リプレイで choose-build-two-* を解決するため）
+      if (pendingEntry) {
+        const player = state.game.players.find(p => p.id === pa.playerId)
+        const findName = (id: string) => { const c = player?.hand.find(h => h.id === id); return c?.kind === 'building' ? c.name : id }
+        pendingEntry.builtCard = { id: pa.firstId, name: findName(pa.firstId) }
+        pendingEntry.secondBuiltCard = { id: pa.secondId, name: findName(pa.secondId) }
+        pendingEntry.paymentCards = ids.map(pid => {
+          const c = player?.hand.find(h => h.id === pid)
+          return { id: pid, name: c?.kind === 'building' ? c.name : '消費財' }
+        })
+      }
       state.game = confirmBuildTwoCards(state.game, ids)
     }
   }
 
   function clickFreeBuildCard(cardId: string) {
     if (!state.game) return
+    // pendingEntry に建設対象を記録（undo リプレイで choose-free-build を解決するため）
+    if (pendingEntry) {
+      const pa = state.game.pendingAction
+      if (pa?.kind === 'choose-free-build') {
+        const card = state.game.players.find(p => p.id === pa.playerId)?.hand.find(c => c.id === cardId)
+        pendingEntry.builtCard = { id: cardId, name: card?.kind === 'building' ? card.name : cardId }
+      }
+    }
     state.game = confirmFreeBuildCard(state.game, cardId)
   }
 
   function clickNoSellBuildCard(cardId: string) {
     if (!state.game) return
+    // pendingEntry に建設対象を記録（undo リプレイで choose-no-sell-build を解決するため）
+    if (pendingEntry) {
+      const pa = state.game.pendingAction
+      if (pa?.kind === 'choose-no-sell-build') {
+        const card = state.game.players.find(p => p.id === pa.playerId)?.hand.find(c => c.id === cardId)
+        pendingEntry.builtCard = { id: cardId, name: card?.kind === 'building' ? card.name : cardId }
+      }
+    }
     state.game = selectNoSellBuildCard(state.game, cardId)
     const newPa = state.game.pendingAction
     if (newPa?.kind === 'choose-build-payment') {
       const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
       const payable = hand.filter(c => c.id !== newPa.targetId)
       if (payable.length === newPa.cost) {
+        if (pendingEntry) {
+          pendingEntry.paymentCards = payable.map(c => ({ id: c.id, name: c.kind === 'building' ? c.name : '消費財' }))
+        }
         state.game = confirmBuildPayment(state.game, payable.map(c => c.id))
       } else if (newPa.cost === 0) {
+        if (pendingEntry) pendingEntry.paymentCards = []
         state.game = confirmBuildPayment(state.game, [])
       } else {
         paymentSelectedIds.value = payable.filter(c => c.kind === 'consumption')

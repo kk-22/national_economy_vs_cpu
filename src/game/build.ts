@@ -234,9 +234,12 @@ export function selectBuildTwoFirst(state: GameState, cardId: string): GameState
   const def = ALL_BUILDING_CARDS[card.name]!
   const buildings = player.hand.filter(c => c.kind === 'building')
   if (buildings.length < 2) return state
+  // 割引を適用したコストで記録（0未満にはならない）
+  const discount = getConstructionDiscount(state, action.playerId, card.name)
+  const firstCost = Math.max(0, def.cost - discount)
   return {
     ...state,
-    pendingAction: { kind: 'choose-build-two-second', playerId: action.playerId, firstId: card.id, firstCost: def.cost, sourceName: action.sourceName, sourceId: action.sourceId },
+    pendingAction: { kind: 'choose-build-two-second', playerId: action.playerId, firstId: card.id, firstCost, sourceName: action.sourceName, sourceId: action.sourceId },
   }
 }
 
@@ -249,7 +252,10 @@ export function selectBuildTwoSecond(state: GameState, cardId: string): GameStat
   const card = player.hand.find(c => c.id === cardId)
   if (!card || card.kind !== 'building') return state
   const def = ALL_BUILDING_CARDS[card.name]!
-  const totalCost = action.firstCost + def.cost
+  // 割引を適用した合計コストで判定（0未満にはならない）
+  const discount = getConstructionDiscount(state, action.playerId, card.name)
+  const secondCost = Math.max(0, def.cost - discount)
+  const totalCost = action.firstCost + secondCost
   // 手札から2棟を除いた残りが合計コスト以上必要
   if (player.hand.length - 2 < totalCost) return state
   return {

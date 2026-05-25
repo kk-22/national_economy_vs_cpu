@@ -49,7 +49,7 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity, 
       const consCount = player.hand.filter(c => c.kind === 'consumption').length
       return consCount > 0 && household >= consCount * effect.perCard
     }
-    case 'discard-draw-min-hand':    return player.hand.length > effect.minHand  // minHand枚以下は不可（より多い=minHand+1以上必要）
+    case 'discard-draw-min-hand':    return player.hand.length >= effect.minHand  // minHand枚未満は不可（minHand枚以上必要）
     case 'discard-gain-household-min': return player.hand.length >= effect.discard && household >= effect.minHousehold
     case 'build-no-sell':            return player.hand.some(c => {
       if (c.kind !== 'building') return false

@@ -7,7 +7,7 @@ export const MECENAT_BUILDING_CARDS: Record<string, BuildingCardDef> = {
   '芋畑':           { name: '芋畑',           cost: 1,  assetValue: 6,  tags: ['farm'],            canSell: true,  isWorkplace: true,  count: 6, effect: { kind: 'draw-consumption-by-hand' } },
   '食堂':           { name: '食堂',           cost: 1,  assetValue: 8,  tags: [],            canSell: true,  isWorkplace: true,  count: 2, effect: { kind: 'discard-gain-household', discard: 1, gain: 8, minHousehold: 8 } },
   '鉄工所':         { name: '鉄工所',         cost: 1,  assetValue: 8,  tags: ['factory'],         canSell: true,  isWorkplace: true,  count: 3, effect: { kind: 'draw-if-mine', n: 2 } },
-  '宮大工':         { name: '宮大工',         cost: 1,  assetValue: 10, tags: [],                  canSell: true,  isWorkplace: true,  count: 5, effect: { kind: 'build-gain-vp', discount: 0, drawAfter: 0 } },
+  '宮大工':         { name: '宮大工',         cost: 1,  assetValue: 8, tags: [],                  canSell: true,  isWorkplace: true,  count: 5, effect: { kind: 'build-gain-vp', discount: 0, drawAfter: 0 } },
   '墓地':           { name: '墓地',           cost: 1,  assetValue: 8,  tags: [],                  canSell: false, isWorkplace: false, count: 2, effect: { kind: 'p-if-empty-hand', bonus: 8 } },
   // cost: 2
   '菜園':           { name: '菜園',           cost: 2,  assetValue: 10, tags: ['farm'],            canSell: true,  isWorkplace: true,  count: 4, effect: { kind: 'draw-gain-vp', n: 2, drawType: 'consumption' } },

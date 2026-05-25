@@ -213,6 +213,17 @@ const sellSelectedTotal = computed(() => {
   return pa.selected.reduce((s, id) => s + (getBuildingDef(sellBuildingName(id))?.assetValue ?? 0), 0)
 })
 
+// 賃金不足売却選択中は賃金支払い前の所持金を表示する
+const displayMoney = computed(() => {
+  const pa = pendingAction.value
+  const player = humanPlayer.value
+  if (!player) return 0
+  if (pa?.kind === 'choose-sell-buildings') {
+    return (player.workers.length * currentWage.value) - pa.deficit
+  }
+  return player.money
+})
+
 function clickConfirmSellBuildings() {
   const pa = game.value?.pendingAction
   if (!pa || pa.kind !== 'choose-sell-buildings') return
@@ -479,12 +490,12 @@ function cardTooltip(name: string): string {
             <div class="player-header">
               <span class="player-name">{{ humanPlayer?.name }}</span>
               <span v-if="humanPlayer?.unpaidWages" class="unpaid-badge">未払い{{ humanPlayer.unpaidWages }}</span>
+              <span v-if="(humanPlayer?.victoryPoints ?? 0) > 0" class="vp-badge">勝利点{{ humanPlayer!.victoryPoints }}枚</span>
               <span class="worker-badge">労働者{{ humanPlayer ? workerAvailable(humanPlayer.workers) : '' }}/<span :class="{ 'worker-limit-alert': humanPlayer != null && workerUnderCapacity(humanPlayer) }">{{ humanPlayer?.workers.length ?? '' }}</span></span>
               <span class="wage-summary">
-                所持金${{ humanPlayer?.money }} -
-                <span :class="(humanPlayer?.money ?? 0) >= (humanPlayer?.workers.length ?? 0) * currentWage ? 'wage-cost wage-cost--ok' : 'wage-cost'">賃金${{ (humanPlayer?.workers.length ?? 0) * currentWage }}</span>
+                所持金${{ displayMoney }} -
+                <span :class="displayMoney >= (humanPlayer?.workers.length ?? 0) * currentWage ? 'wage-cost wage-cost--ok' : 'wage-cost'">賃金${{ (humanPlayer?.workers.length ?? 0) * currentWage }}</span>
               </span>
-              <span v-if="(humanPlayer?.victoryPoints ?? 0) > 0" class="vp-badge">勝利点{{ humanPlayer!.victoryPoints }}枚</span>
               <span v-if="game.startPlayerIndex === humanPlayer?.id" class="sp-badge">🚩SP</span>
             </div>
 
@@ -706,6 +717,8 @@ function cardTooltip(name: string): string {
                       selected: paymentSelected.includes(card.id),
                       'card-disabled': card.id === pendingAction.firstId || card.id === pendingAction.secondId
                     }]"
+                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
+                    @mouseleave="tipLeave"
                     @click="clickBuildTwoPayment(card.id)">
                     <HCard :card="card" />
                   </button>

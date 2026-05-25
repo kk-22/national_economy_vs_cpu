@@ -2,7 +2,9 @@ import type { GameState } from './types'
 import type { HistoryEntry } from './history'
 import { placeWorkerOnPublic, placeWorkerOnBuilding,
   selectFarmBuildTarget, confirmBuildPayment, confirmDoublePayment,
-  confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard } from './turns'
+  confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard,
+  selectBuildTwoFirstCard, selectBuildTwoSecondCard, confirmBuildTwoCards,
+  confirmFreeBuildCard, selectNoSellBuildCard } from './turns'
 import { selectBuildTarget, selectDoubleFirst, selectDoubleSecond } from './build'
 import { confirmSellBuildings } from './round'
 
@@ -56,6 +58,40 @@ function resolvePending(state: GameState, entry: HistoryEntry): GameState {
       case 'choose-from-revealed': {
         if (!entry.pickedCard) return s
         s = pickRevealedCard(s, entry.pickedCard.id)
+        break
+      }
+      // ---- 地球建設 ----
+      // NOTE: choose-build-two-second/payment はここでしか解決できない。
+      // pendingEntry に builtCard/secondBuiltCard/paymentCards を必ず記録すること（useGame.ts の clickBuildTwoConfirm/clickBuildTwoPayment）。
+      // これを漏らすと undo 後に choose-build-two-first 画面に戻ってしまう。
+      case 'choose-build-two-first': {
+        if (!entry.builtCard) return s
+        s = selectBuildTwoFirstCard(s, entry.builtCard.id)
+        break
+      }
+      case 'choose-build-two-second': {
+        if (!entry.secondBuiltCard) return s
+        s = selectBuildTwoSecondCard(s, entry.secondBuiltCard.id)
+        break
+      }
+      case 'choose-build-two-payment': {
+        const ids = entry.paymentCards?.map(c => c.id) ?? []
+        s = confirmBuildTwoCards(s, ids)
+        break
+      }
+      // ---- プレハブ工務店: 無料建設 ----
+      // NOTE: pendingEntry.builtCard を clickFreeBuildCard で記録すること。
+      case 'choose-free-build': {
+        if (!entry.builtCard) return s
+        s = confirmFreeBuildCard(s, entry.builtCard.id)
+        break
+      }
+      // ---- 建築会社: 売却不可建物を建設 ----
+      // NOTE: pendingEntry.builtCard を clickNoSellBuildCard で記録すること。
+      // 建設後に choose-build-payment へ遷移し、上の case で続けて処理される。
+      case 'choose-no-sell-build': {
+        if (!entry.builtCard) return s
+        s = selectNoSellBuildCard(s, entry.builtCard.id)
         break
       }
       default:

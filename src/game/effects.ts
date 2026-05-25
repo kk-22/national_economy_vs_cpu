@@ -227,7 +227,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'discard-draw-min-hand': {
-      if (player.hand.length <= effect.minHand) return state
+      if (player.hand.length < effect.minHand) return state  // minHand枚未満は不可（availability.tsと一致させること）
       if (isCpu) return cpuDiscardDraw(state, playerId, effect.discard, effect.draw, strategy)
       return {
         ...state,

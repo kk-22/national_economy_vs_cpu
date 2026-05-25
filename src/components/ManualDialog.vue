@@ -12,7 +12,8 @@ const emit = defineEmits<{ close: [] }>()
       <div class="manual-content">
         <p>
           本アプリは <a href="http://spa-game.com/?page_id=4242" target="_blank" rel="noopener">公式ガイドライン</a> に基づいて作成した、ナショナルエコノミーの非公式アプリです。<br>
-          ゲームルールは <a href="http://spa-game.com/images/NE_Rules.pdf" target="_blank" rel="noopener">公式ルールブック (PDF)</a> を参照ください。
+          ゲームルールは <a href="http://spa-game.com/images/NE_Rules.pdf" target="_blank" rel="noopener">公式ルールブック (PDF)</a> を参照ください。<br>
+          バグ報告などは本アプリの開発者（<a href="https://x.com/kk22app" target="_blank" rel="noopener">https://x.com/kk22app</a>）へお願いします。
         </p>
         <h3>本アプリのコンセプト</h3>
         <p>最小限のクリック数でサクサク遊べるようにしています。</p>
