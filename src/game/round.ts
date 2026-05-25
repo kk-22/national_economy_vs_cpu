@@ -210,7 +210,12 @@ function finishRoundEnd(state: GameState, noCpu: boolean): GameState {
     const limit = getHandLimit(p)
     if (p.hand.length <= limit) continue
     const excess = p.hand.length - limit
-    const preSelected = p.hand.filter(c => c.kind === 'consumption').slice(0, excess - 1).map(c => c.id)
+    const consumptions = p.hand.filter(c => c.kind === 'consumption')
+    // メセナシリーズでは消費財を最低1枚残す（消費財1枚だけの場合は自動選択しない）
+    const maxAutoSelect = s.series === 'mecenat'
+      ? Math.min(excess - 1, consumptions.length - 1)
+      : excess - 1
+    const preSelected = consumptions.slice(0, maxAutoSelect).map(c => c.id)
     s = { ...s, pendingAction: { kind: 'choose-hand-limit', playerId: player.id, limit, count: excess, selected: preSelected, noCpu } }
     return s
   }

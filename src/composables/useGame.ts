@@ -297,10 +297,7 @@ export function useGame() {
             }
             state.game = confirmBuildPayment(state.game, ids)
           } else {
-            paymentSelectedIds.value = payable
-              .filter(c => c.kind === 'consumption')
-              .slice(0, Math.max(0, newPa.cost - 1))
-              .map(c => c.id)
+            paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.cost)
           }
         }
       }
@@ -330,10 +327,7 @@ export function useGame() {
           }
           state.game = confirmDoublePayment(state.game, ids)
         } else {
-          paymentSelectedIds.value = payable
-            .filter(c => c.kind === 'consumption')
-            .slice(0, Math.max(0, newPa.cost - 1))
-            .map(c => c.id)
+          paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.cost)
         }
       }
     }
@@ -358,12 +352,18 @@ export function useGame() {
         }
         state.game = confirmDoublePayment(state.game, ids)
       } else {
-        paymentSelectedIds.value = payable
-          .filter(c => c.kind === 'consumption')
-          .slice(0, Math.max(0, newPa.cost - 1))
-          .map(c => c.id)
+        paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.cost)
       }
     }
+  }
+
+  // メセナシリーズでは消費財を最低1枚残す
+  function autoSelectConsumptionIds(payable: { kind: string; id: string }[], cost: number): string[] {
+    const consumptions = payable.filter(c => c.kind === 'consumption')
+    const maxAutoSelect = state.game?.series === 'mecenat'
+      ? Math.max(0, Math.min(cost - 1, consumptions.length - 1))
+      : Math.max(0, cost - 1)
+    return consumptions.slice(0, maxAutoSelect).map(c => c.id)
   }
 
   const paymentSelectedIds = ref<string[]>([])
@@ -560,8 +560,7 @@ export function useGame() {
         }
         state.game = confirmBuildTwoCards(state.game, payable.map(c => c.id))
       } else {
-        paymentSelectedIds.value = payable.filter(c => c.kind === 'consumption')
-          .slice(0, Math.max(0, newPa.totalCost - 1)).map(c => c.id)
+        paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.totalCost)
       }
     }
   }
@@ -634,8 +633,7 @@ export function useGame() {
         if (pendingEntry) pendingEntry.paymentCards = []
         state.game = confirmBuildPayment(state.game, [])
       } else {
-        paymentSelectedIds.value = payable.filter(c => c.kind === 'consumption')
-          .slice(0, Math.max(0, newPa.cost - 1)).map(c => c.id)
+        paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.cost)
       }
     }
   }
