@@ -1,6 +1,5 @@
-import { BUILDING_CARDS } from './constants'
-import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, buildActionLog } from './primitives'
-import { constructBuilding } from './build'
+import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, buildActionLog, ALL_BUILDING_CARDS } from './primitives'
+import { constructBuilding, selectBuildTwoFirst, selectBuildTwoSecond, confirmBuildTwoPayment, confirmFreeBuild, selectNoSellBuildTarget } from './build'
 import { applyEffect } from './effects'
 import { processRoundEnd, resolveAfterHandLimit } from './round'
 import { cpuTakeTurnGreedy, cpuTakeTurnGreedyNoAuto } from './cpu-strategy-greedy'
@@ -50,7 +49,8 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
 
   if (s.pendingAction) {
     const pa = s.pendingAction
-    const withSource = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed')
+    const needsSourceId = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed' || pa.kind === 'choose-build-two-first' || pa.kind === 'choose-free-build' || pa.kind === 'choose-no-sell-build')
+    const withSource = needsSourceId
       ? { ...pa, sourceName: workplace.name, sourceId: workplaceId }
       : { ...pa, sourceName: workplace.name }
     s = { ...s, pendingAction: withSource }
@@ -72,7 +72,7 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
 export function placeWorkerOnBuilding(state: GameState, playerId: number, buildingId: string, forceHumanPath = false): GameState {
   const player = getPlayer(state, playerId)
   const building = player.ownedBuildings.find(b => b.id === buildingId)!
-  const def = BUILDING_CARDS[building.name]!
+  const def = ALL_BUILDING_CARDS[building.name]!
   const worker = availableWorkers(player)[0]
   if (!worker) return state
 
@@ -90,7 +90,8 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
 
   if (s.pendingAction) {
     const pa = s.pendingAction
-    const withSource = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed')
+    const needsSourceId = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed' || pa.kind === 'choose-build-two-first' || pa.kind === 'choose-free-build' || pa.kind === 'choose-no-sell-build')
+    const withSource = needsSourceId
       ? { ...pa, sourceName: building.name, sourceId: buildingId }
       : { ...pa, sourceName: building.name }
     s = { ...s, pendingAction: withSource }
@@ -229,7 +230,7 @@ export function selectFarmBuildTarget(state: GameState, targetCardId: string): G
   const beforePlayer = getPlayer(state, action.playerId)
   const card = beforePlayer.hand.find(c => c.id === targetCardId)
   if (!card || card.kind !== 'building') return state
-  const def = BUILDING_CARDS[card.name]!
+  const def = ALL_BUILDING_CARDS[card.name]!
   if (!def.tags.includes('farm')) return state
   let s: GameState
   ;[s] = constructBuilding(state, action.playerId, card.id, [], 0)
@@ -247,6 +248,12 @@ export function confirmBuildPayment(state: GameState, paymentIds: string[]): Gam
   let s: GameState
   ;[s] = constructBuilding(state, action.playerId, action.targetId, paymentIds, action.drawAfter)
   s = { ...s, pendingAction: null }
+  // 宮大工（build-gain-vp）経由の建設なら勝利点を加算
+  const sourceEffect = action.sourceName ? ALL_BUILDING_CARDS[action.sourceName]?.effect : undefined
+  if (sourceEffect?.kind === 'build-gain-vp') {
+    s = updatePlayer(s, action.playerId, p => ({ ...p, victoryPoints: p.victoryPoints + 1 }))
+    s = addLog(s, `${getPlayer(s, action.playerId).name} が勝利点カードを取得（計${getPlayer(s, action.playerId).victoryPoints}枚）`)
+  }
   const afterPlayer = getPlayer(s, action.playerId)
   s = addLog(s, buildActionLog(action.sourceName ?? '', 'build', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
   return afterHumanAction(s)
@@ -351,3 +358,28 @@ export function confirmHandLimitDiscard(state: GameState): GameState {
 
   return resolveAfterHandLimit(s, pa.noCpu)
 }
+
+// ---- メセナ専用アクション確定 ----
+
+export function selectBuildTwoFirstCard(state: GameState, cardId: string): GameState {
+  return selectBuildTwoFirst(state, cardId)
+}
+
+export function selectBuildTwoSecondCard(state: GameState, cardId: string): GameState {
+  return selectBuildTwoSecond(state, cardId)
+}
+
+export function confirmBuildTwoCards(state: GameState, paymentIds: string[]): GameState {
+  let s = confirmBuildTwoPayment(state, paymentIds)
+  return afterHumanAction(s)
+}
+
+export function confirmFreeBuildCard(state: GameState, cardId: string): GameState {
+  let s = confirmFreeBuild(state, cardId)
+  return afterHumanAction(s)
+}
+
+export function selectNoSellBuildCard(state: GameState, cardId: string): GameState {
+  return selectNoSellBuildTarget(state, cardId)
+}
+

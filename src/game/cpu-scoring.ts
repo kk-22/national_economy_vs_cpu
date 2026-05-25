@@ -1,7 +1,7 @@
-import { BUILDING_CARDS, ROUND_CARDS } from './constants'
-import { getPlayer, getMaxWorkers } from './primitives'
+import { ROUND_CARDS } from './constants'
+import { getPlayer, getMaxWorkers, ALL_BUILDING_CARDS } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
-import { GREEDY_BUILD_EXCLUDED } from './cpu'
+import { GREEDY_BUILD_EXCLUDED, getConstructionDiscountForPlayer } from './cpu'
 import { calculateScores } from './round'
 import type { GameState, BuildingCard, GameEffect, Player, PublicWorkplace, OwnedBuilding } from './types'
 
@@ -212,9 +212,10 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
       for (const c of player.hand) {
         if (c.kind !== 'building') continue
         if (GREEDY_BUILD_EXCLUDED.has((c as BuildingCard).name)) continue
-        const def = BUILDING_CARDS[(c as BuildingCard).name]
+        const def = ALL_BUILDING_CARDS[(c as BuildingCard).name]
         if (!def) continue
-        const discountedCost = Math.max(0, def.cost - effect.discount)
+        const selfDiscount = getConstructionDiscountForPlayer(player, (c as BuildingCard).name)
+        const discountedCost = Math.max(0, def.cost - effect.discount - selfDiscount)
         if (player.hand.length - 1 < discountedCost) continue
         if (def.effect.kind.startsWith('p-')) {
           if (round < 8 || def.assetValue <= 0) continue
@@ -238,7 +239,7 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
       // Fix 2: money < wage かつ同等以上コストの自分の建物があれば建設しない
       if (player.money < expectedWage) {
         const hasEquivOwned = player.ownedBuildings.some(b => {
-          const bDef = BUILDING_CARDS[b.name]
+          const bDef = ALL_BUILDING_CARDS[b.name]
           return bDef && bDef.cost >= maxCost && bDef.isWorkplace && b.workerHereId === null
         })
         if (hasEquivOwned) return -Infinity
@@ -307,7 +308,7 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
       const drawWorkerBonus = (player.workers.length - 1) * w.drawWorkerMult
       const drawBaseScore = effect.n * (w.drawBase + drawWorkerBonus)
       const availableNow = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
-      const hasDrawFactory = player.ownedBuildings.some(b => BUILDING_CARDS[b.name]?.effect.kind === 'discard-draw')
+      const hasDrawFactory = player.ownedBuildings.some(b => ALL_BUILDING_CARDS[b.name]?.effect.kind === 'discard-draw')
       return (hasDrawFactory && availableNow >= Math.round(w.drawFactoryMinWorkers)) ? drawBaseScore * w.drawFactoryBonus : drawBaseScore
     }
     case 'draw-if-empty': {
@@ -333,6 +334,101 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
       if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return -Infinity
       return player.hand.length >= effect.target ? -Infinity : (effect.target - player.hand.length) * w.drawConsumptionToMult
     case 'none': return w.noneScore
+
+    // --- メセナ専用 ---
+    case 'draw-gain-vp': {
+      // N枚ドロー + 勝利点1枚（勝利点1枚の期待値を8点と設定）
+      const VP_CARD_VALUE = 8
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) {
+        return effect.n * w.r9DrawMult + VP_CARD_VALUE
+      }
+      const drawScore = effect.n * (w.drawBase + (player.workers.length - 1) * w.drawWorkerMult)
+      return effect.drawType === 'consumption'
+        ? (player.hand.length <= 3 ? effect.n * w.drawConsumptionFew : effect.n * w.drawConsumptionMany) + VP_CARD_VALUE
+        : drawScore + VP_CARD_VALUE
+    }
+    case 'build-gain-vp': {
+      const VP_CARD_VALUE = 8
+      if (availWorkers < 2 && player.money < player.workers.length * (ROUND_CARDS[round - 1]?.wage ?? 0)) return -Infinity
+      return (w.buildBase + 5 * w.buildCostMult) + VP_CARD_VALUE
+    }
+    case 'draw-consumption-by-hand': {
+      const handLen = player.hand.length
+      if (handLen >= 3) return -Infinity
+      const n = handLen === 0 ? 3 : handLen === 1 ? 2 : 1
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return n * w.r9DrawConsumptionMult
+      return player.hand.length <= 3 ? n * w.drawConsumptionFew : n * w.drawConsumptionMany
+    }
+    case 'discard-gain-household':
+    case 'discard-gain-household-min': {
+      const hh = 'minHousehold' in effect ? effect.minHousehold : household
+      if (player.hand.length < effect.discard || household < hh) return -Infinity
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return effect.gain * w.r9GainMult
+      return (effect.gain - effect.discard * (w.drawBase + (player.workers.length - 1) * w.drawWorkerMult)) * w.discardGainNormalMult
+    }
+    case 'gain-household': {
+      if (household < effect.minHousehold) return -Infinity
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return effect.net * w.r9GainMult
+      return effect.net * w.gainSupplyMult
+    }
+    case 'gain-per-consumption': {
+      const consCount = player.hand.filter(c => c.kind === 'consumption').length
+      const gain = consCount * effect.perCard
+      if (gain <= 0 || household < gain) return -Infinity
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return gain * w.r9GainMult
+      return gain * w.gainSupplyMult
+    }
+    case 'draw-if-mine': {
+      const isAtMine = false  // CPU のスコアリング時は配置可否は availability で判定済み
+      if (!isAtMine) return w.defaultScore  // availability 通過済みなら OK として評価
+      return effect.n * (w.drawBase + (player.workers.length - 1) * w.drawWorkerMult)
+    }
+    case 'draw-consumption-if-have': {
+      const hasConsumption = player.hand.some(c => c.kind === 'consumption')
+      const n = hasConsumption ? effect.withConsumption : effect.without
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return n * w.r9DrawConsumptionMult
+      return player.hand.length <= 3 ? n * w.drawConsumptionFew : n * w.drawConsumptionMany
+    }
+    case 'discard-draw-min-hand': {
+      if (player.hand.length <= effect.minHand) return -Infinity
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return (effect.draw - effect.discard) * w.r9DiscardDrawMult
+      return (effect.draw - effect.discard) * (w.discardDrawBase + (player.workers.length - 1) * w.discardDrawWorkerMult)
+    }
+    case 'draw-with-build-discount': {
+      // 工業団地: 3枚ドロー（割引は建設効果に反映されないが、ドロー価値で評価）
+      if (round === 9 && availWorkers <= Math.floor(player.workers.length * w.r9LateThresholdFrac)) return effect.n * w.r9DrawMult
+      return effect.n * (w.drawBase + (player.workers.length - 1) * w.drawWorkerMult)
+    }
+    case 'build-no-sell': {
+      // 建築会社: 売却禁止建物を建設。buildBase + コスト評価
+      if (availWorkers < 2 && player.money < player.workers.length * (ROUND_CARDS[round - 1]?.wage ?? 0)) return -Infinity
+      return (w.buildBase + 5 * w.buildCostMult) + effect.drawAfter * w.buildDrawAfterBonus
+    }
+    case 'build-free-if-cheap': {
+      // プレハブ工務店: 安い建物無料建設
+      const freeable = player.hand.some(c => c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.cost ?? Infinity) <= effect.maxCost)
+      if (!freeable) return -Infinity
+      return w.buildFarmFree  // farmFreeと同等の評価
+    }
+    case 'build-two': {
+      // 地球建設: 2棟同時建設
+      const buildings = player.hand.filter(c => c.kind === 'building')
+      if (buildings.length < 2) return -Infinity
+      return w.buildDouble  // buildDoubleと同等の評価
+    }
+    case 'draw-consumption-hold': {
+      // 醸造所: 次ラウンドに消費財4枚（遅延価値）
+      if (round >= 9) return -Infinity  // 最終ラウンドは意味なし
+      return effect.n * w.drawConsumptionFew * 0.7  // 遅延のため若干割引
+    }
+    case 'p-if-empty-hand':
+    case 'p-vp-double':
+    case 'p-if-own-n-buildings':
+    case 'p-if-tag-n':
+    case 'p-if-no-sell-n':
+    case 'p-vp-build-discount':
+      return round >= 8 ? w.noneScore + 5 : w.noneScore  // 終盤のみ価値あり
+
     default: return w.defaultScore
   }
 }
@@ -376,14 +472,14 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
 
   for (const wp of pubOptions) {
     const base = scoreEffect(wp.effect, player, state.household, state.round, avail, isStartPlayer, weights)
-    const soldDef = BUILDING_CARDS[wp.name]
+    const soldDef = ALL_BUILDING_CARDS[wp.name]
     const sc = (soldDef && drawKinds.has(wp.effect.kind))
       ? base * (1.0 + weights.drawPubExtra + soldDef.cost * weights.drawCostMult)
       : base * pubBonus
     scored.push({ option: { type: 'pub', id: wp.id }, score: sc, name: wp.name })
   }
   for (const bld of bldOptions) {
-    const def = BUILDING_CARDS[bld.name]
+    const def = ALL_BUILDING_CARDS[bld.name]
     if (!def) continue
     const base = scoreEffect(def.effect, player, state.household, state.round, avail, isStartPlayer, weights)
     const sc = drawKinds.has(def.effect.kind)
@@ -434,8 +530,8 @@ export function pickDisruptive(state: GameState, playerId: number): { type: 'pub
   const pubOptions = getAvailablePublicWorkplaces(state, playerId).filter(wp => wp.name !== '大工')
   if (pubOptions.length === 0) return null
 
-  const costOf = (name: string) => BUILDING_CARDS[name]?.cost ?? 0
-  const assetOf = (name: string) => BUILDING_CARDS[name]?.assetValue ?? 0
+  const costOf = (name: string) => ALL_BUILDING_CARDS[name]?.cost ?? 0
+  const assetOf = (name: string) => ALL_BUILDING_CARDS[name]?.assetValue ?? 0
   const expansionOrder = ['専門学校', '大学', '学校', '高等学校']
 
   // 優先度（小さいほど優先）:
@@ -512,11 +608,11 @@ export function scoreIntermediateBeam(state: GameState, playerId: number): numbe
 
   if (state.players[state.startPlayerIndex]?.id === playerId) score += 5
 
-  score += player.ownedBuildings.reduce((s, b) => s + (BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
+  score += player.ownedBuildings.reduce((s, b) => s + (ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
 
   const workplaceCosts = player.ownedBuildings
-    .filter(b => BUILDING_CARDS[b.name]?.isWorkplace)
-    .map(b => BUILDING_CARDS[b.name]?.cost ?? 0)
+    .filter(b => ALL_BUILDING_CARDS[b.name]?.isWorkplace)
+    .map(b => ALL_BUILDING_CARDS[b.name]?.cost ?? 0)
     .sort((a, b) => b - a)
 
   if (wc >= 3 && workplaceCosts.length >= 1) score += workplaceCosts[0] * 10

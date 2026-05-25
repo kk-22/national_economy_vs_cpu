@@ -1,6 +1,20 @@
-import { BUILDING_CARDS } from './constants'
-import { getPlayer, updatePlayer, addLog, genId, drawCards } from './primitives'
+import { getPlayer, updatePlayer, addLog, genId, drawCards, ALL_BUILDING_CARDS, buildActionLog } from './primitives'
 import type { GameState, HandCard, BuildingCard, OwnedBuilding } from './types'
+
+/** 建設する建物の条件付きコスト割引を計算する */
+export function getConstructionDiscount(state: GameState, playerId: number, cardName: string): number {
+  const def = ALL_BUILDING_CARDS[cardName]
+  const cd = def?.constructionDiscount
+  if (!cd) return 0
+  const player = getPlayer(state, playerId)
+  if (cd.condition === 'own-tag') {
+    return player.ownedBuildings.some(b => ALL_BUILDING_CARDS[b.name]?.tags.includes(cd.tag)) ? cd.discount : 0
+  }
+  if (cd.condition === 'own-vp-min') {
+    return player.victoryPoints >= cd.minVp ? cd.discount : 0
+  }
+  return 0
+}
 
 export function constructBuilding(state: GameState, playerId: number, cardId: string, paymentIds: string[], drawAfter: number): [GameState] {
   let s = state
@@ -40,7 +54,7 @@ export function undoWorkerPlacement(state: GameState, playerId: number, effectKi
       if (effectSet.has(wp.effect.kind)) matchingIds.add(wp.id)
     }
     for (const b of player.ownedBuildings) {
-      const def = BUILDING_CARDS[b.name]
+      const def = ALL_BUILDING_CARDS[b.name]
       if (def && effectSet.has(def.effect.kind)) matchingIds.add(b.id)
     }
     placedWorker = player.workers.find(w => w.placedAt !== null && matchingIds.has(w.placedAt!))
@@ -67,8 +81,9 @@ export function getBuildableCards(state: GameState, playerId: number, discount: 
   const player = getPlayer(state, playerId)
   return player.hand.filter(c => {
     if (c.kind !== 'building') return false
-    const def = BUILDING_CARDS[c.name]
-    const cost = Math.max(0, def.cost - discount)
+    const def = ALL_BUILDING_CARDS[c.name]
+    const selfDiscount = getConstructionDiscount(state, playerId, c.name)
+    const cost = Math.max(0, def.cost - discount - selfDiscount)
     return player.hand.length - 1 >= cost
   }) as (HandCard & { kind: 'building' })[]
 }
@@ -76,7 +91,7 @@ export function getBuildableCards(state: GameState, playerId: number, discount: 
 export function getFarmBuildableCards(state: GameState, playerId: number): (HandCard & { kind: 'building' })[] {
   const player = getPlayer(state, playerId)
   return player.hand.filter(c =>
-    c.kind === 'building' && (BUILDING_CARDS[c.name]?.tags.includes('farm') ?? false)
+    c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.tags.includes('farm') ?? false)
   ) as (HandCard & { kind: 'building' })[]
 }
 
@@ -85,7 +100,7 @@ export function getDoubleBuildableFirstCards(state: GameState, playerId: number)
   const buildings = player.hand.filter(c => c.kind === 'building') as (HandCard & { kind: 'building' })[]
   const costGroups: Record<number, (HandCard & { kind: 'building' })[]> = {}
   for (const c of buildings) {
-    const cost = BUILDING_CARDS[c.name]?.cost ?? 0
+    const cost = ALL_BUILDING_CARDS[c.name]?.cost ?? 0
     costGroups[cost] = [...(costGroups[cost] ?? []), c]
   }
   const validFirstCards: (HandCard & { kind: 'building' })[] = []
@@ -104,8 +119,9 @@ export function selectBuildTarget(state: GameState, targetCardId: string): GameS
   const player = getPlayer(state, action.playerId)
   const card = player.hand.find(c => c.id === targetCardId)
   if (!card || card.kind !== 'building') return state
-  const def = BUILDING_CARDS[card.name]!
-  const cost = Math.max(0, def.cost - action.discount)
+  const def = ALL_BUILDING_CARDS[card.name]!
+  const selfDiscount = getConstructionDiscount(state, action.playerId, card.name)
+  const cost = Math.max(0, def.cost - action.discount - selfDiscount)
   if (player.hand.length - 1 < cost) return state
   return {
     ...state,
@@ -129,7 +145,7 @@ export function selectDoubleFirst(state: GameState, cardId: string): GameState {
   const player = getPlayer(state, action.playerId)
   const card = player.hand.find(c => c.id === cardId)
   if (!card || card.kind !== 'building') return state
-  const def = BUILDING_CARDS[card.name]!
+  const def = ALL_BUILDING_CARDS[card.name]!
   return {
     ...state,
     pendingAction: { kind: 'choose-double-second', playerId: action.playerId, firstCost: def.cost, firstId: card.id, sourceName: action.sourceName, sourceId: action.sourceId },
@@ -142,7 +158,7 @@ export function selectDoubleSecond(state: GameState, cardId: string): GameState 
   const player = getPlayer(state, action.playerId)
   const card = player.hand.find(c => c.id === cardId)
   if (!card || card.kind !== 'building') return state
-  const def = BUILDING_CARDS[card.name]!
+  const def = ALL_BUILDING_CARDS[card.name]!
   if (def.cost !== action.firstCost) return state
   if (card.id === action.firstId) return state
   return {
@@ -177,3 +193,124 @@ export function cancelDoublePayment(state: GameState): GameState {
   if (!action || action.kind !== 'choose-double-payment') return state
   return { ...state, pendingAction: { kind: 'choose-double-first', playerId: action.playerId, sourceName: action.sourceName, sourceId: action.sourceId } }
 }
+
+// ---- メセナ専用ビルド関数 ----
+
+// 売却禁止建物（canSell:false）のみを対象とする建設候補
+export function getNoSellBuildableCards(state: GameState, playerId: number): (HandCard & { kind: 'building' })[] {
+  const player = getPlayer(state, playerId)
+  return player.hand.filter(c => {
+    if (c.kind !== 'building') return false
+    const def = ALL_BUILDING_CARDS[c.name]
+    if (!def || def.canSell) return false
+    const selfDiscount = getConstructionDiscount(state, playerId, c.name)
+    const cost = Math.max(0, def.cost - selfDiscount)
+    return player.hand.length - 1 >= cost
+  }) as (HandCard & { kind: 'building' })[]
+}
+
+// 建設コストがmaxCost以下の建物（無料建設対象）
+export function getFreeBuildableCards(state: GameState, playerId: number, maxCost: number): (HandCard & { kind: 'building' })[] {
+  const player = getPlayer(state, playerId)
+  return player.hand.filter(c =>
+    c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.cost ?? Infinity) <= maxCost
+  ) as (HandCard & { kind: 'building' })[]
+}
+
+// 地球建設: 1棟目選択
+export function selectBuildTwoFirst(state: GameState, cardId: string): GameState {
+  const action = state.pendingAction
+  if (!action || action.kind !== 'choose-build-two-first') return state
+  const player = getPlayer(state, action.playerId)
+  const card = player.hand.find(c => c.id === cardId)
+  if (!card || card.kind !== 'building') return state
+  const def = ALL_BUILDING_CARDS[card.name]!
+  const buildings = player.hand.filter(c => c.kind === 'building')
+  if (buildings.length < 2) return state
+  return {
+    ...state,
+    pendingAction: { kind: 'choose-build-two-second', playerId: action.playerId, firstId: card.id, firstCost: def.cost, sourceName: action.sourceName, sourceId: action.sourceId },
+  }
+}
+
+// 地球建設: 2棟目選択
+export function selectBuildTwoSecond(state: GameState, cardId: string): GameState {
+  const action = state.pendingAction
+  if (!action || action.kind !== 'choose-build-two-second') return state
+  if (cardId === action.firstId) return state
+  const player = getPlayer(state, action.playerId)
+  const card = player.hand.find(c => c.id === cardId)
+  if (!card || card.kind !== 'building') return state
+  const def = ALL_BUILDING_CARDS[card.name]!
+  const totalCost = action.firstCost + def.cost
+  // 手札から2棟を除いた残りが合計コスト以上必要
+  if (player.hand.length - 2 < totalCost) return state
+  return {
+    ...state,
+    pendingAction: { kind: 'choose-build-two-payment', playerId: action.playerId, firstId: action.firstId, secondId: card.id, totalCost, sourceName: action.sourceName, sourceId: action.sourceId },
+  }
+}
+
+// 地球建設: 支払い確定
+export function confirmBuildTwoPayment(state: GameState, paymentIds: string[]): GameState {
+  const action = state.pendingAction
+  if (!action || action.kind !== 'choose-build-two-payment') return state
+  if (paymentIds.length !== action.totalCost) return state
+  const beforePlayer = getPlayer(state, action.playerId)
+  let s = state
+  ;[s] = constructBuilding(s, action.playerId, action.firstId, paymentIds, 0)
+  ;[s] = constructBuilding(s, action.playerId, action.secondId, [], 0)
+  // 建設後手札0枚なら3枚ドロー
+  const afterPlayer = getPlayer(s, action.playerId)
+  if (afterPlayer.hand.length === 0) s = drawCards(s, action.playerId, 3)
+  s = { ...s, pendingAction: null }
+  const afterPlayer2 = getPlayer(s, action.playerId)
+  s = addLog(s, buildActionLog(action.sourceName ?? '', 'build-two', beforePlayer, afterPlayer2, state.startPlayerIndex, s.startPlayerIndex))
+  return s
+}
+
+// プレハブ工務店: 建設コストmaxCost以下の建物を無料建設
+export function confirmFreeBuild(state: GameState, cardId: string): GameState {
+  const action = state.pendingAction
+  if (!action || action.kind !== 'choose-free-build') return state
+  const beforePlayer = getPlayer(state, action.playerId)
+  const card = beforePlayer.hand.find(c => c.id === cardId)
+  if (!card || card.kind !== 'building') return state
+  const def = ALL_BUILDING_CARDS[card.name]
+  if (!def || def.cost > action.maxCost) return state
+  let s: GameState
+  ;[s] = constructBuilding(state, action.playerId, card.id, [], 0)
+  s = { ...s, pendingAction: null }
+  const afterPlayer = getPlayer(s, action.playerId)
+  s = addLog(s, buildActionLog(action.sourceName ?? '', 'build-free-if-cheap', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
+  return s
+}
+
+// 建築会社: 売却禁止建物を建設コスト払いで建設し、N枚ドロー
+export function selectNoSellBuildTarget(state: GameState, cardId: string): GameState {
+  const action = state.pendingAction
+  if (!action || action.kind !== 'choose-no-sell-build') return state
+  const player = getPlayer(state, action.playerId)
+  const card = player.hand.find(c => c.id === cardId)
+  if (!card || card.kind !== 'building') return state
+  const def = ALL_BUILDING_CARDS[card.name]
+  if (!def || def.canSell) return state
+  const selfDiscount = getConstructionDiscount(state, action.playerId, card.name)
+  const cost = Math.max(0, def.cost - selfDiscount)
+  if (player.hand.length - 1 < cost) return state
+  return {
+    ...state,
+    pendingAction: {
+      kind: 'choose-build-payment',
+      playerId: action.playerId,
+      targetId: card.id,
+      targetName: card.name,
+      cost,
+      drawAfter: action.drawAfter,
+      discount: 0,
+      sourceName: action.sourceName,
+      sourceId: action.sourceId,
+    },
+  }
+}
+

@@ -1,5 +1,5 @@
-import { BUILDING_CARDS, ROUND_CARDS } from './constants'
-import { getPlayer, updatePlayer, addLog, genId } from './primitives'
+import { ROUND_CARDS } from './constants'
+import { getPlayer, updatePlayer, addLog, genId, ALL_BUILDING_CARDS } from './primitives'
 import type { GameState, BuildingCard, PublicWorkplace, Player, ScoreResult, OwnedBuilding } from './types'
 
 // Circular dep with turns.ts (processCpuTurns calls processRoundEnd; processRoundEnd/startNextRound call processCpuTurns)
@@ -34,7 +34,7 @@ export function flipRoundCard(state: GameState, round: number, playerCount: numb
 export function getHandLimit(player: Player): number {
   let limit = 5
   for (const b of player.ownedBuildings) {
-    const effect = BUILDING_CARDS[b.name]?.effect
+    const effect = ALL_BUILDING_CARDS[b.name]?.effect
     if (effect?.kind === 'p-hand-limit') limit += effect.n
   }
   return limit
@@ -46,7 +46,7 @@ export function getHandLimit(player: Player): number {
 function findSellOptions(sellable: OwnedBuilding[], deficit: number): string[][] {
   const n = sellable.length
   if (n === 0 || deficit <= 0) return []
-  const values = sellable.map(b => BUILDING_CARDS[b.name]?.assetValue ?? 0)
+  const values = sellable.map(b => ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0)
   const totalAvailable = values.reduce((a, b) => a + b, 0)
   if (totalAvailable < deficit) return [] // 全部売っても足りない
 
@@ -70,7 +70,7 @@ function findSellOptions(sellable: OwnedBuilding[], deficit: number): string[][]
 
 // CPU: 売却総額が最小、同値なら高価な建物を残す方を選ぶ
 function cpuBestSellOption(options: string[][], sellable: OwnedBuilding[]): string[] {
-  const valueMap = new Map(sellable.map(b => [b.id, BUILDING_CARDS[b.name]?.assetValue ?? 0]))
+  const valueMap = new Map(sellable.map(b => [b.id, ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0]))
   const allIds = sellable.map(b => b.id)
   return options.reduce((best, opt) => {
     const bestSold = best.reduce((s, id) => s + (valueMap.get(id) ?? 0), 0)
@@ -95,7 +95,7 @@ function autoSellForWages(state: GameState, playerId: number, idsToSell: string[
   let s = state
   const buildings = getPlayer(s, playerId).ownedBuildings.filter(b => idsToSell.includes(b.id))
   for (const b of buildings) {
-    const def = BUILDING_CARDS[b.name]!
+    const def = ALL_BUILDING_CARDS[b.name]!
     s = updatePlayer(s, playerId, p => ({
       ...p, money: p.money + def.assetValue,
       ownedBuildings: p.ownedBuildings.filter(ob => ob.id !== b.id),
@@ -146,10 +146,10 @@ function processWagesCash(state: GameState): GameState {
       s = { ...s, household: s.household + playerMoney }
 
       const sellable = getPlayer(s, player.id).ownedBuildings
-        .filter(b => BUILDING_CARDS[b.name]?.canSell)
+        .filter(b => ALL_BUILDING_CARDS[b.name]?.canSell)
 
       if (!player.isCpu) {
-        const totalSellable = sellable.reduce((sum, b) => sum + (BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
+        const totalSellable = sellable.reduce((sum, b) => sum + (ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
         if (totalSellable >= remaining) {
           // 手札上限処理の後で建物売却を行うため記録
           s = { ...s, _pendingWageDeficit: { playerId: player.id, deficit: remaining } }
@@ -224,8 +224,8 @@ export function resolveAfterHandLimit(state: GameState, noCpu: boolean): GameSta
     const { playerId, deficit } = s._pendingWageDeficit
     s = { ...s, _pendingWageDeficit: undefined }
     const sellable = getPlayer(s, playerId).ownedBuildings
-      .filter(b => BUILDING_CARDS[b.name]?.canSell)
-    const totalSellable = sellable.reduce((sum, b) => sum + (BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
+      .filter(b => ALL_BUILDING_CARDS[b.name]?.canSell)
+    const totalSellable = sellable.reduce((sum, b) => sum + (ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
     if (totalSellable >= deficit) {
       const options = findSellOptions(sellable, deficit)
       if (options.length === 1) {
@@ -281,6 +281,28 @@ export function startNextRound(state: GameState, noCpu: boolean): GameState {
     }
   }
 
+  // 醸造所の storedConsumption を手札に加える（次ラウンド開始時）
+  for (const player of s.players) {
+    for (const b of player.ownedBuildings) {
+      if (b.storedConsumption && b.storedConsumption > 0) {
+        const count = b.storedConsumption
+        s = updatePlayer(s, player.id, p => ({
+          ...p,
+          ownedBuildings: p.ownedBuildings.map(ob => ob.id === b.id ? { ...ob, storedConsumption: 0 } : ob),
+        }))
+        for (let i = 0; i < count; i++) {
+          let cId: string
+          ;[s, cId] = genId(s, 'c-')
+          s = updatePlayer(s, player.id, p => ({
+            ...p,
+            hand: [...p.hand, { kind: 'consumption' as const, id: cId }],
+          }))
+        }
+        s = addLog(s, `${getPlayer(s, player.id).name} の醸造所から消費財${count}枚を手札に加えた`)
+      }
+    }
+  }
+
   s = {
     ...s,
     players: s.players.map(p => ({
@@ -303,13 +325,17 @@ export function startNextRound(state: GameState, noCpu: boolean): GameState {
 
 export function calculateScores(state: GameState): ScoreResult[] {
   return state.players.map(player => {
-    const buildingValue = player.ownedBuildings.reduce((sum, b) => sum + (BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
+    let buildingValue = player.ownedBuildings.reduce((sum, b) => sum + (ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
 
     let bonuses = 0
+    const noSellCount = player.ownedBuildings.filter(ob => !ALL_BUILDING_CARDS[ob.name]?.canSell).length
+    const farmCount = player.ownedBuildings.filter(ob => ALL_BUILDING_CARDS[ob.name]?.tags.includes('farm')).length
+
     for (const b of player.ownedBuildings) {
-      const effect = BUILDING_CARDS[b.name]?.effect
+      const effect = ALL_BUILDING_CARDS[b.name]?.effect
       if (!effect) continue
       switch (effect.kind) {
+        // プログレス系
         case 'p-per-building':
           bonuses += effect.pts * player.ownedBuildings.length
           break
@@ -320,18 +346,38 @@ export function calculateScores(state: GameState): ScoreResult[] {
           bonuses += effect.pts * player.workers.length
           break
         case 'p-per-factory':
-          bonuses += effect.pts * player.ownedBuildings.filter(ob => BUILDING_CARDS[ob.name]?.tags.includes('factory')).length
+          bonuses += effect.pts * player.ownedBuildings.filter(ob => ALL_BUILDING_CARDS[ob.name]?.tags.includes('factory')).length
           break
         case 'p-per-no-sell':
-          bonuses += effect.pts * player.ownedBuildings.filter(ob => !BUILDING_CARDS[ob.name]?.canSell).length
+          bonuses += effect.pts * noSellCount
+          break
+        // メセナ系：終了時条件付きボーナス（資産価値に加算）
+        case 'p-if-empty-hand':
+          if (player.hand.length === 0) buildingValue += effect.bonus
+          break
+        case 'p-if-own-n-buildings':
+          if (player.ownedBuildings.length >= effect.threshold) buildingValue += effect.bonus
+          break
+        case 'p-if-tag-n':
+          if (effect.tag === 'farm' && farmCount >= effect.threshold) buildingValue += effect.bonus
+          else if (effect.tag === 'factory' && player.ownedBuildings.filter(ob => ALL_BUILDING_CARDS[ob.name]?.tags.includes('factory')).length >= effect.threshold) buildingValue += effect.bonus
+          break
+        case 'p-if-no-sell-n':
+          if (noSellCount >= effect.threshold) buildingValue += effect.bonus
           break
       }
     }
 
-    const forgiveBuilding = player.ownedBuildings.find(b => BUILDING_CARDS[b.name]?.effect.kind === 'p-forgive-wages')
-    const forgiveMax = forgiveBuilding ? (BUILDING_CARDS[forgiveBuilding.name].effect as { kind: 'p-forgive-wages'; max: number }).max : 0
+    const forgiveBuilding = player.ownedBuildings.find(b => ALL_BUILDING_CARDS[b.name]?.effect.kind === 'p-forgive-wages')
+    const forgiveMax = forgiveBuilding ? (ALL_BUILDING_CARDS[forgiveBuilding.name].effect as { kind: 'p-forgive-wages'; max: number }).max : 0
     const forgivenWages = Math.min(player.unpaidWages, forgiveMax)
     const unpaidPenalty = (player.unpaidWages - forgivenWages) * 3
+
+    // 勝利点計算: floor(n/3)*10 + (n%3)*1。会計事務所所有で2倍
+    const vp = player.victoryPoints
+    const baseVpScore = Math.floor(vp / 3) * 10 + (vp % 3) * 1
+    const hasKaikei = player.ownedBuildings.some(b => ALL_BUILDING_CARDS[b.name]?.effect.kind === 'p-vp-double')
+    const vpScore = hasKaikei ? baseVpScore * 2 : baseVpScore
 
     return {
       playerId: player.id,
@@ -341,8 +387,9 @@ export function calculateScores(state: GameState): ScoreResult[] {
       unpaidPenalty,
       workerCount: player.workers.length,
       actionsPlaced: 0,
-      victoryPoints: 0,
-      total: buildingValue + player.money + bonuses - unpaidPenalty,
+      victoryPoints: vp,
+      vpScore,
+      total: buildingValue + player.money + bonuses + vpScore - unpaidPenalty,
     }
   })
 }

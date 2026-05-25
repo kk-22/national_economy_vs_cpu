@@ -1,8 +1,8 @@
-import { BUILDING_CARDS, ROUND_CARDS } from './constants'
+import { ROUND_CARDS } from './constants'
 import { makeSeed } from './random'
-import { nextId, genId, buildDeck, drawCards, drawConsumption, rngNext, updatePlayer, addLog } from './primitives'
+import { nextId, genId, buildDeck, drawCards, drawConsumption, rngNext, updatePlayer, addLog, getCardDefs } from './primitives'
 import { flipRoundCard } from './round'
-import type { GameState, GameConfig, Player, BuildingCard } from './types'
+import type { GameState, GameConfig, GameSeries, Player, BuildingCard } from './types'
 
 export function createGame(config: GameConfig): GameState {
   const playerCount = config.cpuOnly ? config.cpuCount : 1 + config.cpuCount
@@ -18,6 +18,7 @@ export function createGame(config: GameConfig): GameState {
     discardPile: [],
     household: 0,
     phase: 'placement',
+    series: config.series ?? 'progress',
     pendingAction: null,
     log: [],
     _nextId: 0,
@@ -55,6 +56,7 @@ export function createGame(config: GameConfig): GameState {
         { id: w2Id, playerId: i, isTraining: false, placedAt: null },
       ],
       unpaidWages: 0,
+      victoryPoints: 0,
     })
   }
   state = { ...state, players }
@@ -90,7 +92,7 @@ export function createGame(config: GameConfig): GameState {
   return state
 }
 
-export function createDebugGame(cpuCount: number = 3): GameState {
+export function createDebugGame(cpuCount: number = 3, series: GameSeries = 'progress'): GameState {
   const cpuN = Math.min(Math.max(1, cpuCount), 3)
   const playerCount = 1 + cpuN
   const playerNames = ['プレイヤー', 'CPU 1', 'CPU 2', 'CPU 3']
@@ -106,6 +108,7 @@ export function createDebugGame(cpuCount: number = 3): GameState {
     discardPile: [],
     household: 40,
     phase: 'placement',
+    series,
     pendingAction: null,
     log: ['【デバッグ】ラウンド8スタート'],
     _nextId: 0,
@@ -138,12 +141,15 @@ export function createDebugGame(cpuCount: number = 3): GameState {
         { id: w3, playerId: i, isTraining: false, placedAt: null },
       ],
       unpaidWages: 0,
+      victoryPoints: 0,
     })
   }
   state = { ...state, players }
 
+  // シリーズの全建物カードを各プレイヤーの建設済み建物と手札に配置
+  const cardDefs = getCardDefs(state)
   for (const p of state.players) {
-    for (const def of Object.values(BUILDING_CARDS)) {
+    for (const def of Object.values(cardDefs)) {
       let bId: string
       ;[state, bId] = genId(state, 'b-')
       state = updatePlayer(state, p.id, pl => ({
@@ -158,6 +164,7 @@ export function createDebugGame(cpuCount: number = 3): GameState {
     state = drawConsumption(state, p.id, 3)
   }
 
+  // 一般職場（ラウンドカード職場）を追加（ラウンド8まで）
   const seen = new Set<string>()
   for (const rc of ROUND_CARDS.slice(0, 8)) {
     for (const wp of rc.workplaces) {
@@ -181,7 +188,8 @@ export function createDebugGame(cpuCount: number = 3): GameState {
     }
   }
 
-  const canSellDefs = Object.values(BUILDING_CARDS)
+  // シリーズの売却可能な全建物カードを公共職場として追加
+  const canSellDefs = Object.values(cardDefs)
     .filter(d => d.canSell)
     .sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name))
   for (const def of canSellDefs) {

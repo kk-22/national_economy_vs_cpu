@@ -1,5 +1,5 @@
-import { BUILDING_CARDS, ROUND_CARDS } from './constants'
-import { getPlayer } from './primitives'
+import { ROUND_CARDS } from './constants'
+import { getPlayer, ALL_BUILDING_CARDS } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { scoreEffect, filterDominatedWorkplaces, getPlayerWeights } from './cpu-scoring'
 import { setLastCpuNoAutoTarget } from './turns'
@@ -28,7 +28,7 @@ export function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState
 
   for (const wp of pubOptions) {
     const base = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers, isStartPlayer, weights)
-    const soldDef = BUILDING_CARDS[wp.name]
+    const soldDef = ALL_BUILDING_CARDS[wp.name]
     // 売却建物 かつ draw 系施設 → コスト連動ボーナス（コスト高いほど優先）
     const sc = (soldDef && drawKinds.has(wp.effect.kind))
       ? base * (1.0 + weights.drawPubExtra + soldDef.cost * weights.drawCostMult)
@@ -36,7 +36,7 @@ export function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState
     if (sc > bestScore) { bestScore = sc; bestPub = wp; bestBld = null }
   }
   for (const bld of bldOptions) {
-    const def = BUILDING_CARDS[bld.name]
+    const def = ALL_BUILDING_CARDS[bld.name]
     if (!def) continue
     const base = scoreEffect(def.effect, player, state.household, state.round, availableWorkers, isStartPlayer, weights)
     // draw 系施設 → コスト連動ボーナス、build 系等 → pubBonus 適用
@@ -80,7 +80,7 @@ export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): Gam
     const bestBuildableCost = player.hand
       .filter(c => c.kind === 'building')
       .reduce((max, c) => {
-        const def = BUILDING_CARDS[(c as BuildingCard).name]
+        const def = ALL_BUILDING_CARDS[(c as BuildingCard).name]
         if (!def) return max
         const dc = Math.max(0, def.cost - buildDiscount)
         if (player.hand.length - 1 < dc) return max
@@ -88,7 +88,7 @@ export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): Gam
       }, -1)
     if (bestBuildableCost >= 0) {
       const equivBld = bldOptions.find(b => {
-        const def = BUILDING_CARDS[b.name]
+        const def = ALL_BUILDING_CARDS[b.name]
         return def && def.isWorkplace && def.cost >= bestBuildableCost
       })
       if (equivBld) {
@@ -106,14 +106,14 @@ export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): Gam
 
   for (const wp of pubOptions) {
     const base = scoreEffect(wp.effect, player, state.household, state.round, availableWorkers, isStartPlayer, weights)
-    const soldDef = BUILDING_CARDS[wp.name]
+    const soldDef = ALL_BUILDING_CARDS[wp.name]
     const sc = (soldDef && drawKinds.has(wp.effect.kind))
       ? base * (1.0 + weights.drawPubExtra + soldDef.cost * weights.drawCostMult)
       : base * pubBonus
     if (sc > bestScore) { bestScore = sc; bestPub = wp; bestBld = null }
   }
   for (const bld of bldOptions) {
-    const def = BUILDING_CARDS[bld.name]
+    const def = ALL_BUILDING_CARDS[bld.name]
     if (!def) continue
     const base = scoreEffect(def.effect, player, state.household, state.round, availableWorkers, isStartPlayer, weights)
     const sc = drawKinds.has(def.effect.kind)

@@ -62,6 +62,7 @@ export function makePlayer(overrides: Partial<Player> = {}): Player {
     ownedBuildings: [],
     workers: baseWorkers,
     unpaidWages: 0,
+    victoryPoints: 0,
     ...overrides,
     // workersだけはoverridesで上書き可能にするため、overridesにworkersがあれば使う
     // （上の...overridesで既に上書きされるので追記不要）
@@ -115,6 +116,7 @@ export function makeState(players: Player[], overrides: Partial<GameState> = {})
     _nextId: 2000,
     _rngSeed: 42,
     _rngState: 42,
+    series: 'progress',
     ...overrides,
   }
 }

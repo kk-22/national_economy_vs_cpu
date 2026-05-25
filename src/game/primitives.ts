@@ -1,6 +1,16 @@
 import { BUILDING_CARDS, MAX_WORKERS_PER_PLAYER } from './constants'
+import { MECENAT_BUILDING_CARDS } from './mecenat-constants'
 import { SeededRandom } from './random'
-import type { GameState, Player, Worker, HandCard, BuildingCard } from './types'
+import type { GameState, Player, Worker, HandCard, BuildingCard, BuildingCardDef } from './types'
+
+export const ALL_BUILDING_CARDS: Record<string, BuildingCardDef> = {
+  ...BUILDING_CARDS,
+  ...MECENAT_BUILDING_CARDS,
+}
+
+export function getCardDefs(state: GameState): Record<string, BuildingCardDef> {
+  return state.series === 'mecenat' ? MECENAT_BUILDING_CARDS : BUILDING_CARDS
+}
 
 // ---- ID generation ----
 
@@ -39,7 +49,7 @@ export function shuffle<T>(state: GameState, arr: T[]): [GameState, T[]] {
 export function buildDeck(state: GameState): [GameState, BuildingCard[]] {
   const cards: BuildingCard[] = []
   let s = state
-  for (const def of Object.values(BUILDING_CARDS)) {
+  for (const def of Object.values(getCardDefs(s))) {
     for (let i = 0; i < def.count; i++) {
       let id: string
       ;[s, id] = nextId(s)
@@ -170,7 +180,7 @@ export function availableWorkers(player: Player): Worker[] {
 export function getMaxWorkers(player: Player): number {
   let max = MAX_WORKERS_PER_PLAYER
   for (const b of player.ownedBuildings) {
-    const effect = BUILDING_CARDS[b.name]?.effect
+    const effect = ALL_BUILDING_CARDS[b.name]?.effect
     if (effect?.kind === 'p-worker-limit') max += effect.n
   }
   return max

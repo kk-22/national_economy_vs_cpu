@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { CpuStrategy } from '../game/types'
+import type { CpuStrategy, GameSeries } from '../game/types'
 
 const props = defineProps<{
   setupTotal: number
   setupHasPlayer: boolean
   setupPlayerOrder: number
   setupCpuStrategies: CpuStrategy[]
+  setupSeries: GameSeries
   animSpeed: 'none' | 'short' | 'long'
   hasGame: boolean
 }>()
@@ -16,6 +17,7 @@ const emit = defineEmits<{
   'update:setupHasPlayer': [v: boolean]
   'update:setupPlayerOrder': [v: number]
   'update:setupCpuStrategies': [v: CpuStrategy[]]
+  'update:setupSeries': [v: GameSeries]
   'update:animSpeed': [v: 'none' | 'short' | 'long']
   begin: []
   beginDebug: []
@@ -96,6 +98,18 @@ const DIFFICULTY_OPTIONS: { label: string; strategy: CpuStrategy }[] = [
 
       <!-- ゲーム開始設定 -->
       <div class="setup-section-title">ゲーム開始設定</div>
+
+      <div class="radio-group-label">シリーズ</div>
+      <div class="radio-group radio-group--horizontal">
+        <label class="radio-item">
+          <input type="radio" :checked="setupSeries === 'progress'" @change="emit('update:setupSeries', 'progress')" />
+          <span>プログレス</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" :checked="setupSeries === 'mecenat'" @change="emit('update:setupSeries', 'mecenat')" />
+          <span>メセナ</span>
+        </label>
+      </div>
 
       <div class="radio-group-label">人数</div>
       <div class="radio-group radio-group--horizontal">

@@ -1,6 +1,6 @@
-import { BUILDING_CARDS, ROUND_CARDS } from './constants'
-import { rngNext, shuffle, updatePlayer, getPlayer, drawCards } from './primitives'
-import { constructBuilding } from './build'
+import { ROUND_CARDS } from './constants'
+import { rngNext, shuffle, updatePlayer, getPlayer, drawCards, ALL_BUILDING_CARDS } from './primitives'
+import { constructBuilding, getConstructionDiscount } from './build'
 import type { GameState, HandCard, BuildingCard, CpuStrategy } from './types'
 
 export const MCTS_SIMULATIONS = 10
@@ -10,6 +10,19 @@ export const MCTS_SIMULATIONS = 10
 // 倉庫・社宅: パッシブ効果だが得点貢献が低く投資効率が悪い
 export const GREEDY_BUILD_EXCLUDED = new Set(['珈琲店', '倉庫', '社宅'])
 
+/** state なしで player から建設コスト割引を計算（cpu-scoring.ts 用） */
+export function getConstructionDiscountForPlayer(player: { ownedBuildings: { name: string }[]; victoryPoints: number }, cardName: string): number {
+  const cd = ALL_BUILDING_CARDS[cardName]?.constructionDiscount
+  if (!cd) return 0
+  if (cd.condition === 'own-tag') {
+    return player.ownedBuildings.some(b => ALL_BUILDING_CARDS[b.name]?.tags.includes(cd.tag)) ? cd.discount : 0
+  }
+  if (cd.condition === 'own-vp-min') {
+    return player.victoryPoints >= cd.minVp ? cd.discount : 0
+  }
+  return 0
+}
+
 // ---- 捨て札ソート（greedy/disruptive 共通: 消費財→低value建物の順） ----
 
 function sortedDiscardIds(hand: HandCard[], count: number): string[] {
@@ -17,7 +30,7 @@ function sortedDiscardIds(hand: HandCard[], count: number): string[] {
     if (a.kind === 'consumption' && b.kind !== 'consumption') return -1
     if (b.kind === 'consumption' && a.kind !== 'consumption') return 1
     if (a.kind === 'building' && b.kind === 'building') {
-      return (BUILDING_CARDS[a.name]?.assetValue ?? 0) - (BUILDING_CARDS[b.name]?.assetValue ?? 0)
+      return (ALL_BUILDING_CARDS[a.name]?.assetValue ?? 0) - (ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0)
     }
     return 0
   })
@@ -49,7 +62,7 @@ export function cpuRevealPick(state: GameState, playerId: number, n: number, str
     pick = revealed.reduce((best, c) => {
       if (c.kind !== 'building') return best
       if (best.kind !== 'building') return c
-      return (BUILDING_CARDS[c.name]?.assetValue ?? 0) >= (BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
+      return (ALL_BUILDING_CARDS[c.name]?.assetValue ?? 0) >= (ALL_BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
     })
   } else {
     let r: number
@@ -99,8 +112,9 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
   const player = getPlayer(state, playerId)
   let buildable = player.hand.filter(c => {
     if (c.kind !== 'building') return false
-    const def = BUILDING_CARDS[c.name]!
-    const cost = Math.max(0, def.cost - discount)
+    const def = ALL_BUILDING_CARDS[c.name]!
+    const selfDiscount = getConstructionDiscount(state, playerId, c.name)
+    const cost = Math.max(0, def.cost - discount - selfDiscount)
     return player.hand.length - 1 >= cost
   }) as (BuildingCard & { kind: 'building' })[]
 
@@ -111,7 +125,7 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
     // 建てて即売り損パターンを除外、7ラウンド以下は配置不可建物（職場でない建物）を建てない
     buildable = buildable.filter(c => {
       if (GREEDY_BUILD_EXCLUDED.has(c.name)) return false
-      const def = BUILDING_CARDS[c.name]!
+      const def = ALL_BUILDING_CARDS[c.name]!
       if (def.effect.kind.startsWith('p-')) {
         // パッシブ効果: R8以降で得点があれば建設対象
         return state.round >= 8 && def.assetValue > 0
@@ -139,19 +153,19 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
     // ラウンド8-9は残りラウンドが少なくコスト効果より得点価値が重要
     if (state.round >= 8) {
       target = buildable.reduce((best, c) =>
-        (BUILDING_CARDS[c.name]?.assetValue ?? 0) >= (BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
+        (ALL_BUILDING_CARDS[c.name]?.assetValue ?? 0) >= (ALL_BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
       )
     } else {
       target = buildable.reduce((best, c) =>
-        (BUILDING_CARDS[c.name]?.cost ?? 0) >= (BUILDING_CARDS[best.name]?.cost ?? 0) ? c : best
+        (ALL_BUILDING_CARDS[c.name]?.cost ?? 0) >= (ALL_BUILDING_CARDS[best.name]?.cost ?? 0) ? c : best
       )
     }
   } else if (strategy === 'disruptive') {
     target = buildable.reduce((best, c) => {
-      const cc = BUILDING_CARDS[c.name]?.cost ?? 0
-      const bc = BUILDING_CARDS[best.name]?.cost ?? 0
+      const cc = ALL_BUILDING_CARDS[c.name]?.cost ?? 0
+      const bc = ALL_BUILDING_CARDS[best.name]?.cost ?? 0
       if (cc !== bc) return cc < bc ? c : best
-      return (BUILDING_CARDS[c.name]?.assetValue ?? 0) <= (BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
+      return (ALL_BUILDING_CARDS[c.name]?.assetValue ?? 0) <= (ALL_BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
     })
   } else {
     let r: number
@@ -159,8 +173,9 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
     target = buildable[Math.floor(r * buildable.length)]
   }
 
-  const def = BUILDING_CARDS[target.name]!
-  const cost = Math.max(0, def.cost - discount)
+  const def = ALL_BUILDING_CARDS[target.name]!
+  const selfDiscount = getConstructionDiscount(state, playerId, target.name)
+  const cost = Math.max(0, def.cost - discount - selfDiscount)
   const payment = player.hand.filter(c => c.id !== target.id).slice(0, cost).map(c => c.id)
   ;[s] = constructBuilding(s, playerId, target.id, payment, drawAfter)
   return s
@@ -172,7 +187,7 @@ export function cpuBuildFarmFree(state: GameState, playerId: number, strategy: C
   const player = getPlayer(state, playerId)
   const farmCards = player.hand.filter(c => {
     if (c.kind !== 'building') return false
-    return BUILDING_CARDS[c.name]?.tags.includes('farm') ?? false
+    return ALL_BUILDING_CARDS[c.name]?.tags.includes('farm') ?? false
   }) as (BuildingCard & { kind: 'building' })[]
   if (farmCards.length === 0) return state
 
@@ -180,7 +195,7 @@ export function cpuBuildFarmFree(state: GameState, playerId: number, strategy: C
   let s = state
   if (strategy === 'greedy' || strategy === 'beam') {
     target = farmCards.reduce((best, c) =>
-      (BUILDING_CARDS[c.name]?.assetValue ?? 0) >= (BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
+      (ALL_BUILDING_CARDS[c.name]?.assetValue ?? 0) >= (ALL_BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
     )
   } else {
     let r: number
@@ -199,7 +214,7 @@ export function cpuBuildDouble(state: GameState, playerId: number, strategy: Cpu
 
   const costGroups: Record<number, typeof buildings> = {}
   for (const c of buildings) {
-    const cost = BUILDING_CARDS[c.name]?.cost ?? 0
+    const cost = ALL_BUILDING_CARDS[c.name]?.cost ?? 0
     costGroups[cost] = [...(costGroups[cost] ?? []), c]
   }
   const validCosts = Object.entries(costGroups).filter(([costStr, cards]) => {
@@ -224,9 +239,112 @@ export function cpuBuildDouble(state: GameState, playerId: number, strategy: Cpu
   const [, sameCostCards] = chosenEntry
   const first = sameCostCards[0]
   const second = sameCostCards[1]
-  const cost = BUILDING_CARDS[first.name]?.cost ?? 0
+  const cost = ALL_BUILDING_CARDS[first.name]?.cost ?? 0
   const payment = buildings.filter(c => c.id !== first.id && c.id !== second.id).slice(0, cost).map(c => c.id)
   ;[s] = constructBuilding(s, playerId, first.id, payment, 0)
   ;[s] = constructBuilding(s, playerId, second.id, [], 0)
+  return s
+}
+
+// ---- メセナ専用 CPU 関数 ----
+
+// 建築会社: 売却禁止建物を建設コスト払いで建設し、N枚ドロー
+export function cpuBuildNoSell(state: GameState, playerId: number, drawAfter: number, strategy: CpuStrategy = 'random'): GameState {
+  const player = getPlayer(state, playerId)
+  const buildable = player.hand.filter(c => {
+    if (c.kind !== 'building') return false
+    const def = ALL_BUILDING_CARDS[c.name]
+    if (!def || def.canSell) return false
+    const selfDiscount = getConstructionDiscount(state, playerId, c.name)
+    const cost = Math.max(0, def.cost - selfDiscount)
+    return player.hand.length - 1 >= cost
+  }) as (BuildingCard & { kind: 'building' })[]
+  if (buildable.length === 0) return state
+
+  let target: BuildingCard & { kind: 'building' }
+  let s = state
+  if (strategy === 'greedy' || strategy === 'beam') {
+    target = buildable.reduce((best, c) =>
+      (ALL_BUILDING_CARDS[c.name]?.assetValue ?? 0) >= (ALL_BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
+    )
+  } else {
+    let r: number
+    ;[s, r] = rngNext(s)
+    target = buildable[Math.floor(r * buildable.length)]
+  }
+  const def = ALL_BUILDING_CARDS[target.name]!
+  const selfDiscount = getConstructionDiscount(state, playerId, target.name)
+  const cost = Math.max(0, def.cost - selfDiscount)
+  const payment = player.hand.filter(c => c.id !== target.id).slice(0, cost).map(c => c.id)
+  ;[s] = constructBuilding(s, playerId, target.id, payment, drawAfter)
+  return s
+}
+
+// プレハブ工務店: 建設コストmaxCost以下の建物を無料建設
+export function cpuBuildFree(state: GameState, playerId: number, maxCost: number, strategy: CpuStrategy = 'random'): GameState {
+  const player = getPlayer(state, playerId)
+  const buildable = player.hand.filter(c =>
+    c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.cost ?? Infinity) <= maxCost
+  ) as (BuildingCard & { kind: 'building' })[]
+  if (buildable.length === 0) return state
+
+  let target: BuildingCard & { kind: 'building' }
+  let s = state
+  if (strategy === 'greedy' || strategy === 'beam') {
+    target = buildable.reduce((best, c) =>
+      (ALL_BUILDING_CARDS[c.name]?.assetValue ?? 0) >= (ALL_BUILDING_CARDS[best.name]?.assetValue ?? 0) ? c : best
+    )
+  } else {
+    let r: number
+    ;[s, r] = rngNext(s)
+    target = buildable[Math.floor(r * buildable.length)]
+  }
+  ;[s] = constructBuilding(s, playerId, target.id, [], 0)
+  return s
+}
+
+// 地球建設: 2棟同時建設（合計コスト払い、建設後手札0なら3枚ドロー）
+export function cpuBuildTwo(state: GameState, playerId: number, strategy: CpuStrategy = 'random'): GameState {
+  const player = getPlayer(state, playerId)
+  const buildings = player.hand.filter(c => c.kind === 'building') as (BuildingCard & { kind: 'building' })[]
+  if (buildings.length < 2) return state
+
+  let first: BuildingCard & { kind: 'building' }
+  let second: BuildingCard & { kind: 'building' }
+  let s = state
+
+  if (strategy === 'greedy' || strategy === 'beam') {
+    // assetValue最大の2枚を選ぶ（合計コストが払えるか確認）
+    const sorted = [...buildings].sort((a, b) => (ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0) - (ALL_BUILDING_CARDS[a.name]?.assetValue ?? 0))
+    // 支払い可能な組み合わせを探す
+    let found = false
+    for (let i = 0; i < sorted.length && !found; i++) {
+      for (let j = i + 1; j < sorted.length && !found; j++) {
+        const c1 = sorted[i], c2 = sorted[j]
+        const totalCost = (ALL_BUILDING_CARDS[c1.name]?.cost ?? 0) + (ALL_BUILDING_CARDS[c2.name]?.cost ?? 0)
+        if (buildings.length - 2 >= totalCost) {
+          first = c1; second = c2; found = true
+        }
+      }
+    }
+    if (!found) return state
+  } else {
+    let r1: number, r2: number
+    ;[s, r1] = rngNext(s)
+    ;[s, r2] = rngNext(s)
+    const i1 = Math.floor(r1 * buildings.length)
+    let i2 = Math.floor(r2 * (buildings.length - 1))
+    if (i2 >= i1) i2++
+    first = buildings[i1]
+    second = buildings[i2]
+    const totalCost = (ALL_BUILDING_CARDS[first.name]?.cost ?? 0) + (ALL_BUILDING_CARDS[second.name]?.cost ?? 0)
+    if (buildings.length - 2 < totalCost) return state
+  }
+  const totalCost = (ALL_BUILDING_CARDS[first!.name]?.cost ?? 0) + (ALL_BUILDING_CARDS[second!.name]?.cost ?? 0)
+  const payment = player.hand.filter(c => c.id !== first!.id && c.id !== second!.id).slice(0, totalCost).map(c => c.id)
+  ;[s] = constructBuilding(s, playerId, first!.id, payment, 0)
+  ;[s] = constructBuilding(s, playerId, second!.id, [], 0)
+  // 建設後手札0枚なら3枚ドロー
+  if (getPlayer(s, playerId).hand.length === 0) s = drawCards(s, playerId, 3)
   return s
 }

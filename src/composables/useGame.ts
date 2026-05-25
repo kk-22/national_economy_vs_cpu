@@ -1,5 +1,5 @@
 import { shallowReactive, computed, ref, toRaw } from 'vue'
-import type { GameConfig, GameState } from '../game/types'
+import type { GameConfig, GameSeries, GameState } from '../game/types'
 import { createGame, createDebugGame } from '../game/init'
 import { calculateScores, confirmSellBuildings, processRoundEnd } from '../game/round'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from '../game/availability'
@@ -8,15 +8,17 @@ import {
   cpuOneTurnStep, consumeLastCpuNoAutoTarget, skipEmptyPlayerTurn, setDeferRoundEnd,
   selectFarmBuildTarget, confirmBuildPayment, confirmDoublePayment,
   confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard,
+  selectBuildTwoFirstCard, selectBuildTwoSecondCard, confirmBuildTwoCards, confirmFreeBuildCard, selectNoSellBuildCard,
 } from '../game/turns'
 import {
   selectBuildTarget, selectDoubleFirst, selectDoubleSecond,
   cancelBuildChoice, cancelBuildPayment, cancelDoubleSecond, cancelDoublePayment,
   getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards,
+  getNoSellBuildableCards, getFreeBuildableCards,
 } from '../game/build'
 import { toggleDiscardSelection, cancelDiscardChoice, toggleHandLimitSelection } from '../game/resolution'
-import { availableWorkers } from '../game/primitives'
-import { BUILDING_CARDS, ROUND_CARDS } from '../game/constants'
+import { availableWorkers, ALL_BUILDING_CARDS } from '../game/primitives'
+import { ROUND_CARDS } from '../game/constants'
 import { GameHistory } from '../game/history'
 import type { HistoryEntry } from '../game/history'
 import { replayToIndex } from '../game/replay'
@@ -86,9 +88,9 @@ export function useGame() {
     historyVersion.value++
   }
 
-  function startDebugGame(cpuCount: number = 3) {
+  function startDebugGame(cpuCount: number = 3, series: GameSeries = 'progress') {
     clearSavedGame()
-    state.game = createDebugGame(cpuCount)
+    state.game = createDebugGame(cpuCount, series)
     history = new GameHistory(state.game._rngSeed)
     history.setInitialState(toRaw(state.game))
     pendingEntry = null
@@ -202,7 +204,7 @@ export function useGame() {
   const canRedo = computed(() => { historyVersion.value; return history.canRedo })
 
   function getBuildingDef(name: string) {
-    return BUILDING_CARDS[name]
+    return ALL_BUILDING_CARDS[name]
   }
 
   // Actions
@@ -465,6 +467,9 @@ export function useGame() {
     if (pa.kind === 'choose-build-target') return getBuildableCards(state.game, pa.playerId, pa.discount)
     if (pa.kind === 'choose-farm-build') return getFarmBuildableCards(state.game, pa.playerId)
     if (pa.kind === 'choose-double-first' || pa.kind === 'choose-double-second') return getDoubleBuildableFirstCards(state.game, pa.playerId)
+    if (pa.kind === 'choose-build-two-first' || pa.kind === 'choose-build-two-second') return state.game.players.find(p => p.id === pa.playerId)?.hand.filter(c => c.kind === 'building') ?? []
+    if (pa.kind === 'choose-no-sell-build') return getNoSellBuildableCards(state.game, pa.playerId)
+    if (pa.kind === 'choose-free-build') return getFreeBuildableCards(state.game, pa.playerId, pa.maxCost)
     return []
   })
 
@@ -523,6 +528,67 @@ export function useGame() {
       history.push(entry)
       historyVersion.value++
       state.game = confirmHandLimitDiscard(state.game)
+    }
+  }
+
+  // ---- メセナ用ペンディングアクション ----
+
+  function clickBuildTwoCard(cardId: string) {
+    if (!state.game) return
+    const pa = state.game.pendingAction
+    if (!pa) return
+    if (pa.kind === 'choose-build-two-first') {
+      state.game = selectBuildTwoFirstCard(state.game, cardId)
+    } else if (pa.kind === 'choose-build-two-second') {
+      state.game = selectBuildTwoSecondCard(state.game, cardId)
+      const newPa = state.game.pendingAction
+      if (newPa?.kind === 'choose-build-two-payment') {
+        const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
+        const payable = hand.filter(c => c.id !== newPa.firstId && c.id !== newPa.secondId)
+        if (payable.length === newPa.totalCost) {
+          state.game = confirmBuildTwoCards(state.game, payable.map(c => c.id))
+        } else {
+          paymentSelectedIds.value = payable.filter(c => c.kind === 'consumption')
+            .slice(0, Math.max(0, newPa.totalCost - 1)).map(c => c.id)
+        }
+      }
+    }
+  }
+
+  function clickBuildTwoPayment(cardId: string) {
+    if (!state.game) return
+    const pa = state.game.pendingAction
+    if (pa?.kind !== 'choose-build-two-payment') return
+    const idx = paymentSelectedIds.value.indexOf(cardId)
+    if (idx >= 0) paymentSelectedIds.value.splice(idx, 1)
+    else paymentSelectedIds.value.push(cardId)
+    if (paymentSelectedIds.value.length === pa.totalCost) {
+      const ids = [...paymentSelectedIds.value]
+      paymentSelectedIds.value = []
+      state.game = confirmBuildTwoCards(state.game, ids)
+    }
+  }
+
+  function clickFreeBuildCard(cardId: string) {
+    if (!state.game) return
+    state.game = confirmFreeBuildCard(state.game, cardId)
+  }
+
+  function clickNoSellBuildCard(cardId: string) {
+    if (!state.game) return
+    state.game = selectNoSellBuildCard(state.game, cardId)
+    const newPa = state.game.pendingAction
+    if (newPa?.kind === 'choose-build-payment') {
+      const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
+      const payable = hand.filter(c => c.id !== newPa.targetId)
+      if (payable.length === newPa.cost) {
+        state.game = confirmBuildPayment(state.game, payable.map(c => c.id))
+      } else if (newPa.cost === 0) {
+        state.game = confirmBuildPayment(state.game, [])
+      } else {
+        paymentSelectedIds.value = payable.filter(c => c.kind === 'consumption')
+          .slice(0, Math.max(0, newPa.cost - 1)).map(c => c.id)
+      }
     }
   }
 
@@ -637,6 +703,10 @@ export function useGame() {
     clickHandLimitCard,
     clickToggleSellBuilding,
     clickSellOption,
+    clickBuildTwoCard,
+    clickBuildTwoPayment,
+    clickFreeBuildCard,
+    clickNoSellBuildCard,
     undo,
     redo,
     replayError,

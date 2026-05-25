@@ -43,7 +43,12 @@ function strategyLabel(strategy: CpuStrategy): string {
             <td>{{ sc.actionsPlaced }}</td>
             <td>${{ sc.money }}</td>
             <td>{{ sc.unpaidPenalty ? '-' + sc.unpaidPenalty : '' }}</td>
-            <td>{{ sc.victoryPoints || '' }}</td>
+            <td>
+              <template v-if="sc.victoryPoints">
+                {{ sc.victoryPoints }}枚
+                <span v-if="sc.vpScore" class="result-vpscore">(+{{ sc.vpScore }})</span>
+              </template>
+            </td>
             <td>${{ sc.buildingValue }}</td>
             <td>{{ sc.bonuses || '' }}</td>
             <td><strong>${{ sc.total }}</strong></td>

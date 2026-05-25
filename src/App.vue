@@ -3,7 +3,7 @@ import './App.css'
 import { ref, onMounted, computed, watch, watchEffect, nextTick } from 'vue'
 import { useGame } from './composables/useGame'
 import { useLogHighlight } from './composables/useLogHighlight'
-import type { CpuStrategy } from './game/types'
+import type { CpuStrategy, GameSeries } from './game/types'
 import GameSetup from './components/GameSetup.vue'
 import GameResult from './components/GameResult.vue'
 import GameBoard from './components/GameBoard.vue'
@@ -35,6 +35,7 @@ const setupTotal = ref(4)       // 総プレイヤー数 (2-4)
 const setupHasPlayer = ref(true) // 人間プレイヤーあり
 const setupPlayerOrder = ref(1)
 const setupCpuStrategies = ref<CpuStrategy[]>(['random', 'random', 'random', 'random'])
+const setupSeries = ref<GameSeries>('progress')
 const menuOpen = ref(false)
 const showSummary = ref(false)
 const showManual = ref(false)
@@ -73,6 +74,9 @@ onMounted(() => {
   const order = Number(localStorage.getItem('ne-setup-order'))
   if (order >= 0 && order <= 4) setupPlayerOrder.value = order
 
+  const savedSeries = localStorage.getItem('ne-setup-series')
+  if (savedSeries === 'progress' || savedSeries === 'mecenat') setupSeries.value = savedSeries
+
   const savedSpeed = localStorage.getItem('ne-setup-anim-speed')
   if (savedSpeed === 'none' || savedSpeed === 'short' || savedSpeed === 'long') {
     animSpeed.value = savedSpeed
@@ -97,9 +101,9 @@ onMounted(() => {
   }
 
   if (lastStartedDebug.value) {
-    startDebugGame(Math.min(setupCpu.value, 3))
+    startDebugGame(Math.min(setupCpu.value, 3), setupSeries.value)
   } else if (!setupHasPlayer.value) {
-    startGame({ humanName: '', cpuCount: setupCpu.value, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, setupCpu.value) })
+    startGame({ humanName: '', cpuCount: setupCpu.value, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, setupCpu.value), series: setupSeries.value })
     scheduleInitialCpuRun()
   } else {
     startGame({
@@ -107,6 +111,7 @@ onMounted(() => {
       cpuCount: setupCpu.value,
       playerOrder: setupPlayerOrder.value,
       cpuStrategies: setupCpuStrategies.value.slice(0, setupCpu.value),
+      series: setupSeries.value,
     })
     // watch が oldGame=null で早期 return するため、初回起動時は手動でCPUを起動する
     scheduleInitialCpuRun()
@@ -118,6 +123,7 @@ watch(setupTotal, (newVal) => {
 })
 watch(setupPlayerOrder, (newVal) => { localStorage.setItem('ne-setup-order', String(newVal)) })
 watch(animSpeed, (newVal) => { localStorage.setItem('ne-setup-anim-speed', newVal) })
+watch(setupSeries, (newVal) => { localStorage.setItem('ne-setup-series', newVal) })
 
 // ---- アニメーション管理 ----
 const activatedIds = ref<string[]>([])
@@ -282,6 +288,7 @@ let setupSnapshot: {
   hasPlayer: boolean
   playerOrder: number
   cpuStrategies: CpuStrategy[]
+  series: GameSeries
 } | null = null
 
 function openSetup() {
@@ -290,6 +297,7 @@ function openSetup() {
     hasPlayer: setupHasPlayer.value,
     playerOrder: setupPlayerOrder.value,
     cpuStrategies: [...setupCpuStrategies.value],
+    series: setupSeries.value,
   }
   // CPU専用ゲームではゲーム設定を開いた瞬間にCPUを一時停止
   if (game.value && !game.value.players.some(p => !p.isCpu)) {
@@ -305,6 +313,7 @@ function cancelSetup() {
     setupHasPlayer.value = setupSnapshot.hasPlayer
     setupPlayerOrder.value = setupSnapshot.playerOrder
     setupCpuStrategies.value = [...setupSnapshot.cpuStrategies]
+    setupSeries.value = setupSnapshot.series
     setupSnapshot = null
   }
   showSetup.value = false
@@ -357,7 +366,7 @@ function beginGame() {
   lastStartedDebug.value = false
   suppressHandAnim = true
   if (!setupHasPlayer.value) {
-    startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies: strategies })
+    startGame({ humanName: '', cpuCount, cpuOnly: true, cpuStrategies: strategies, series: setupSeries.value })
     scheduleInitialCpuRun()
   } else {
     startGame({
@@ -365,6 +374,7 @@ function beginGame() {
       cpuCount,
       playerOrder: setupPlayerOrder.value,
       cpuStrategies: setupCpuStrategies.value.slice(0, cpuCount),
+      series: setupSeries.value,
     })
   }
   showSetup.value = false
@@ -375,7 +385,7 @@ function beginDebugGame() {
   localStorage.setItem('ne-setup-debug', 'true')
   lastStartedDebug.value = true
   suppressHandAnim = true
-  startDebugGame(Math.min(setupCpu.value, 3))
+  startDebugGame(Math.min(setupCpu.value, 3), setupSeries.value)
   showSetup.value = false
 }
 
@@ -442,6 +452,7 @@ function replayGame() {
       v-model:setupHasPlayer="setupHasPlayer"
       v-model:setupPlayerOrder="setupPlayerOrder"
       v-model:setupCpuStrategies="setupCpuStrategies"
+      v-model:setupSeries="setupSeries"
       v-model:animSpeed="animSpeed"
       :hasGame="!!game"
       @begin="beginGame"

@@ -1,5 +1,10 @@
 export type Tag = 'farm' | 'factory'
 
+// 建物の建設コストに対する条件付き割引
+export type ConditionalDiscount =
+  | { condition: 'own-tag'; tag: Tag; discount: number }       // 指定タグの建物を所有していればコスト割引
+  | { condition: 'own-vp-min'; minVp: number; discount: number } // 勝利点カードがminVp枚以上あればコスト割引
+
 export type CpuStrategy = 'random' | 'greedy' | 'beam' | 'mcts' | 'disruptive'
 
 export interface BuildingCardDef {
@@ -11,6 +16,7 @@ export interface BuildingCardDef {
   isWorkplace: boolean
   effect: GameEffect
   count: number
+  constructionDiscount?: ConditionalDiscount  // 建設時の条件付きコスト割引
 }
 
 export type GameEffect =
@@ -38,6 +44,28 @@ export type GameEffect =
   | { kind: 'p-per-worker'; pts: number }
   | { kind: 'p-per-no-sell'; pts: number }
   | { kind: 'p-per-factory'; pts: number }
+  // --- メセナ専用 ---
+  | { kind: 'draw-consumption-by-hand' }
+  | { kind: 'discard-gain-household'; discard: number; gain: number; minHousehold: number }
+  | { kind: 'draw-if-mine'; n: number }
+  | { kind: 'build-gain-vp'; discount: number; drawAfter: number }
+  | { kind: 'draw-gain-vp'; n: number; drawType: 'building' | 'consumption' }
+  | { kind: 'draw-consumption-if-have'; withConsumption: number; without: number }
+  | { kind: 'gain-per-consumption'; perCard: number }
+  | { kind: 'gain-household'; net: number; take: number; minHousehold: number }
+  | { kind: 'build-free-if-cheap'; maxCost: number }
+  | { kind: 'build-two' }
+  | { kind: 'draw-consumption-hold'; n: number }
+  | { kind: 'discard-draw-min-hand'; discard: number; draw: number; minHand: number }
+  | { kind: 'draw-with-build-discount'; n: number; discountTag: Tag }
+  | { kind: 'discard-gain-household-min'; discard: number; gain: number; minHousehold: number }
+  | { kind: 'p-if-empty-hand'; bonus: number }
+  | { kind: 'p-vp-double' }
+  | { kind: 'p-if-own-n-buildings'; threshold: number; bonus: number }
+  | { kind: 'p-if-tag-n'; tag: Tag; threshold: number; bonus: number }
+  | { kind: 'p-if-no-sell-n'; threshold: number; bonus: number }
+  | { kind: 'p-vp-build-discount'; vpThreshold: number; discount: number }
+  | { kind: 'build-no-sell'; drawAfter: number }
 
 export interface BuildingCard {
   id: string
@@ -63,6 +91,7 @@ export interface OwnedBuilding {
   id: string
   name: string
   workerHereId: string | null
+  storedConsumption?: number  // 醸造所が保持する消費財枚数
 }
 
 export interface PublicWorkplace {
@@ -84,6 +113,7 @@ export interface Player {
   ownedBuildings: OwnedBuilding[]
   workers: Worker[]
   unpaidWages: number
+  victoryPoints: number  // 勝利点カード枚数（プログレスでは常に0）
 }
 
 export type PendingAction =
@@ -97,8 +127,16 @@ export type PendingAction =
   | { kind: 'choose-double-payment'; playerId: number; firstId: string; secondId: string; cost: number; firstCost: number; sourceName?: string; sourceId?: string }
   | { kind: 'choose-hand-limit'; playerId: number; limit: number; count: number; selected: string[]; noCpu: boolean; sourceName?: string }
   | { kind: 'choose-sell-buildings'; playerId: number; deficit: number; sellableIds: string[]; selected: string[]; noCpu: boolean; sourceName?: string }
+  // --- メセナ専用 ---
+  | { kind: 'choose-build-two-first'; playerId: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-build-two-second'; playerId: number; firstId: string; firstCost: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-build-two-payment'; playerId: number; firstId: string; secondId: string; totalCost: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-free-build'; playerId: number; maxCost: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-no-sell-build'; playerId: number; drawAfter: number; sourceName?: string; sourceId?: string }
 
 export type GamePhase = 'placement' | 'game-over'
+
+export type GameSeries = 'progress' | 'mecenat'
 
 export interface GameState {
   round: number
@@ -110,6 +148,7 @@ export interface GameState {
   discardPile: BuildingCard[]
   household: number
   phase: GamePhase
+  series: GameSeries
   pendingAction: PendingAction | null
   log: string[]
   _nextId: number
@@ -126,6 +165,7 @@ export interface GameConfig {
   playerOrder?: number   // 0=ランダム, 1〜4=手番順（1番目が先手）
   cpuStrategies?: CpuStrategy[]  // CPU番号順（0=CPU1, 1=CPU2, ...）
   seed?: number          // 固定シード（GA用・省略時はランダム）
+  series?: GameSeries    // シリーズ選択（省略時はprogress）
 }
 
 export interface ScoreResult {
@@ -136,6 +176,7 @@ export interface ScoreResult {
   unpaidPenalty: number
   workerCount: number
   actionsPlaced: number
-  victoryPoints: number
+  victoryPoints: number  // 勝利点カード枚数
+  vpScore: number        // 勝利点カードによる得点（会計事務所2倍含む）
   total: number
 }
