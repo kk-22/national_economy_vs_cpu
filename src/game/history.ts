@@ -68,6 +68,16 @@ export class GameHistory {
     this._redoLog = []
   }
 
+  snapshotForUndo(): { actionLog: HistoryEntry[]; redoLog: HistoryEntry[] } {
+    return { actionLog: [...this.actionLog], redoLog: [...this._redoLog] }
+  }
+
+  restoreSnapshot(snapshot: { actionLog: HistoryEntry[]; redoLog: HistoryEntry[] }): void {
+    this.actionLog.length = 0
+    this.actionLog.push(...snapshot.actionLog)
+    this._redoLog = [...snapshot.redoLog]
+  }
+
   get canUndo(): boolean { return this.actionLog.length > 0 && this._initialState !== null }
   get canRedo(): boolean { return this._redoLog.length > 0 }
 

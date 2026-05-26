@@ -651,6 +651,8 @@ export function useGame() {
     const isMandatoryPending = state.game.pendingAction?.kind === 'choose-sell-buildings'
       || state.game.pendingAction?.kind === 'choose-hand-limit'
 
+    const snapshot = history.snapshotForUndo()
+
     if (hasPending && !isMandatoryPending) {
       history.clearRedo()
       history.popEntry(false)
@@ -675,6 +677,7 @@ export function useGame() {
     try {
       state.game = replayToIndex(history.initialState, history.actionLog)
     } catch (e) {
+      history.restoreSnapshot(snapshot)
       replayError.value = e instanceof Error ? e.message : String(e)
     }
     if (!hasHumanPlayer) cpuPaused.value = true
@@ -687,6 +690,8 @@ export function useGame() {
   function redo() {
     if (!state.game || !history.canRedo || !history.initialState) return
     const hasHumanPlayer = state.game.players.some(p => !p.isCpu)
+
+    const snapshot = history.snapshotForUndo()
 
     if (!hasHumanPlayer) {
       history.pushFromRedo()
@@ -705,6 +710,7 @@ export function useGame() {
     try {
       state.game = replayToIndex(history.initialState, history.actionLog)
     } catch (e) {
+      history.restoreSnapshot(snapshot)
       replayError.value = e instanceof Error ? e.message : String(e)
     }
   }
