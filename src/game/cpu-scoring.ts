@@ -171,6 +171,7 @@ export type ActionOption = { type: 'pub'; id: string } | { type: 'bld'; id: stri
 // 上位互換関係にある職場から下位互換の選択肢を除外する
 // 1. 採石場が選択肢にあれば鉱山を除外（採石場は draw-become-start で上位互換）
 // 2. 大農園（draw-consumption n:3）が選択肢にあれば農場（n:2）を除外
+// 3. 一般職場と同名の自分の建物は除外（一般職場を使えば相手を妨害できるため）
 export function filterDominatedWorkplaces(
   pubOptions: PublicWorkplace[],
   bldOptions: OwnedBuilding[],
@@ -189,6 +190,10 @@ export function filterDominatedWorkplaces(
     filteredPub = filteredPub.filter(wp => wp.name !== '農場')
     filteredBld = filteredBld.filter(b => b.name !== '農場')
   }
+
+  // 3. 一般職場と同名の自分の建物を除外
+  const pubNames = new Set(filteredPub.map(wp => wp.name))
+  filteredBld = filteredBld.filter(b => !pubNames.has(b.name))
 
   return { pubOptions: filteredPub, bldOptions: filteredBld }
 }

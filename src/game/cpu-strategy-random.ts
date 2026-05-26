@@ -6,7 +6,9 @@ import type { GameState } from './types'
 
 export function cpuTakeTurnRandom(state: GameState, playerId: number): GameState {
   const pubOptions = getAvailablePublicWorkplaces(state, playerId)
-  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+  const allBldOptions = getAvailableOwnedBuildings(state, playerId)
+  const pubNames = new Set(pubOptions.map(wp => wp.name))
+  const bldOptions = allBldOptions.filter(b => !pubNames.has(b.name))
   if (pubOptions.length === 0 && bldOptions.length === 0) return afterAction(state)
 
   let s = state, r: number
@@ -26,7 +28,9 @@ export function cpuTakeTurnRandom(state: GameState, playerId: number): GameState
 
 export function cpuTakeTurnRandomNoAuto(state: GameState, playerId: number): GameState {
   const pubOptions = getAvailablePublicWorkplaces(state, playerId)
-  const bldOptions = getAvailableOwnedBuildings(state, playerId)
+  const allBldOptions = getAvailableOwnedBuildings(state, playerId)
+  const pubNames = new Set(pubOptions.map(wp => wp.name))
+  const bldOptions = allBldOptions.filter(b => !pubNames.has(b.name))
   if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
 
   let s = state, r: number

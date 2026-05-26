@@ -15,9 +15,12 @@ export function cpuTakeTurnMCTS(state: GameState, playerId: number): GameState {
   const expansion = pickWorkerExpansion(state, playerId)
   if (expansion) return placeWorkerOnPublic(state, playerId, expansion.id)
 
+  const pubNames = new Set(pubOptions.map(wp => wp.name))
+  const filteredBldOptions = bldOptions.filter(b => !pubNames.has(b.name))
+
   const options: Array<{ type: 'pub'; id: string } | { type: 'bld'; id: string }> = [
     ...pubOptions.map(w => ({ type: 'pub' as const, id: w.id })),
-    ...bldOptions.map(b => ({ type: 'bld' as const, id: b.id })),
+    ...filteredBldOptions.map(b => ({ type: 'bld' as const, id: b.id })),
   ]
 
   // N個のシード事前生成
@@ -76,9 +79,12 @@ export function cpuTakeTurnMCTSNoAuto(state: GameState, playerId: number): GameS
     return placeWorkerOnPublic(state, playerId, expansion.id, true)
   }
 
+  const pubNames = new Set(pubOptions.map(wp => wp.name))
+  const filteredBldOptions = bldOptions.filter(b => !pubNames.has(b.name))
+
   const options: Array<{ type: 'pub'; id: string } | { type: 'bld'; id: string }> = [
     ...pubOptions.map(w => ({ type: 'pub' as const, id: w.id })),
-    ...bldOptions.map(b => ({ type: 'bld' as const, id: b.id })),
+    ...filteredBldOptions.map(b => ({ type: 'bld' as const, id: b.id })),
   ]
 
   const seeds: number[] = []
