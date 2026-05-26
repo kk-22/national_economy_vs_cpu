@@ -576,6 +576,8 @@ function cardTooltip(name: string): string {
                       'card-drawn': drawnIds.includes(card.id),
                       'card-disabled': card.id === (pendingAction as any).targetId || card.id === (pendingAction as any).firstId || card.id === (pendingAction as any).secondId
                     }]"
+                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
+                    @mouseleave="tipLeave"
                     @click="clickPaymentCard(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -595,6 +597,8 @@ function cardTooltip(name: string): string {
                       'card-drawn': drawnIds.includes(card.id),
                       'card-disabled': !pendingAction.selected.includes(card.id) && pendingAction.selected.length >= pendingAction.count
                     }]"
+                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
+                    @mouseleave="tipLeave"
                     @click="clickDiscardCard(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -692,7 +696,9 @@ function cardTooltip(name: string): string {
                   <div class="subsection-label"><span class="hand-count-bold">手札{{ handCount(humanPlayer?.hand ?? []) }}</span>{{ handDetail(humanPlayer?.hand ?? []) }}（売却不可）</div>
                 </div>
                 <div v-if="humanPlayer?.hand.length" class="card-wrap">
-                  <div v-for="card in sortedHand" :key="card.id" class="hcard card-disabled">
+                  <div v-for="card in sortedHand" :key="card.id" class="hcard card-disabled"
+                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
+                    @mouseleave="tipLeave">
                     <HCard :card="card" />
                   </div>
                 </div>
