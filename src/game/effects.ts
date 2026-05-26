@@ -3,8 +3,13 @@ import { getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards,
 import { cpuRevealPick, cpuDiscardDraw, cpuDiscardGain, cpuBuild, cpuBuildFarmFree, cpuBuildDouble, cpuBuildNoSell, cpuBuildFree, cpuBuildTwo } from './cpu'
 import type { GameState, GameEffect, Worker, HandCard, BuildingCard, CpuStrategy } from './types'
 
-function preSelectConsumptions(hand: HandCard[], count: number): string[] {
-  return hand.filter(c => c.kind === 'consumption').slice(0, count).map(c => c.id)
+function preSelectConsumptions(hand: HandCard[], count: number, series: string): string[] {
+  const consumptions = hand.filter(c => c.kind === 'consumption')
+  // メセナシリーズでは消費財を最低1枚残す
+  const maxAutoSelect = series === 'mecenat'
+    ? Math.max(0, Math.min(count, consumptions.length - 1))
+    : count
+  return consumptions.slice(0, maxAutoSelect).map(c => c.id)
 }
 
 export function applyEffect(state: GameState, playerId: number, effect: GameEffect, isCpu: boolean, strategy: CpuStrategy = 'random'): GameState {
@@ -60,7 +65,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       if (isCpu) return cpuDiscardDraw(state, playerId, effect.discard, effect.draw, strategy)
       return {
         ...state,
-        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: -1, selected: preSelectConsumptions(player.hand, effect.discard - 1), drawCount: effect.draw },
+        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: -1, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series), drawCount: effect.draw },
       }
     }
 
@@ -91,7 +96,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       if (isCpu) return cpuDiscardGain(state, playerId, effect.discard, effect.gain, strategy)
       return {
         ...state,
-        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1) },
+        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series) },
       }
     }
 
@@ -142,7 +147,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       if (isCpu) return cpuDiscardGain(state, playerId, effect.discard, effect.gain, strategy)
       return {
         ...state,
-        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1) },
+        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series) },
       }
     }
 
@@ -243,7 +248,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       if (isCpu) return cpuDiscardDraw(state, playerId, effect.discard, effect.draw, strategy)
       return {
         ...state,
-        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: -1, selected: preSelectConsumptions(player.hand, effect.discard - 1), drawCount: effect.draw },
+        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: -1, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series), drawCount: effect.draw },
       }
     }
 
@@ -257,7 +262,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       if (isCpu) return cpuDiscardGain(state, playerId, effect.discard, effect.gain, strategy)
       return {
         ...state,
-        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1) },
+        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series) },
       }
     }
 

@@ -236,6 +236,34 @@ export function getFreeBuildableCards(state: GameState, playerId: number, maxAss
   }) as (HandCard & { kind: 'building' })[]
 }
 
+// 地球建設: 1棟目として選択可能な建物（他の建物と組み合わせて合計コストが払えるものが1枚以上ある）
+export function getBuildTwoFirstCards(state: GameState, playerId: number): (HandCard & { kind: 'building' })[] {
+  const player = getPlayer(state, playerId)
+  const buildings = player.hand.filter(c => c.kind === 'building') as (HandCard & { kind: 'building' })[]
+  return buildings.filter(b => {
+    const bDef = ALL_BUILDING_CARDS[b.name]!
+    const bCost = Math.max(0, bDef.cost - getConstructionDiscount(state, playerId, b.name))
+    return buildings.some(other => {
+      if (other.id === b.id) return false
+      const oDef = ALL_BUILDING_CARDS[other.name]!
+      const oCost = Math.max(0, oDef.cost - getConstructionDiscount(state, playerId, other.name))
+      return player.hand.length - 2 >= bCost + oCost
+    })
+  })
+}
+
+// 地球建設: 1棟目選択後に2棟目として選択可能な建物
+export function getBuildTwoSecondCards(state: GameState, playerId: number, firstId: string, firstCost: number): (HandCard & { kind: 'building' })[] {
+  const player = getPlayer(state, playerId)
+  return player.hand.filter(c => {
+    if (c.kind !== 'building') return false
+    if (c.id === firstId) return false
+    const def = ALL_BUILDING_CARDS[c.name]!
+    const cost = Math.max(0, def.cost - getConstructionDiscount(state, playerId, c.name))
+    return player.hand.length - 2 >= firstCost + cost
+  }) as (HandCard & { kind: 'building' })[]
+}
+
 // 地球建設: 1棟目選択
 export function selectBuildTwoFirst(state: GameState, cardId: string): GameState {
   const action = state.pendingAction
@@ -287,10 +315,11 @@ export function confirmBuildTwoPayment(state: GameState, paymentIds: string[]): 
   ;[s] = constructBuilding(s, action.playerId, action.secondId, [], 0)
   // 建設後手札0枚なら3枚ドロー
   const afterPlayer = getPlayer(s, action.playerId)
-  if (afterPlayer.hand.length === 0) s = drawCards(s, action.playerId, 3)
+  const drewAfterBuildTwo = afterPlayer.hand.length === 0
+  if (drewAfterBuildTwo) s = drawCards(s, action.playerId, 3)
   s = { ...s, pendingAction: null }
   const afterPlayer2 = getPlayer(s, action.playerId)
-  s = addLog(s, buildActionLog(action.sourceName ?? '', 'build-two', beforePlayer, afterPlayer2, state.startPlayerIndex, s.startPlayerIndex))
+  s = addLog(s, buildActionLog(action.sourceName ?? '', 'build-two', beforePlayer, afterPlayer2, state.startPlayerIndex, s.startPlayerIndex, undefined, drewAfterBuildTwo))
   return s
 }
 

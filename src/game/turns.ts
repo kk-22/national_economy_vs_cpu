@@ -1,5 +1,5 @@
 import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, buildActionLog, ALL_BUILDING_CARDS } from './primitives'
-import { constructBuilding, selectBuildTwoFirst, selectBuildTwoSecond, confirmBuildTwoPayment, confirmFreeBuild, selectNoSellBuildTarget } from './build'
+import { constructBuilding, selectBuildTwoFirst, selectBuildTwoSecond, confirmBuildTwoPayment, confirmFreeBuild, selectNoSellBuildTarget, getConstructionDiscount } from './build'
 import { applyEffect } from './effects'
 import { processRoundEnd, resolveAfterHandLimit } from './round'
 import { cpuTakeTurnGreedy, cpuTakeTurnGreedyNoAuto } from './cpu-strategy-greedy'
@@ -7,7 +7,17 @@ import { cpuTakeTurnBeam, cpuTakeTurnBeamNoAuto } from './cpu-strategy-beam'
 import { cpuTakeTurnMCTS, cpuTakeTurnMCTSNoAuto } from './cpu-strategy-mcts'
 import { cpuTakeTurnDisruptive, cpuTakeTurnDisruptiveNoAuto } from './cpu-strategy-disruptive'
 import { cpuTakeTurnRandom, cpuTakeTurnRandomNoAuto } from './cpu-strategy-random'
-import type { GameState, BuildingCard } from './types'
+import type { GameState, BuildingCard, Player } from './types'
+
+function computeDrewAfterBuildTwo(beforeState: GameState, beforePlayer: Player, afterPlayer: Player): boolean {
+  const newBuildings = afterPlayer.ownedBuildings.filter(b => !beforePlayer.ownedBuildings.some(ob => ob.id === b.id))
+  if (newBuildings.length !== 2) return false
+  const d1 = getConstructionDiscount(beforeState, beforePlayer.id, newBuildings[0].name)
+  const d2 = getConstructionDiscount(beforeState, beforePlayer.id, newBuildings[1].name)
+  const totalCost = Math.max(0, (ALL_BUILDING_CARDS[newBuildings[0].name]?.cost ?? 0) - d1)
+                  + Math.max(0, (ALL_BUILDING_CARDS[newBuildings[1].name]?.cost ?? 0) - d2)
+  return beforePlayer.hand.length - 2 - totalCost === 0
+}
 
 // CPU NoAuto ターンで選択した配置先を一時保持（replay 高速化用）
 let _lastCpuNoAutoTarget: { id: string; type: 'pub' | 'bld' } | null = null
@@ -64,7 +74,10 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
     const newDiscarded = s.discardPile.filter(c => !beforeDiscardPile.some(b => b.id === c.id))
     revealPickInfo = { picked: pickedCard?.name ?? '不明', discarded: newDiscarded.map(c => c.name) }
   }
-  s = addLog(s, buildActionLog(workplace.name, workplace.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex, revealPickInfo))
+  const drewAfterBuildTwoPub = workplace.effect.kind === 'build-two'
+    ? computeDrewAfterBuildTwo(state, beforePlayer, afterPlayer)
+    : undefined
+  s = addLog(s, buildActionLog(workplace.name, workplace.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex, revealPickInfo, drewAfterBuildTwoPub))
 
   return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
 }
@@ -105,7 +118,10 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
     const newDiscarded = s.discardPile.filter(c => !beforeDiscardPile.some(b => b.id === c.id))
     revealPickInfo = { picked: pickedCard?.name ?? '不明', discarded: newDiscarded.map(c => c.name) }
   }
-  s = addLog(s, buildActionLog(building.name, def.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex, revealPickInfo))
+  const drewAfterBuildTwoBld = def.effect.kind === 'build-two'
+    ? computeDrewAfterBuildTwo(state, beforePlayer, afterPlayer)
+    : undefined
+  s = addLog(s, buildActionLog(building.name, def.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex, revealPickInfo, drewAfterBuildTwoBld))
 
   return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
 }

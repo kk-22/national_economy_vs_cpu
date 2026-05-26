@@ -139,6 +139,7 @@ export function buildActionLog(
   beforeSP: number,
   afterSP: number,
   revealPickInfo?: { picked: string; discarded: string[] },
+  drewAfterBuildTwo?: boolean,
 ): string {
   const parts: string[] = []
 
@@ -166,7 +167,8 @@ export function buildActionLog(
     }
   }
 
-  return `${after.name}: ${sourceName}${parts.length > 0 ? ' → ' + parts.join('、') : ''}`
+  const drawSuffix = (effectKind === 'build-two' && drewAfterBuildTwo) ? ` → ${handSummary(after)}` : ''
+  return `${after.name}: ${sourceName}${parts.length > 0 ? ' → ' + parts.join('、') : ''}${drawSuffix}`
 }
 
 export function workerCount(player: Player): number {

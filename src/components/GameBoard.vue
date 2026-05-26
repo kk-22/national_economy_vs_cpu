@@ -6,6 +6,7 @@ import type { Worker, GameEffect, Player } from '../game/types'
 import { bcardNameStyle, cardLabel, handCount, handDetail } from '../utils/cardDisplay'
 import { ROUND_CARDS } from '../game/constants'
 import { ALL_BUILDING_CARDS } from '../game/primitives'
+import { getBuildTwoSecondCards, getConstructionDiscount } from '../game/build'
 import HandSortHeader from './HandSortHeader.vue'
 import HCard from './HCard.vue'
 
@@ -180,7 +181,24 @@ function cancelDoubleSelect() {
 // ---- 地球建設 2枚同時選択 ----
 const buildTwoSelectedIds = ref<string[]>([])
 
+function isBuildTwoCardDisabled(cardId: string): boolean {
+  if (buildTwoSelectedIds.value.includes(cardId)) return false
+  if (buildTwoSelectedIds.value.length === 0) {
+    return !buildableCards.value.some(b => b.id === cardId)
+  }
+  const pa = pendingAction.value
+  if (!pa || pa.kind !== 'choose-build-two-first' || !game.value) return true
+  const firstId = buildTwoSelectedIds.value[0]
+  const firstCard = humanPlayer.value?.hand.find(c => c.id === firstId)
+  if (!firstCard || firstCard.kind !== 'building') return true
+  const def = ALL_BUILDING_CARDS[firstCard.name]
+  if (!def) return true
+  const firstCost = Math.max(0, def.cost - getConstructionDiscount(game.value, pa.playerId, firstCard.name))
+  return !getBuildTwoSecondCards(game.value, pa.playerId, firstId, firstCost).some(b => b.id === cardId)
+}
+
 function clickBuildTwoSelect(cardId: string) {
+  if (isBuildTwoCardDisabled(cardId)) return
   const idx = buildTwoSelectedIds.value.indexOf(cardId)
   if (idx >= 0) {
     buildTwoSelectedIds.value.splice(idx, 1)
@@ -338,7 +356,7 @@ function effectDesc(effect: GameEffect): string {
     case 'gain-per-consumption':     return `手札の消費財1枚につき家計から$${effect.perCard}もらう`
     case 'gain-household':           return `家計から$${effect.net}もらう（家計$${effect.minHousehold}以上必要）`
     case 'build-free-if-cheap':      return `資産価値${effect.maxAsset}以下の建物を1棟無料建設`
-    case 'build-two':                return `建物2棟を合計コストを支払って同時建設`
+    case 'build-two':                return `建物2棟を合計コストを支払って同時建設\n建設後に手札が0枚なら、建物カードを3枚引く`
     case 'draw-consumption-hold':    return `消費財${effect.n}枚を次のラウンド開始時に手札に加える`
     case 'discard-draw-min-hand':    return `手札${effect.discard}枚捨てて${effect.draw}枚引く（手札${effect.minHand}枚以下は配置不可）`
     case 'draw-with-build-discount': return `建物カードを${effect.n}枚引く\n建設割引：所有する工業マーク建物１つにつき建設コスト-1`
@@ -693,7 +711,7 @@ function cardTooltip(name: string): string {
                   <button v-for="card in sortedHand" :key="card.id"
                     :class="['hcard', 'selectable', {
                       selected: buildTwoSelectedIds.includes(card.id),
-                      'card-disabled': card.kind !== 'building',
+                      'card-disabled': isBuildTwoCardDisabled(card.id),
                     }]"
                     @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                     @mouseleave="tipLeave"

@@ -16,6 +16,7 @@ import {
   cancelBuildTwoPayment,
   getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards,
   getNoSellBuildableCards, getFreeBuildableCards,
+  getBuildTwoFirstCards,
 } from '../game/build'
 import { toggleDiscardSelection, cancelDiscardChoice, toggleHandLimitSelection } from '../game/resolution'
 import { availableWorkers, ALL_BUILDING_CARDS } from '../game/primitives'
@@ -468,7 +469,8 @@ export function useGame() {
     if (pa.kind === 'choose-build-target') return getBuildableCards(state.game, pa.playerId, pa.discount)
     if (pa.kind === 'choose-farm-build') return getFarmBuildableCards(state.game, pa.playerId)
     if (pa.kind === 'choose-double-first' || pa.kind === 'choose-double-second') return getDoubleBuildableFirstCards(state.game, pa.playerId)
-    if (pa.kind === 'choose-build-two-first' || pa.kind === 'choose-build-two-second') return state.game.players.find(p => p.id === pa.playerId)?.hand.filter(c => c.kind === 'building') ?? []
+    if (pa.kind === 'choose-build-two-first') return getBuildTwoFirstCards(state.game, pa.playerId)
+    if (pa.kind === 'choose-build-two-second') return getBuildTwoFirstCards(state.game, pa.playerId)
     if (pa.kind === 'choose-no-sell-build') return getNoSellBuildableCards(state.game, pa.playerId)
     if (pa.kind === 'choose-free-build') return getFreeBuildableCards(state.game, pa.playerId, pa.maxAsset)
     return []
