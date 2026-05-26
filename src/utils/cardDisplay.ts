@@ -5,7 +5,7 @@ export function cardLabel(card: { kind: string; name?: string }): string {
 }
 
 export function bcardNameStyle(name: string, small = false): Record<string, string> {
-  const usable = small ? 46 : 64
+  const usable = small ? 46 : 88
   const base   = small ? 11 : 14
   if (!name || name.length * base <= usable) return {}
   return { fontSize: Math.max(8, Math.floor(usable / name.length)) + 'px' }
