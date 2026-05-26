@@ -166,8 +166,6 @@ export function getPlayerWeights(playerId: number): ScoreWeights {
   return _playerWeights.get(playerId) ?? DEFAULT_WEIGHTS
 }
 
-export const BEAM_WIDTH = 7
-
 export type ActionOption = { type: 'pub'; id: string } | { type: 'bld'; id: string }
 
 // 上位互換関係にある職場から下位互換の選択肢を除外する
