@@ -90,9 +90,9 @@ export function useGame() {
     historyVersion.value++
   }
 
-  function startDebugGame(cpuCount: number = 3, series: GameSeries = 'progress') {
+  function startDebugGame(cpuCount: number = 3, series: GameSeries = 'progress', playerOrder: number = 1) {
     clearSavedGame()
-    state.game = createDebugGame(cpuCount, series)
+    state.game = createDebugGame(cpuCount, series, playerOrder)
     history = new GameHistory(state.game._rngSeed)
     history.setInitialState(toRaw(state.game))
     pendingEntry = null

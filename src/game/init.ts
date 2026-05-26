@@ -92,16 +92,19 @@ export function createGame(config: GameConfig): GameState {
   return state
 }
 
-export function createDebugGame(cpuCount: number = 3, series: GameSeries = 'progress'): GameState {
+export function createDebugGame(cpuCount: number = 3, series: GameSeries = 'progress', playerOrder: number = 1): GameState {
   const cpuN = Math.min(Math.max(1, cpuCount), 3)
   const playerCount = 1 + cpuN
   const playerNames = ['プレイヤー', 'CPU 1', 'CPU 2', 'CPU 3']
   const seed = makeSeed()
 
+  const n = Math.min(playerOrder, playerCount)
+  const startIdx = (playerCount - (n - 1)) % playerCount
+
   let state: GameState = {
     round: 8,
-    currentPlayerIndex: 0,
-    startPlayerIndex: 0,
+    currentPlayerIndex: startIdx,
+    startPlayerIndex: startIdx,
     players: [],
     publicWorkplaces: [],
     buildingDeck: [],
@@ -144,7 +147,13 @@ export function createDebugGame(cpuCount: number = 3, series: GameSeries = 'prog
       victoryPoints: 0,
     })
   }
-  state = { ...state, players }
+  state = {
+    ...state,
+    players: players.map((p, i) => {
+      const turnPosition = (i - startIdx + playerCount) % playerCount
+      return { ...p, money: 20 + turnPosition }
+    }),
+  }
 
   // シリーズの全建物カードを各プレイヤーの建設済み建物と手札に配置
   const cardDefs = getCardDefs(state)

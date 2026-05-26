@@ -101,7 +101,7 @@ onMounted(() => {
   }
 
   if (lastStartedDebug.value) {
-    startDebugGame(Math.min(setupCpu.value, 3), setupSeries.value)
+    startDebugGame(Math.min(setupCpu.value, 3), setupSeries.value, setupPlayerOrder.value)
   } else if (!setupHasPlayer.value) {
     startGame({ humanName: '', cpuCount: setupCpu.value, cpuOnly: true, cpuStrategies: setupCpuStrategies.value.slice(0, setupCpu.value), series: setupSeries.value })
     scheduleInitialCpuRun()
@@ -385,7 +385,7 @@ function beginDebugGame() {
   localStorage.setItem('ne-setup-debug', 'true')
   lastStartedDebug.value = true
   suppressHandAnim = true
-  startDebugGame(Math.min(setupCpu.value, 3), setupSeries.value)
+  startDebugGame(Math.min(setupCpu.value, 3), setupSeries.value, setupPlayerOrder.value)
   showSetup.value = false
 }
 
