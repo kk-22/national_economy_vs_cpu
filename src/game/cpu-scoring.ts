@@ -5,7 +5,7 @@ import { GREEDY_BUILD_EXCLUDED, getConstructionDiscountForPlayer } from './cpu'
 import { calculateScores } from './round'
 import type { GameState, BuildingCard, GameEffect, Player, PublicWorkplace, OwnedBuilding } from './types'
 
-// ---- GA 用スコア重みパラメータ ----
+// ---- GA 用スコア重みパラメータ (greedy アクション選択用) ----
 
 export interface ScoreWeights {
   buildDouble: number
@@ -164,6 +164,71 @@ export function clearPlayerWeights(): void {
 
 export function getPlayerWeights(playerId: number): ScoreWeights {
   return _playerWeights.get(playerId) ?? DEFAULT_WEIGHTS
+}
+
+// ---- GA 用スコア重みパラメータ (ビームサーチ中間評価用) ----
+
+export interface BeamEvalWeights {
+  workers3Bonus:        number  // 3人目ワーカー取得ボーナス
+  workers4Bonus:        number  // 4人目ワーカー取得ボーナス
+  workers5Bonus:        number  // 5人目ワーカー取得ボーナス
+  buildingCardValue:    number  // 手札建物カード1枚あたりの評価値
+  consumptionCardValue: number  // 手札消費財1枚あたりの評価値
+  startPlayerBonus:     number  // スタートプレイヤーボーナス
+  assetValueMult:       number  // 所有建物の assetValue への乗数
+  workplace1CostMult:   number  // 最高コスト職場のコストへの乗数
+  workplace2CostMult:   number  // 2番目コスト職場のコストへの乗数
+  workplace3CostMult:   number  // 3番目コスト職場のコストへの乗数
+  moneyMult:            number  // 所持金への乗数
+  unpaidWagesPenalty:   number  // 未払い賃金1単位あたりのペナルティ
+  vpCardValue:          number  // 勝利点カード1枚あたりの評価値
+}
+
+export const DEFAULT_BEAM_EVAL_WEIGHTS: BeamEvalWeights = {
+  workers3Bonus:        1000,
+  workers4Bonus:        10,
+  workers5Bonus:        5,
+  buildingCardValue:    6,
+  consumptionCardValue: 4,
+  startPlayerBonus:     5,
+  assetValueMult:       1,
+  workplace1CostMult:   10,
+  workplace2CostMult:   7,
+  workplace3CostMult:   5,
+  moneyMult:            1,
+  unpaidWagesPenalty:   3,
+  vpCardValue:          3,
+}
+
+export const BEAM_EVAL_WEIGHT_BOUNDS: Record<keyof BeamEvalWeights, [number, number]> = {
+  workers3Bonus:        [0, 2000],
+  workers4Bonus:        [0, 200],
+  workers5Bonus:        [0, 100],
+  buildingCardValue:    [0, 30],
+  consumptionCardValue: [0, 20],
+  startPlayerBonus:     [0, 50],
+  assetValueMult:       [0, 5],
+  workplace1CostMult:   [0, 50],
+  workplace2CostMult:   [0, 40],
+  workplace3CostMult:   [0, 30],
+  moneyMult:            [0, 5],
+  unpaidWagesPenalty:   [0, 20],
+  vpCardValue:          [0, 20],
+}
+
+// ビームサーチ中間評価重みストア（GA 用）
+let _beamEvalWeights: BeamEvalWeights | null = null
+
+export function setBeamEvalWeights(weights: BeamEvalWeights): void {
+  _beamEvalWeights = weights
+}
+
+export function clearBeamEvalWeights(): void {
+  _beamEvalWeights = null
+}
+
+export function getBeamEvalWeights(): BeamEvalWeights {
+  return _beamEvalWeights ?? DEFAULT_BEAM_EVAL_WEIGHTS
 }
 
 export type ActionOption = { type: 'pub'; id: string } | { type: 'bld'; id: string }
@@ -597,33 +662,37 @@ export function pickDisruptive(state: GameState, playerId: number): { type: 'pub
 
 // ラウンド終了後の中間評価関数
 export function scoreIntermediateBeam(state: GameState, playerId: number): number {
+  const w = getBeamEvalWeights()
   const player = getPlayer(state, playerId)
   const wc = player.workers.length
   let score = 0
 
-  if (wc >= 3) score += 1000
-  if (wc >= 4) score += 10
-  if (wc >= 5) score += 5
+  if (wc >= 3) score += w.workers3Bonus
+  if (wc >= 4) score += w.workers4Bonus
+  if (wc >= 5) score += w.workers5Bonus
 
   const buildingCards = player.hand.filter(c => c.kind === 'building').length
   const consumptionCards = player.hand.filter(c => c.kind === 'consumption').length
-  score += buildingCards * 6 + consumptionCards * 4
+  score += buildingCards * w.buildingCardValue + consumptionCards * w.consumptionCardValue
 
-  if (state.players[state.startPlayerIndex]?.id === playerId) score += 5
+  if (state.players[state.startPlayerIndex]?.id === playerId) score += w.startPlayerBonus
 
-  score += player.ownedBuildings.reduce((s, b) => s + (ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0), 0)
+  score += player.ownedBuildings.reduce(
+    (s, b) => s + (ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0) * w.assetValueMult, 0,
+  )
 
   const workplaceCosts = player.ownedBuildings
     .filter(b => ALL_BUILDING_CARDS[b.name]?.isWorkplace)
     .map(b => ALL_BUILDING_CARDS[b.name]?.cost ?? 0)
     .sort((a, b) => b - a)
 
-  if (wc >= 3 && workplaceCosts.length >= 1) score += workplaceCosts[0] * 10
-  if (wc >= 4 && workplaceCosts.length >= 2) score += workplaceCosts[1] * 7
-  if (wc >= 5 && workplaceCosts.length >= 3) score += workplaceCosts[2] * 5
+  if (wc >= 3 && workplaceCosts.length >= 1) score += workplaceCosts[0] * w.workplace1CostMult
+  if (wc >= 4 && workplaceCosts.length >= 2) score += workplaceCosts[1] * w.workplace2CostMult
+  if (wc >= 5 && workplaceCosts.length >= 3) score += workplaceCosts[2] * w.workplace3CostMult
 
-  score += player.money
-  score -= player.unpaidWages * 3
+  score += player.money * w.moneyMult
+  score -= player.unpaidWages * w.unpaidWagesPenalty
+  score += player.victoryPoints * w.vpCardValue
 
   return score
 }
