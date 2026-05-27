@@ -122,18 +122,25 @@ function randn(): number {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
 }
 
-// ---- 1試合シミュレーション（プレイヤー0がビーム候補個体、1-2がデフォルト greedy） ----
-function runGame(weights: BeamEvalWeights, seed: number): number[] {
+// ---- 1試合シミュレーション（プレイヤー0がビーム候補個体、1がデフォルト greedy、2がお邪魔CPU） ----
+// seedIndex を使って手番を順番にサイクル: 0→先手($5), 1→2手目($6), 2→3手目($7), 3→先手…
+function runGame(weights: BeamEvalWeights, seed: number, seedIndex: number): number[] {
   setBeamEvalWeights(weights)
   try {
+    const playerOrder = (seedIndex % 3) + 1
     let state = createGame({
       humanName: '',
       cpuCount: 3,
       cpuOnly: true,
       seed,
-      cpuStrategies: ['beam', 'greedy', 'greedy'],
+      playerOrder,
+      cpuStrategies: ['beam', 'greedy', 'disruptive'],
     })
+    // GA用途ではログ不要のため配列を空に保ち、メモリ肥大化を防ぐ
+    state = { ...state, log: [] }
     state = processCpuTurns(state)
+    // processCpuTurns 後のログも解放
+    state = { ...state, log: [] }
     const scores = calculateScores(state)
     return scores
       .sort((a, b) => a.playerId - b.playerId)
@@ -149,8 +156,8 @@ type EvalResult = { fitness: number; avgMyScore: number; avgAllScore: number }
 function evaluate(weights: BeamEvalWeights, seeds: number[]): EvalResult {
   let totalMyScore = 0
   let totalAllScore = 0
-  for (const seed of seeds) {
-    const totals = runGame(weights, seed)
+  for (let i = 0; i < seeds.length; i++) {
+    const totals = runGame(weights, seeds[i], i)
     totalMyScore += totals[0]
     totalAllScore += totals.reduce((a, b) => a + b, 0) / totals.length
   }
@@ -218,6 +225,8 @@ async function main() {
       bestFitness = maxFit
       bestWeights = { ...population[bestIdx] }
       console.log(`★ Gen ${String(gen + 1).padStart(3)}: 最良スコア ${maxFit.toFixed(1)} 平均 ${avgFit.toFixed(1)} | 自分 ${bestResult.avgMyScore.toFixed(1)} / 3人平均 ${bestResult.avgAllScore.toFixed(1)} [更新]`)
+      // クラッシュ時でも最良重みを失わないよう即時出力
+      console.log(`  [チェックポイント] export const OPTIMIZED_BEAM_EVAL_WEIGHTS: BeamEvalWeights = { ${GENES.map(k => `${k}: ${bestWeights[k].toFixed(3)}`).join(', ')} }`)
     } else if ((gen + 1) % 10 === 0) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(0)
       console.log(`  Gen ${String(gen + 1).padStart(3)}: 最良スコア ${maxFit.toFixed(1)} 平均 ${avgFit.toFixed(1)} | 自分 ${bestResult.avgMyScore.toFixed(1)} / 3人平均 ${bestResult.avgAllScore.toFixed(1)} (${elapsed}s)`)
