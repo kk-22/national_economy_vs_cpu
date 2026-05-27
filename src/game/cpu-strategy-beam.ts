@@ -14,9 +14,9 @@ import { GREEDY_BUILD_EXCLUDED } from './cpu'
 import type { GameState, HandCard } from './types'
 import type { ActionOption } from './cpu-scoring'
 
-// R1: 幅15から手番ごとに半分切り上げ（min4）、R2: 1手のみ幅10で平均評価
+// R1: 幅15から手番ごとに半分切り上げ（min4）、ラウンド終了時点のスコアで評価
+// R2: 残りワーカー1〜2人の場合のみ、次ラウンドの1手を追加評価（幅は最終R1幅/2切り上げ）
 const R1_BEAM_START_WIDTH = 15
-const R2_LOOKAHEAD_WIDTH = 10
 
 const BUILD_EFFECT_KINDS = new Set([
   'build', 'build-double', 'build-farm-free', 'build-no-sell',
@@ -27,6 +27,7 @@ type LeafState = {
   state: GameState
   firstAction: ActionOption
   r1Score: number
+  r2Width: number  // 0 = R2なし
 }
 
 function simulateUntilBeamOrEnd(state: GameState, beamPlayerId: number, startRound: number): GameState {
@@ -239,6 +240,7 @@ function collectR1Leaves(
   startRound: number,
   currentWidth: number,
   firstAction: ActionOption | null,
+  r2Width: number,
 ): LeafState[] {
   const actions = getTopNActionsGreedy(simState, beamPlayerId, currentWidth)
   const nextWidth = Math.max(4, Math.ceil(currentWidth / 2))
@@ -251,9 +253,9 @@ function collectR1Leaves(
       beamPlayerId, startRound,
     )
     if (s.round > startRound || s.phase === 'game-over') {
-      results.push({ state: s, firstAction, r1Score: evaluateSimEnd(s, beamPlayerId, startRound) })
+      results.push({ state: s, firstAction, r1Score: evaluateSimEnd(s, beamPlayerId, startRound), r2Width })
     } else {
-      results.push(...collectR1Leaves(s, beamPlayerId, startRound, nextWidth, firstAction))
+      results.push(...collectR1Leaves(s, beamPlayerId, startRound, nextWidth, firstAction, r2Width))
     }
     return results
   }
@@ -263,9 +265,9 @@ function collectR1Leaves(
     for (const s0 of expandPlacementStates(simState, beamPlayerId, action)) {
       const s = simulateUntilBeamOrEnd(s0, beamPlayerId, startRound)
       if (s.round > startRound || s.phase === 'game-over') {
-        results.push({ state: s, firstAction: fa, r1Score: evaluateSimEnd(s, beamPlayerId, startRound) })
+        results.push({ state: s, firstAction: fa, r1Score: evaluateSimEnd(s, beamPlayerId, startRound), r2Width })
       } else {
-        results.push(...collectR1Leaves(s, beamPlayerId, startRound, nextWidth, fa))
+        results.push(...collectR1Leaves(s, beamPlayerId, startRound, nextWidth, fa, r2Width))
       }
     }
   }
@@ -273,8 +275,8 @@ function collectR1Leaves(
   return results
 }
 
-// R2の1手を評価：ビームプレイヤーの手番まで進めてから上位N手の平均スコアを返す
-function scoreR2OneTurn(state: GameState, beamPlayerId: number, startRound: number): number {
+// R2: 次ラウンドのビームプレイヤーの手番まで進め、上位width手の平均スコアを返す
+function scoreR2OneTurn(state: GameState, beamPlayerId: number, startRound: number, width: number): number {
   const r2Round = state.round
   const s2 = simulateUntilBeamOrEnd(state, beamPlayerId, r2Round)
 
@@ -282,7 +284,7 @@ function scoreR2OneTurn(state: GameState, beamPlayerId: number, startRound: numb
     return evaluateSimEnd(s2, beamPlayerId, startRound)
   }
 
-  const actions = getTopNActionsGreedy(s2, beamPlayerId, R2_LOOKAHEAD_WIDTH)
+  const actions = getTopNActionsGreedy(s2, beamPlayerId, width)
   if (actions.length === 0) return evaluateSimEnd(s2, beamPlayerId, startRound)
 
   let sum = 0
@@ -296,41 +298,41 @@ function scoreR2OneTurn(state: GameState, beamPlayerId: number, startRound: numb
 }
 
 // リーフ群から最善の最初の手番を選択する
-// 残留対象: 「手番ごとのベスト1」∪「グローバル上位10%（最小10個）」
-// 各手番の代表スコアはR2評価の平均値
+// r2Width > 0 のとき: 上位リーフをR2評価して平均スコアで選択
+// r2Width = 0 のとき: R1スコアの平均で選択
 function selectBestFirstAction(leaves: LeafState[], beamPlayerId: number, startRound: number): ActionOption {
-  const topCount = Math.max(Math.ceil(leaves.length * 0.1), 10)
-  const sortedByR1 = [...leaves].sort((a, b) => b.r1Score - a.r1Score)
-  const globalTopSet = new Set<LeafState>(sortedByR1.slice(0, topCount))
-
-  // 手番ごとのベスト1
-  const bestPerAction = new Map<string, LeafState>()
-  for (const leaf of leaves) {
-    const key = `${leaf.firstAction.type}:${leaf.firstAction.id}`
-    const cur = bestPerAction.get(key)
-    if (!cur || leaf.r1Score > cur.r1Score) bestPerAction.set(key, leaf)
-  }
-
-  // Union（重複除去）
-  const r2Candidates = new Set<LeafState>([...globalTopSet, ...bestPerAction.values()])
-
-  // 手番ごとにR2スコアを収集して平均
+  const r2Width = leaves[0]?.r2Width ?? 0
   const scoresByAction = new Map<string, { action: ActionOption; scores: number[] }>()
 
-  for (const leaf of r2Candidates) {
-    const key = `${leaf.firstAction.type}:${leaf.firstAction.id}`
-    const r2Score = leaf.state.phase === 'game-over'
-      ? leaf.r1Score
-      : scoreR2OneTurn(leaf.state, beamPlayerId, startRound)
-
-    if (!scoresByAction.has(key)) scoresByAction.set(key, { action: leaf.firstAction, scores: [] })
-    scoresByAction.get(key)!.scores.push(r2Score)
+  if (r2Width > 0) {
+    // 手番ごとのベスト1 ∪ グローバル上位10%（最小10個）を候補としてR2評価
+    const topCount = Math.max(Math.ceil(leaves.length * 0.1), 10)
+    const sortedByR1 = [...leaves].sort((a, b) => b.r1Score - a.r1Score)
+    const globalTopSet = new Set<LeafState>(sortedByR1.slice(0, topCount))
+    const bestPerAction = new Map<string, LeafState>()
+    for (const leaf of leaves) {
+      const key = `${leaf.firstAction.type}:${leaf.firstAction.id}`
+      const cur = bestPerAction.get(key)
+      if (!cur || leaf.r1Score > cur.r1Score) bestPerAction.set(key, leaf)
+    }
+    for (const leaf of new Set([...globalTopSet, ...bestPerAction.values()])) {
+      const key = `${leaf.firstAction.type}:${leaf.firstAction.id}`
+      const score = leaf.state.phase === 'game-over'
+        ? leaf.r1Score
+        : scoreR2OneTurn(leaf.state, beamPlayerId, startRound, r2Width)
+      if (!scoresByAction.has(key)) scoresByAction.set(key, { action: leaf.firstAction, scores: [] })
+      scoresByAction.get(key)!.scores.push(score)
+    }
+  } else {
+    for (const leaf of leaves) {
+      const key = `${leaf.firstAction.type}:${leaf.firstAction.id}`
+      if (!scoresByAction.has(key)) scoresByAction.set(key, { action: leaf.firstAction, scores: [] })
+      scoresByAction.get(key)!.scores.push(leaf.r1Score)
+    }
   }
 
-  // 平均スコア最大の手番を採用
   let bestScore = -Infinity
   let bestAction = leaves[0].firstAction
-
   for (const { action, scores } of scoresByAction.values()) {
     const avg = scores.reduce((a, b) => a + b, 0) / scores.length
     if (avg > bestScore) {
@@ -338,7 +340,6 @@ function selectBestFirstAction(leaves: LeafState[], beamPlayerId: number, startR
       bestAction = action
     }
   }
-
   return bestAction
 }
 
@@ -353,6 +354,15 @@ function buildSimState(state: GameState): GameState {
   }
 }
 
+// ビームサーチ開始時点の残りワーカー数からR2幅を決定する
+// 残り1人: R1幅15→R2幅8、残り2人: R1最終幅8→R2幅4、3人以上: R2なし
+function computeR2Width(state: GameState, playerId: number): number {
+  const available = availableWorkers(getPlayer(state, playerId)).length
+  if (available > 2) return 0
+  const lastR1Width = Math.max(4, Math.ceil(R1_BEAM_START_WIDTH / Math.pow(2, available - 1)))
+  return Math.ceil(lastR1Width / 2)
+}
+
 export function cpuTakeTurnBeam(state: GameState, playerId: number): GameState {
   const pubOptions = getAvailablePublicWorkplaces(state, playerId)
   const bldOptions = getAvailableOwnedBuildings(state, playerId)
@@ -362,7 +372,8 @@ export function cpuTakeTurnBeam(state: GameState, playerId: number): GameState {
   if (expansion) return placeWorkerOnPublic(state, playerId, expansion.id)
 
   const startRound = state.round
-  const leaves = collectR1Leaves(buildSimState(state), playerId, startRound, R1_BEAM_START_WIDTH, null)
+  const r2Width = computeR2Width(state, playerId)
+  const leaves = collectR1Leaves(buildSimState(state), playerId, startRound, R1_BEAM_START_WIDTH, null, r2Width)
   if (leaves.length === 0) return cpuTakeTurnGreedy(state, playerId)
 
   const bestAction = selectBestFirstAction(leaves, playerId, startRound)
@@ -383,7 +394,8 @@ export function cpuTakeTurnBeamNoAuto(state: GameState, playerId: number): GameS
   }
 
   const startRound = state.round
-  const leaves = collectR1Leaves(buildSimState(state), playerId, startRound, R1_BEAM_START_WIDTH, null)
+  const r2Width = computeR2Width(state, playerId)
+  const leaves = collectR1Leaves(buildSimState(state), playerId, startRound, R1_BEAM_START_WIDTH, null, r2Width)
   if (leaves.length === 0) return cpuTakeTurnGreedyNoAuto(state, playerId)
 
   const bestAction = selectBestFirstAction(leaves, playerId, startRound)
