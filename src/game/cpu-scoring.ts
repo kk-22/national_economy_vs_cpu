@@ -185,29 +185,29 @@ export interface BeamEvalWeights {
 }
 
 export const DEFAULT_BEAM_EVAL_WEIGHTS: BeamEvalWeights = {
-  workers3Bonus:        1000,
-  workers4Bonus:        10,
-  workers5Bonus:        5,
-  buildingCardValue:    6,
-  consumptionCardValue: 4,
-  startPlayerBonus:     5,
-  assetValueMult:       1,
-  workplace1CostMult:   10,
-  workplace2CostMult:   7,
-  workplace3CostMult:   5,
-  moneyMult:            1,
-  unpaidWagesPenalty:   3,
-  vpCardValue:          3,
+  workers3Bonus:        1085.362,
+  workers4Bonus:        7.400,
+  workers5Bonus:        7.400,
+  buildingCardValue:    20.000,
+  consumptionCardValue: 7.784,
+  startPlayerBonus:     19.204,
+  assetValueMult:       4.000,
+  workplace1CostMult:   5.014,
+  workplace2CostMult:   5.014,
+  workplace3CostMult:   4.877,
+  moneyMult:            2.489,
+  unpaidWagesPenalty:   0.000,
+  vpCardValue:          0.602,
 }
 
 export const BEAM_EVAL_WEIGHT_BOUNDS: Record<keyof BeamEvalWeights, [number, number]> = {
   workers3Bonus:        [0, 2000],
   workers4Bonus:        [0, 200],
   workers5Bonus:        [0, 100],
-  buildingCardValue:    [0, 30],
+  buildingCardValue:    [0, 60],
   consumptionCardValue: [0, 20],
   startPlayerBonus:     [0, 50],
-  assetValueMult:       [0, 5],
+  assetValueMult:       [0, 15],
   workplace1CostMult:   [0, 50],
   workplace2CostMult:   [0, 40],
   workplace3CostMult:   [0, 30],
@@ -236,7 +236,8 @@ export type ActionOption = { type: 'pub'; id: string } | { type: 'bld'; id: stri
 // 上位互換関係にある職場から下位互換の選択肢を除外する
 // 1. 採石場が選択肢にあれば鉱山を除外（採石場は draw-become-start で上位互換）
 // 2. 大農園（draw-consumption n:3）が選択肢にあれば農場（n:2）を除外
-// 3. 一般職場と同名の自分の建物は除外（一般職場を使えば相手を妨害できるため）
+// 3. 宮大工（build-gain-vp）が一般職場にあれば大工を除外（build + 勝利点で完全上位互換）
+// 4. 一般職場と同名の自分の建物は除外（一般職場を使えば相手を妨害できるため）
 export function filterDominatedWorkplaces(
   pubOptions: PublicWorkplace[],
   bldOptions: OwnedBuilding[],
@@ -256,7 +257,13 @@ export function filterDominatedWorkplaces(
     filteredBld = filteredBld.filter(b => b.name !== '農場')
   }
 
-  // 3. 一般職場と同名の自分の建物を除外
+  // 4. 宮大工（build-gain-vp）が一般職場にある場合、大工を除外
+  if (filteredPub.some(wp => wp.name === '宮大工')) {
+    filteredPub = filteredPub.filter(wp => wp.name !== '大工')
+    filteredBld = filteredBld.filter(b => b.name !== '大工')
+  }
+
+  // 5. 一般職場と同名の自分の建物を除外
   const pubNames = new Set(filteredPub.map(wp => wp.name))
   filteredBld = filteredBld.filter(b => !pubNames.has(b.name))
 
@@ -519,7 +526,7 @@ const CARD_CATEGORY: Record<string, string> = {
   '工場': 'drawer', '製鉄所': 'drawer', '自動車工場': 'drawer', '化学工場': 'drawer', '採石場': 'drawer',
   '学校': 'worker', '専門学校': 'worker', '高等学校': 'worker', '大学': 'worker',
   '露店': 'income', '市場': 'income', 'スーパーマーケット': 'income', '百貨店': 'income',
-  '万博': 'income', 'レストラン': 'income', '珈琲店': 'income', '焼畑': 'income',
+  '万博': 'income', 'レストラン': 'income', '珈琲店': 'income', '焼畑': 'drawer',
 }
 
 // greedy スコアで上位 n 件のアクションを返す（beam 候補選択に使用）
@@ -697,9 +704,9 @@ export function scoreIntermediateBeam(state: GameState, playerId: number): numbe
   return score
 }
 
-// startRound に対する終端評価（最終ラウンドは実スコア、それ以外は中間評価）
+// startRound に対する終端評価（ラウンド8以降または game-over は実スコア、それ以外は中間評価）
 export function evaluateSimEnd(state: GameState, beamPlayerId: number, startRound: number): number {
-  if (startRound === 9) {
+  if (startRound >= 8 || state.phase === 'game-over') {
     return calculateScores(state).find(sc => sc.playerId === beamPlayerId)?.total ?? 0
   }
   return scoreIntermediateBeam(state, beamPlayerId)

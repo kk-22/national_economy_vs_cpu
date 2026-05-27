@@ -49,7 +49,7 @@ function parseArgs(): { generations: number; seedsPerGen: number } {
 }
 
 // ---- GA ハイパーパラメータ ----
-const POP_SIZE       = 20    // ビームは1ゲームが重いので集団サイズを小さめに
+const POP_SIZE       = 10    // ビームは1ゲームが重くメモリも多いので小さめに
 const TOURNAMENT_K   = 3     // トーナメント選択のサイズ
 const CROSSOVER_RATE = 0.7   // 交叉確率
 const MUTATION_SIGMA = 0.10  // 突然変異の標準偏差（遺伝子範囲に対する割合）
@@ -122,16 +122,16 @@ function randn(): number {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
 }
 
-// ---- 1試合シミュレーション（プレイヤー0がビーム候補個体、1-3がデフォルト greedy） ----
+// ---- 1試合シミュレーション（プレイヤー0がビーム候補個体、1-2がデフォルト greedy） ----
 function runGame(weights: BeamEvalWeights, seed: number): number[] {
   setBeamEvalWeights(weights)
   try {
     let state = createGame({
       humanName: '',
-      cpuCount: 4,
+      cpuCount: 3,
       cpuOnly: true,
       seed,
-      cpuStrategies: ['beam', 'greedy', 'greedy', 'greedy'],
+      cpuStrategies: ['beam', 'greedy', 'greedy'],
     })
     state = processCpuTurns(state)
     const scores = calculateScores(state)
@@ -143,17 +143,23 @@ function runGame(weights: BeamEvalWeights, seed: number): number[] {
   }
 }
 
-// ---- 適応度評価（固定シードセットで複数試合） ----
-function evaluate(weights: BeamEvalWeights, seeds: number[]): number {
-  let fitness = 0
+// ---- 適応度評価（自分の最終スコア平均を適応度とする） ----
+type EvalResult = { fitness: number; avgMyScore: number; avgAllScore: number }
+
+function evaluate(weights: BeamEvalWeights, seeds: number[]): EvalResult {
+  let totalMyScore = 0
+  let totalAllScore = 0
   for (const seed of seeds) {
     const totals = runGame(weights, seed)
-    const myScore = totals[0]
-    const rank = totals.filter(s => s > myScore).length
-    if (rank === 0) fitness += 2   // 1位
-    else if (rank === 1) fitness += 1  // 2位
+    totalMyScore += totals[0]
+    totalAllScore += totals.reduce((a, b) => a + b, 0) / totals.length
   }
-  return fitness
+  const avgMyScore = totalMyScore / seeds.length
+  return {
+    fitness: avgMyScore,   // 自分のスコア平均が適応度（他プレイヤーのスコアは無視）
+    avgMyScore,
+    avgAllScore: totalAllScore / seeds.length,
+  }
 }
 
 // ---- トーナメント選択 ----
@@ -182,7 +188,6 @@ function formatDiff(w: BeamEvalWeights): string {
 // ---- メインループ ----
 async function main() {
   const { generations, seedsPerGen } = parseArgs()
-  const maxFitness = seedsPerGen * 2
 
   console.log(`GA開始 (ビームサーチ中間評価最適化)`)
   console.log(`集団${POP_SIZE}個体 × ${generations}世代, シード${seedsPerGen}本/世代`)
@@ -202,18 +207,20 @@ async function main() {
   for (let gen = 0; gen < generations; gen++) {
     const seeds = Array.from({ length: seedsPerGen }, () => makeSeed())
 
-    const fitnesses = population.map(w => evaluate(w, seeds))
+    const results = population.map(w => evaluate(w, seeds))
+    const fitnesses = results.map(r => r.fitness)
     const maxFit = Math.max(...fitnesses)
     const avgFit = fitnesses.reduce((a, b) => a + b, 0) / fitnesses.length
     const bestIdx = fitnesses.indexOf(maxFit)
+    const bestResult = results[bestIdx]
 
     if (maxFit > bestFitness) {
       bestFitness = maxFit
       bestWeights = { ...population[bestIdx] }
-      console.log(`★ Gen ${String(gen + 1).padStart(3)}: 最良 ${maxFit}/${maxFitness} 平均 ${avgFit.toFixed(2)} [更新]`)
+      console.log(`★ Gen ${String(gen + 1).padStart(3)}: 最良スコア ${maxFit.toFixed(1)} 平均 ${avgFit.toFixed(1)} | 自分 ${bestResult.avgMyScore.toFixed(1)} / 3人平均 ${bestResult.avgAllScore.toFixed(1)} [更新]`)
     } else if ((gen + 1) % 10 === 0) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(0)
-      console.log(`  Gen ${String(gen + 1).padStart(3)}: 最良 ${maxFit}/${maxFitness} 平均 ${avgFit.toFixed(2)} (${elapsed}s)`)
+      console.log(`  Gen ${String(gen + 1).padStart(3)}: 最良スコア ${maxFit.toFixed(1)} 平均 ${avgFit.toFixed(1)} | 自分 ${bestResult.avgMyScore.toFixed(1)} / 3人平均 ${bestResult.avgAllScore.toFixed(1)} (${elapsed}s)`)
     }
 
     // エリート保存
@@ -242,17 +249,16 @@ async function main() {
   // 最終評価（シードを増やして精度を上げる）
   const finalSeedCount = Math.max(30, seedsPerGen * 2)
   const finalSeeds = Array.from({ length: finalSeedCount }, () => makeSeed())
-  const finalFitness = evaluate(bestWeights, finalSeeds)
-  const defaultFitness = evaluate({ ...DEFAULT_BEAM_EVAL_WEIGHTS }, finalSeeds)
-  const finalMax = finalSeedCount * 2
+  const finalResult = evaluate(bestWeights, finalSeeds)
+  const defaultResult = evaluate({ ...DEFAULT_BEAM_EVAL_WEIGHTS }, finalSeeds)
 
   console.log()
   console.log('='.repeat(60))
   console.log('GA完了')
   console.log('='.repeat(60))
   console.log(`最終評価（${finalSeedCount}シード）:`)
-  console.log(`  候補個体:           ${finalFitness}/${finalMax} (${(finalFitness / finalMax * 100).toFixed(1)}%)`)
-  console.log(`  デフォルト重み:     ${defaultFitness}/${finalMax} (${(defaultFitness / finalMax * 100).toFixed(1)}%)`)
+  console.log(`  候補個体:       自分 ${finalResult.avgMyScore.toFixed(1)} / 3人平均 ${finalResult.avgAllScore.toFixed(1)}`)
+  console.log(`  デフォルト重み: 自分 ${defaultResult.avgMyScore.toFixed(1)} / 3人平均 ${defaultResult.avgAllScore.toFixed(1)}`)
   console.log()
   console.log('最適化後の重み（DEFAULT_BEAM_EVAL_WEIGHTSとの差分）:')
   console.log(formatDiff(bestWeights))
