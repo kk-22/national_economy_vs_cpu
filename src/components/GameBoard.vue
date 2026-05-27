@@ -438,10 +438,10 @@ function cardTooltip(name: string): string {
                 <div class="cpu-header">
                   <span class="cpu-name">{{ cpu.name }}</span>
                   <span v-if="cpu.unpaidWages > 0" class="unpaid-badge">未払い{{ cpu.unpaidWages }}</span>
+                  <span v-if="cpu.victoryPoints > 0" class="vp-badge">勝利点{{ cpu.victoryPoints }}枚</span>
                   <span class="worker-badge">労働者{{ workerAvailable(cpu.workers) }}/<span :class="{ 'worker-limit-alert': workerUnderCapacity(cpu) }">{{ cpu.workers.length }}</span></span>
                   <span class="cpu-money">${{ cpu.money }}</span>
                   <span class="hand-count"><span class="hand-count-bold">手札{{ handCount(cpu.hand) }}</span>{{ handDetail(cpu.hand) }}</span>
-                  <span v-if="cpu.victoryPoints > 0" class="vp-badge">勝利点{{ cpu.victoryPoints }}枚</span>
                   <span v-if="game.startPlayerIndex === cpu.id" class="sp-badge">🚩SP</span>
                 </div>
                 <div class="cpu-cards-scroll">
