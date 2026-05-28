@@ -11,6 +11,13 @@ export function bcardNameStyle(name: string, small = false): Record<string, stri
   return { fontSize: Math.max(8, Math.floor(usable / name.length)) + 'px' }
 }
 
+export function tagBadgeClass(tag: string): string {
+  if (tag === '農') return 'bcard-type-badge--farm'
+  if (tag === '工') return 'bcard-type-badge--factory'
+  if (tag === '禁') return 'bcard-type-badge--nosell'
+  return ''
+}
+
 export function handCount(hand: HandCard[]): number {
   return hand.length
 }

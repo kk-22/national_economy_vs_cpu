@@ -4,13 +4,12 @@ import type { GameState, ScoreResult, CpuStrategy } from '../game/types'
 defineProps<{
   game: GameState
   scores: ScoreResult[]
-  canUndo: boolean
 }>()
 
 const emit = defineEmits<{
   replay: []
   openSetup: []
-  undo: []
+  close: []
 }>()
 
 function strategyLabel(strategy: CpuStrategy): string {
@@ -25,9 +24,12 @@ function strategyLabel(strategy: CpuStrategy): string {
 </script>
 
 <template>
-  <div class="gameover">
+  <div class="gameover" @click.self="emit('close')">
     <div class="gameover-card">
-      <h1>ゲーム終了</h1>
+      <div class="modal-header">
+        <h2>ゲーム終了</h2>
+        <button class="modal-close-btn" @click="emit('close')">✕</button>
+      </div>
       <table>
         <thead><tr><th>プレイヤー</th><th>労働者</th><th>総手数</th><th>残金</th><th>未払い賃金</th><th>勝利点</th><th>建物価値</th><th>建物効果</th><th>合計</th></tr></thead>
         <tbody>
@@ -59,7 +61,6 @@ function strategyLabel(strategy: CpuStrategy): string {
       <div class="gameover-actions">
         <button class="btn-primary" @click="emit('replay')">もう一度</button>
         <button class="btn-secondary" @click="emit('openSetup')">設定を変更</button>
-        <button class="btn-secondary" :disabled="!canUndo" @click="emit('undo')">◀ 戻る</button>
       </div>
     </div>
   </div>

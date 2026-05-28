@@ -345,7 +345,7 @@ button { font: inherit; }
 .bcard-used-label {
   position: absolute;
   top: 3px;
-  right: 4px;
+  left: 4px;
   font-size: 9px;
   font-weight: 700;
   color: #fff;
@@ -354,7 +354,40 @@ button { font: inherit; }
   padding: 1px 3px;
   line-height: 1.3;
   pointer-events: none;
+  z-index: 1;
 }
+
+.bcard-cost--discounted {
+  color: #16a34a;
+}
+
+.bcard-type-badges {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.bcard-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b7280;
+  line-height: 1;
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #9ca3af;
+  border-radius: 3px;
+}
+.bcard-type-badge--farm    { background: #dcfce7; border-color: #86efac; color: #166534; }
+.bcard-type-badge--factory { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+.bcard-type-badge--nosell  { background: #fef9c3; border-color: #fde047; color: #713f12; }
 
 /* ===== Smaller cards in CPU columns ===== */
 .cpu-col .bcard {
@@ -364,6 +397,7 @@ button { font: inherit; }
 .cpu-col .bcard-cost  { font-size: 12px; }
 .cpu-col .bcard-name  { font-size: 11px; margin-top: 12px; }
 .cpu-col .bcard-asset { font-size: 13px; }
+.cpu-col .bcard-type-badge { font-size: 9px; width: 13px; height: 13px; }
 
 /* ===== Card animations ===== */
 @keyframes cardActivate {
@@ -665,7 +699,7 @@ button { font: inherit; }
   background: #fff; border-radius: 12px; padding: 28px;
   max-width: 900px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
 }
-.gameover-card h1 { font-size: 22px; margin-bottom: 16px; }
+.gameover-card .modal-header { margin-bottom: 16px; }
 .gameover-card table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
 .gameover-card th, .gameover-card td { padding: 6px 8px; border: 1px solid #e2e8f0; text-align: center; font-size: 12px; }
 .gameover-card th { background: #f8fafc; color: #64748b; font-weight: 600; }

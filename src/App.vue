@@ -14,7 +14,7 @@ const {
   pendingAction, scores,
   startGame, startDebugGame, runCpuTurns, cpuStepAction, triggerRoundEnd, autoAdvanceIfStuck,
   saveGameState, hasSavedGame, restoreGame,
-  undo, canUndo, isUndoRedo, cpuPaused, resumeCpu,
+  isUndoRedo, cpuPaused, resumeCpu,
   replayError, clearReplayError,
 } = useGame()
 
@@ -39,6 +39,7 @@ const setupSeries = ref<GameSeries>('progress')
 const menuOpen = ref(false)
 const showSummary = ref(false)
 const showManual = ref(false)
+const showResult = ref(true)
 const animSpeed = ref<'none' | 'short' | 'long'>('short')
 const lastStartedDebug = ref(false)
 const settingsPaused = ref(false)
@@ -116,6 +117,10 @@ onMounted(() => {
     // watch が oldGame=null で早期 return するため、初回起動時は手動でCPUを起動する
     scheduleInitialCpuRun()
   }
+})
+
+watch(() => game.value?.phase, (phase) => {
+  if (phase === 'game-over') showResult.value = true
 })
 
 watch(setupTotal, (newVal) => {
@@ -435,14 +440,14 @@ function replayGame() {
       @openSummary="showSummary = true"
       @openManual="showManual = true"
       @resume="resumeAfterUndo"
+      @openResult="showResult = true"
     />
-    <GameResult v-if="game.phase === 'game-over'"
+    <GameResult v-if="game.phase === 'game-over' && showResult"
       :game="game"
       :scores="scores!"
-      :canUndo="canUndo"
       @replay="replayGame"
       @openSetup="openSetup"
-      @undo="undo"
+      @close="showResult = false"
     />
   </template>
 

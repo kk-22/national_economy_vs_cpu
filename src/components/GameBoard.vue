@@ -3,7 +3,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import { useGame } from '../composables/useGame'
 import { useLogHighlight } from '../composables/useLogHighlight'
 import type { Worker, GameEffect, Player } from '../game/types'
-import { bcardNameStyle, cardLabel, handCount, handDetail } from '../utils/cardDisplay'
+import { bcardNameStyle, cardLabel, handCount, handDetail, tagBadgeClass } from '../utils/cardDisplay'
 import { ROUND_CARDS } from '../game/constants'
 import { ALL_BUILDING_CARDS } from '../game/primitives'
 import { getBuildTwoSecondCards, getConstructionDiscount } from '../game/build'
@@ -27,6 +27,7 @@ const emit = defineEmits<{
   openSummary: []
   openManual: []
   resume: []
+  openResult: []
 }>()
 
 const {
@@ -372,6 +373,27 @@ function effectDesc(effect: GameEffect): string {
     default:                   return ''
   }
 }
+function effectiveCost(playerId: number, cardName: string): number {
+  const base = getBuildingDef(cardName)?.cost ?? 0
+  if (!game.value) return base
+  return Math.max(0, base - getConstructionDiscount(game.value, playerId, cardName))
+}
+
+function isDiscounted(playerId: number, cardName: string): boolean {
+  if (!game.value) return false
+  return getConstructionDiscount(game.value, playerId, cardName) > 0
+}
+
+function cardTypeTags(name: string): string[] {
+  const def = getBuildingDef(name)
+  if (!def) return []
+  const parts: string[] = []
+  if (def.tags.includes('farm')) parts.push('農')
+  if (def.tags.includes('factory')) parts.push('工')
+  if (!def.canSell) parts.push('禁')
+  return parts
+}
+
 function constructionDiscountDesc(name: string): string {
   const cd = getBuildingDef(name)?.constructionDiscount
   if (!cd) return ''
@@ -415,8 +437,9 @@ function cardTooltip(name: string): string {
       </div>
       <div class="mobile-undo-bar">
         <button class="btn-undo" :disabled="!canUndo" @click="undo">◀</button>
-        <button v-if="(cpuPaused && !canRedo || settingsPaused) && game?.phase !== 'game-over'" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
-        <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">▶</button>
+        <button v-if="game?.phase === 'game-over'" class="btn-redo" @click="emit('openResult')">結果表示</button>
+        <button v-else-if="(cpuPaused && !canRedo || settingsPaused)" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
+        <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">次へ ▶</button>
       </div>
       <button class="menu-btn" @click="emit('menuOpen')">☰</button>
     </div>
@@ -450,10 +473,12 @@ function cardTooltip(name: string): string {
                       :class="['bcard', { used: b.workerHereId !== null, 'card-activated': activatedIds.includes(b.id), 'card-built': builtIds.includes(b.id) }]"
                       @mouseenter="tipEnter($event, cardTooltip(b.name))"
                       @mouseleave="tipLeave">
-                      <span v-if="b.workerHereId !== null" class="bcard-used-label">使用済</span>
-                      <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
+                      <span v-if="b.workerHereId !== null && game.phase !== 'game-over'" class="bcard-used-label">使用済</span>
+                      <span :class="['bcard-cost', { 'bcard-cost--discounted': isDiscounted(cpu.id, b.name) }]">{{ effectiveCost(cpu.id, b.name) }}</span>
                       <span class="bcard-name" :style="bcardNameStyle(b.name, true)">{{ b.name }}</span>
-
+                      <span v-if="cardTypeTags(b.name).length" class="bcard-type-badges">
+                        <span v-for="t in cardTypeTags(b.name)" :key="t" :class="['bcard-type-badge', tagBadgeClass(t)]">{{ t }}</span>
+                      </span>
                       <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
                     </div>
                   </div>
@@ -627,9 +652,12 @@ function cardTooltip(name: string): string {
                     class="bcard card-disabled"
                     @mouseenter="tipEnter($event, cardTooltip(b.name))"
                     @mouseleave="tipLeave">
-                    <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
+                    <span :class="['bcard-cost', { 'bcard-cost--discounted': isDiscounted(humanPlayer!.id, b.name) }]">{{ effectiveCost(humanPlayer!.id, b.name) }}</span>
                     <span class="bcard-name" :style="bcardNameStyle(b.name)">{{ b.name }}</span>
                     <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
+                    <span v-if="cardTypeTags(b.name).length" class="bcard-type-badges">
+                      <span v-for="t in cardTypeTags(b.name)" :key="t" :class="['bcard-type-badge', tagBadgeClass(t)]">{{ t }}</span>
+                    </span>
                   </div>
                 </div>
                 <div v-if="humanPlayer?.hand.length" class="hand-label-row" style="margin-top: 6px;">
@@ -682,9 +710,12 @@ function cardTooltip(name: string): string {
                       @mouseenter="tipEnter($event, cardTooltip(b.name))"
                       @mouseleave="tipLeave"
                       @click="pendingAction.sellableIds.includes(b.id) && clickToggleSellBuilding(b.id)">
-                      <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
+                      <span :class="['bcard-cost', { 'bcard-cost--discounted': isDiscounted(humanPlayer!.id, b.name) }]">{{ effectiveCost(humanPlayer!.id, b.name) }}</span>
                       <span class="bcard-name" :style="bcardNameStyle(b.name)">{{ b.name }}</span>
                       <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
+                      <span v-if="cardTypeTags(b.name).length" class="bcard-type-badges">
+                        <span v-for="t in cardTypeTags(b.name)" :key="t" :class="['bcard-type-badge', tagBadgeClass(t)]">{{ t }}</span>
+                      </span>
                     </button>
                   </div>
                   <div class="sell-confirm-col">
@@ -801,9 +832,11 @@ function cardTooltip(name: string): string {
                       @mouseleave="tipLeave"
                       @click="canPlayerAct && availableOwnedBuildings.some(x => x.id === b.id) && clickOwnedBuilding(b.id)">
                       <span v-if="b.workerHereId !== null" class="bcard-used-label">使用済</span>
-                      <span class="bcard-cost">{{ getBuildingDef(b.name)?.cost }}</span>
+                      <span :class="['bcard-cost', { 'bcard-cost--discounted': isDiscounted(humanPlayer!.id, b.name) }]">{{ effectiveCost(humanPlayer!.id, b.name) }}</span>
                       <span class="bcard-name" :style="bcardNameStyle(b.name)">{{ b.name }}</span>
-
+                      <span v-if="cardTypeTags(b.name).length" class="bcard-type-badges">
+                        <span v-for="t in cardTypeTags(b.name)" :key="t" :class="['bcard-type-badge', tagBadgeClass(t)]">{{ t }}</span>
+                      </span>
                       <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
                     </div>
                   </div>
@@ -819,9 +852,12 @@ function cardTooltip(name: string): string {
                       :class="['hcard', { 'card-drawn': drawnIds.includes(card.id) }]"
                       @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
                       @mouseleave="tipLeave">
-                      <span v-if="card.kind === 'building'" class="bcard-cost">{{ getBuildingDef(card.name!)?.cost }}</span>
+                      <span v-if="card.kind === 'building'" :class="['bcard-cost', { 'bcard-cost--discounted': isDiscounted(humanPlayer!.id, card.name!) }]">{{ effectiveCost(humanPlayer!.id, card.name!) }}</span>
                       <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
                       <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
+                      <span v-if="card.kind === 'building' && cardTypeTags(card.name!).length" class="bcard-type-badges">
+                        <span v-for="t in cardTypeTags(card.name!)" :key="t" :class="['bcard-type-badge', tagBadgeClass(t)]">{{ t }}</span>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -850,8 +886,9 @@ function cardTooltip(name: string): string {
         </div>
         <div class="log-undo-bar">
           <button class="btn-undo" :disabled="!canUndo" @click="undo">◀ 戻る</button>
-          <button v-if="(cpuPaused && !canRedo || settingsPaused) && game?.phase !== 'game-over'" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
-          <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">進む ▶</button>
+          <button v-if="game?.phase === 'game-over'" class="btn-redo" @click="emit('openResult')">結果表示</button>
+          <button v-else-if="(cpuPaused && !canRedo || settingsPaused)" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
+          <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">次へ ▶</button>
         </div>
         <div class="log-label">ログ</div>
         <div class="log-scroll">
