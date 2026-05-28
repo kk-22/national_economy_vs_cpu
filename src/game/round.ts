@@ -371,19 +371,19 @@ export function calculateScores(state: GameState): ScoreResult[] {
         case 'p-per-no-sell':
           bonuses += effect.pts * noSellCount
           break
-        // メセナ系：終了時条件付きボーナス（資産価値に加算）
+        // メセナ系：終了時条件付きボーナス（建物効果として加算）
         case 'p-if-empty-hand':
-          if (player.hand.length === 0) buildingValue += effect.bonus
+          if (player.hand.length === 0) bonuses += effect.bonus
           break
         case 'p-if-own-n-buildings':
-          if (player.ownedBuildings.length >= effect.threshold) buildingValue += effect.bonus
+          if (player.ownedBuildings.length >= effect.threshold) bonuses += effect.bonus
           break
         case 'p-if-tag-n':
-          if (effect.tag === 'farm' && farmCount >= effect.threshold) buildingValue += effect.bonus
-          else if (effect.tag === 'factory' && player.ownedBuildings.filter(ob => ALL_BUILDING_CARDS[ob.name]?.tags.includes('factory')).length >= effect.threshold) buildingValue += effect.bonus
+          if (effect.tag === 'farm' && farmCount >= effect.threshold) bonuses += effect.bonus
+          else if (effect.tag === 'factory' && player.ownedBuildings.filter(ob => ALL_BUILDING_CARDS[ob.name]?.tags.includes('factory')).length >= effect.threshold) bonuses += effect.bonus
           break
         case 'p-if-no-sell-n':
-          if (noSellCount >= effect.threshold) buildingValue += effect.bonus
+          if (noSellCount >= effect.threshold) bonuses += effect.bonus
           break
       }
     }
