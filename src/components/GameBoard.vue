@@ -360,7 +360,7 @@ function effectDesc(effect: GameEffect): string {
     case 'build-two':                return `建物2棟を合計コストを支払って同時建設\n建設後に手札が0枚なら、建物カードを3枚引く`
     case 'draw-consumption-hold':    return `消費財${effect.n}枚を次のラウンド開始時に手札に加える`
     case 'discard-draw-min-hand':    return `手札${effect.discard}枚捨てて${effect.draw}枚引く（手札${effect.minHand}枚以下は配置不可）`
-    case 'draw-with-build-discount': return `建物カードを${effect.n}枚引く\n建設割引：所有する工業マーク建物１つにつき建設コスト-1`
+    case 'draw-with-build-discount': return `建物カードを${effect.n}枚引く`
     case 'discard-gain-household-min': return `手札${effect.discard}枚捨てて家計から$${effect.gain}もらう（家計$${effect.minHousehold}以上必要）`
     case 'build-no-sell':            return `売却不可建物をコストを支払って建設し、建物カードを${effect.drawAfter}枚引く`
     case 'p-if-empty-hand':          return `ゲーム終了時、手札0枚なら資産価値+${effect.bonus}`
@@ -395,14 +395,20 @@ function cardTypeTags(name: string): string[] {
 }
 
 function constructionDiscountDesc(name: string): string {
-  const cd = getBuildingDef(name)?.constructionDiscount
-  if (!cd) return ''
+  const def = getBuildingDef(name)
+  const cd = def?.constructionDiscount
+  if (!cd || !def) return ''
+  const base = def.cost
   if (cd.condition === 'own-tag') {
     const tagLabel = cd.tag === 'farm' ? '農業マーク' : '工業マーク'
-    return `建設割引：${tagLabel}建物を所有していれば建設コスト-${cd.discount}`
+    return `建設割引：${tagLabel}建物を所有していれば建設コスト${base}→${Math.max(0, base - cd.discount)}`
   }
   if (cd.condition === 'own-vp-min') {
-    return `建設割引：勝利点カード${cd.minVp}枚以上でコスト-${cd.discount}`
+    return `建設割引：勝利点カード${cd.minVp}枚以上でコスト${base}→${Math.max(0, base - cd.discount)}`
+  }
+  if (cd.condition === 'per-owned-tag') {
+    const tagLabel = cd.tag === 'farm' ? '農業マーク' : '工業マーク'
+    return `建設割引：${tagLabel}建物1棟につきコスト-${cd.discountPerTag}（基本コスト${base}）`
   }
   return ''
 }

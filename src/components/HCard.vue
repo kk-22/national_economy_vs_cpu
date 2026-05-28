@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useGame } from '../composables/useGame'
 import type { HandCard } from '../game/types'
-import { cardLabel, bcardNameStyle, tagBadgeClass } from '../utils/cardDisplay'
+import { cardLabel, bcardNameStyle } from '../utils/cardDisplay'
 import { getConstructionDiscount } from '../game/build'
 
 const props = defineProps<{ card: HandCard }>()
@@ -34,6 +34,7 @@ function cardTypeTags(name: string): string[] {
   <span class="bcard-name" :style="props.card.kind === 'building' ? bcardNameStyle(props.card.name!) : {}">{{ cardLabel(props.card) }}</span>
   <span v-if="props.card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(props.card.name!)?.assetValue }}</span>
   <span v-if="props.card.kind === 'building' && cardTypeTags(props.card.name!).length" class="bcard-type-badges">
-    <span v-for="t in cardTypeTags(props.card.name!)" :key="t" :class="['bcard-type-badge', tagBadgeClass(t)]">{{ t }}</span>
+    <span v-for="t in cardTypeTags(props.card.name!)" :key="t"
+      :class="['bcard-type-badge', { 'bcard-type-badge--farm': t === '農', 'bcard-type-badge--factory': t === '工', 'bcard-type-badge--nosell': t === '禁' }]">{{ t }}</span>
   </span>
 </template>

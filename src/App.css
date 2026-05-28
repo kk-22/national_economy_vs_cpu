@@ -80,7 +80,6 @@ button { font: inherit; }
   .mobile-header { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
   .mobile-undo-bar { display: flex; }
   .log-panel { display: none; }
-  .gameover { z-index: 200; }
   /* スマホ: 各行の高さ固定なし・ページ全体でスクロール */
   .game { height: auto; overflow: visible; padding-top: 44px; }
   .game-body { overflow: visible; height: auto; }
@@ -358,7 +357,7 @@ button { font: inherit; }
 }
 
 .bcard-cost--discounted {
-  color: #16a34a;
+  color: #d97706;
 }
 
 .bcard-type-badges {
@@ -385,9 +384,9 @@ button { font: inherit; }
   border: 1px solid #9ca3af;
   border-radius: 3px;
 }
-.bcard-type-badge--farm    { background: #dcfce7; border-color: #86efac; color: #166534; }
-.bcard-type-badge--factory { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
-.bcard-type-badge--nosell  { background: #fef9c3; border-color: #fde047; color: #713f12; }
+.bcard-type-badge--farm    { background: #dcfce7 !important; border-color: #86efac !important; color: #166534 !important; }
+.bcard-type-badge--factory { background: #fee2e2 !important; border-color: #fca5a5 !important; color: #991b1b !important; }
+.bcard-type-badge--nosell  { background: #fef9c3 !important; border-color: #fde047 !important; color: #713f12 !important; }
 
 /* ===== Smaller cards in CPU columns ===== */
 .cpu-col .bcard {
@@ -687,17 +686,20 @@ button { font: inherit; }
 
 /* ===== Game over ===== */
 .gameover {
-  position: fixed; left: 0; right: 0; top: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex; align-items: center; justify-content: center; padding: 24px;
-  z-index: 50;
-}
-@media (min-width: 641px) {
-  .gameover { right: var(--log-panel-width); }
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex; align-items: flex-start; justify-content: center;
+  z-index: 200;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  box-sizing: border-box;
 }
 .gameover-card {
   background: #fff; border-radius: 12px; padding: 28px;
   max-width: 900px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  margin: auto;
+  flex-shrink: 0;
 }
 .gameover-card .modal-header { margin-bottom: 16px; }
 .gameover-card table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
