@@ -63,42 +63,47 @@ const GENES = Object.keys(DEFAULT_BEAM_EVAL_WEIGHTS) as Gene[]
 function repair(w: BeamEvalWeights): BeamEvalWeights {
   const result = { ...w }
 
-  // 各遺伝子を範囲内にクランプ
+  // 各遺伝子を範囲内にクランプし整数化（GA最適化は1刻み）
   for (const key of GENES) {
     const [lo, hi] = BEAM_EVAL_WEIGHT_BOUNDS[key]
-    result[key] = Math.max(lo, Math.min(hi, result[key]))
+    result[key] = Math.round(Math.max(lo, Math.min(hi, result[key])))
   }
 
-  // 単調制約: workers3Bonus ≥ workers4Bonus ≥ workers5Bonus
-  result.workers4Bonus = Math.min(result.workers4Bonus, result.workers3Bonus)
-  result.workers5Bonus = Math.min(result.workers5Bonus, result.workers4Bonus)
+  // 単調制約: workers3Bonus ≥ workers4Bonus ≥ workers5Bonus（early/late 両方）
+  result.workers4Bonus_early = Math.min(result.workers4Bonus_early, result.workers3Bonus_early)
+  result.workers5Bonus_early = Math.min(result.workers5Bonus_early, result.workers4Bonus_early)
+  result.workers4Bonus_late  = Math.min(result.workers4Bonus_late,  result.workers3Bonus_late)
+  result.workers5Bonus_late  = Math.min(result.workers5Bonus_late,  result.workers4Bonus_late)
 
-  // 単調制約: workplace1CostMult ≥ workplace2CostMult ≥ workplace3CostMult
-  result.workplace2CostMult = Math.min(result.workplace2CostMult, result.workplace1CostMult)
-  result.workplace3CostMult = Math.min(result.workplace3CostMult, result.workplace2CostMult)
+  // 単調制約: workplace1CostMult ≥ workplace2CostMult ≥ workplace3CostMult（early/late 両方）
+  result.workplace2CostMult_early = Math.min(result.workplace2CostMult_early, result.workplace1CostMult_early)
+  result.workplace3CostMult_early = Math.min(result.workplace3CostMult_early, result.workplace2CostMult_early)
+  result.workplace2CostMult_late  = Math.min(result.workplace2CostMult_late,  result.workplace1CostMult_late)
+  result.workplace3CostMult_late  = Math.min(result.workplace3CostMult_late,  result.workplace2CostMult_late)
 
   return result
 }
 
-// ---- 個体生成（DEFAULT_BEAM_EVAL_WEIGHTS にガウスノイズを加えた初期集団） ----
+// ---- 個体生成（DEFAULT_BEAM_EVAL_WEIGHTS にランダム整数ノイズを加えた初期集団） ----
 function randomIndividual(): BeamEvalWeights {
   const w = { ...DEFAULT_BEAM_EVAL_WEIGHTS }
   for (const key of GENES) {
     const [lo, hi] = BEAM_EVAL_WEIGHT_BOUNDS[key]
     const range = hi - lo
-    const noise = (Math.random() * 2 - 1) * range * 0.3
+    const noise = Math.round((Math.random() * 2 - 1) * range * 0.3)
     w[key] = w[key] + noise
   }
   return repair(w)
 }
 
-// ---- 突然変異 ----
+// ---- 突然変異（整数刻み） ----
 function mutate(w: BeamEvalWeights): BeamEvalWeights {
   const result = { ...w }
   for (const key of GENES) {
     const [lo, hi] = BEAM_EVAL_WEIGHT_BOUNDS[key]
     const range = hi - lo
-    const noise = randn() * range * MUTATION_SIGMA
+    // 整数単位のガウスノイズ（最小±1を保証）
+    const noise = Math.round(randn() * range * MUTATION_SIGMA) || (Math.random() < 0.5 ? 1 : -1)
     result[key] = result[key] + noise
   }
   return repair(result)
@@ -187,7 +192,7 @@ function formatDiff(w: BeamEvalWeights): string {
     const cur = w[key]
     const diff = cur - def
     const pct = def !== 0 ? ((diff / def) * 100).toFixed(1) : '---'
-    lines.push(`  ${key.padEnd(24)} ${String(cur.toFixed(3)).padStart(10)}  (default: ${String(def).padStart(6)}, ${diff >= 0 ? '+' : ''}${pct}%)`)
+    lines.push(`  ${key.padEnd(28)} ${String(cur).padStart(6)}  (default: ${String(def).padStart(4)}, ${diff >= 0 ? '+' : ''}${pct}%)`)
   }
   return lines.join('\n')
 }
@@ -226,7 +231,7 @@ async function main() {
       bestWeights = { ...population[bestIdx] }
       console.log(`★ Gen ${String(gen + 1).padStart(3)}: 最良スコア ${maxFit.toFixed(1)} 平均 ${avgFit.toFixed(1)} | 自分 ${bestResult.avgMyScore.toFixed(1)} / 3人平均 ${bestResult.avgAllScore.toFixed(1)} [更新]`)
       // クラッシュ時でも最良重みを失わないよう即時出力
-      console.log(`  [チェックポイント] export const OPTIMIZED_BEAM_EVAL_WEIGHTS: BeamEvalWeights = { ${GENES.map(k => `${k}: ${bestWeights[k].toFixed(3)}`).join(', ')} }`)
+      console.log(`  [チェックポイント] export const OPTIMIZED_BEAM_EVAL_WEIGHTS: BeamEvalWeights = { ${GENES.map(k => `${k}: ${bestWeights[k]}`).join(', ')} }`)
     } else if ((gen + 1) % 10 === 0) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(0)
       console.log(`  Gen ${String(gen + 1).padStart(3)}: 最良スコア ${maxFit.toFixed(1)} 平均 ${avgFit.toFixed(1)} | 自分 ${bestResult.avgMyScore.toFixed(1)} / 3人平均 ${bestResult.avgAllScore.toFixed(1)} (${elapsed}s)`)
@@ -275,7 +280,7 @@ async function main() {
   console.log('TypeScript定数として貼り付け用:')
   console.log('export const OPTIMIZED_BEAM_EVAL_WEIGHTS: BeamEvalWeights = {')
   for (const key of GENES) {
-    console.log(`  ${key.padEnd(24)}: ${bestWeights[key].toFixed(3)},`)
+    console.log(`  ${key.padEnd(28)}: ${bestWeights[key]},`)
   }
   console.log('}')
 
