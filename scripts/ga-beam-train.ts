@@ -10,7 +10,7 @@
  *   --seeds N  1世代あたりの評価シード数（デフォルト: 10）
  *
  * 設計:
- *   - 4人全CPU戦、プレイヤー0 がビーム（候補個体）・プレイヤー1-3 がデフォルト重みの greedy
+ *   - 4人全CPU戦、プレイヤー0 がビーム（候補個体）・プレイヤー1-2 がお邪魔CPU
  *   - 固定シードを世代ごとに更新して評価（同一世代内は全個体が同じシードで比較）
  *   - 適応度: 1位=2点、2位=1点、3-4位=0点 の合計（seeds分）
  *   - 単調制約: workers3Bonus ≥ workers4Bonus ≥ workers5Bonus を個体修正で強制
@@ -122,7 +122,7 @@ function randn(): number {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
 }
 
-// ---- 1試合シミュレーション（プレイヤー0がビーム候補個体、1がデフォルト greedy、2がお邪魔CPU） ----
+// ---- 1試合シミュレーション（プレイヤー0がビーム候補個体、1-2がお邪魔CPU） ----
 // seedIndex を使って手番を順番にサイクル: 0→先手($5), 1→2手目($6), 2→3手目($7), 3→先手…
 function runGame(weights: BeamEvalWeights, seed: number, seedIndex: number): number[] {
   setBeamEvalWeights(weights)
@@ -134,7 +134,7 @@ function runGame(weights: BeamEvalWeights, seed: number, seedIndex: number): num
       cpuOnly: true,
       seed,
       playerOrder,
-      cpuStrategies: ['beam', 'greedy', 'disruptive'],
+      cpuStrategies: ['beam', 'disruptive', 'disruptive'],
     })
     // GA用途ではログ不要のため配列を空に保ち、メモリ肥大化を防ぐ
     state = { ...state, log: [] }
