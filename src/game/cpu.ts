@@ -137,9 +137,9 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
       // 7ラウンド以下は職場として使えない建物（倉庫など）を建設対象から除外
       if (state.round <= 7 && !def.isWorkplace) return false
       if (availableAfter >= 1) {
-        // Fix 3: build効果の建物を建設後に手札不足で使えない場合は除外
-        const remainingHand = player.hand.length - 1 - Math.max(0, def.cost - discount)
-        if (def.effect.kind === 'build' && remainingHand < 2) return false
+        const selfDiscount = getConstructionDiscount(state, playerId, c.name)
+        const remainingHand = player.hand.length - 1 - Math.max(0, def.cost - discount - selfDiscount)
+        if (def.effect.kind === 'build' && remainingHand + drawAfter < 2) return false
         return true
       }
       // availableAfter === 0: Fix 1 - money が賃金以上なら建設OK

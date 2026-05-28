@@ -1,4 +1,5 @@
 import { availableWorkers, getPlayer, updatePlayer, drawCards, ALL_BUILDING_CARDS } from './primitives'
+import { ROUND_CARDS } from './constants'
 import { processRoundEnd } from './round'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { evaluateSimEnd, getTopNActionsGreedy, pickWorkerExpansion } from './cpu-scoring'
@@ -73,11 +74,17 @@ function resolveBuildBranches(stateWithPending: GameState): GameState[] {
         if (availableAfter >= 1) {
           const selfDiscount = getConstructionDiscount(stateWithPending, pa.playerId, c.name)
           const remainingHand = player.hand.length - 1 - Math.max(0, def.cost - pa.discount - selfDiscount)
-          if (def.effect.kind === 'build' && remainingHand < 2) return false
+          if (def.effect.kind === 'build' && remainingHand + pa.drawAfter < 2) return false
+          return true
         }
-        return true
+        // availableAfter === 0: cpuBuildの賃金チェックと一致させる
+        const expectedWage = player.workers.length * (ROUND_CARDS[stateWithPending.round - 1]?.wage ?? 0)
+        if (player.money >= expectedWage) return true
+        const cardCost = Math.max(0, def.cost - pa.discount) + 1
+        return def.assetValue > cardCost * 6
       })
       if (filtered.length > 0) targets = filtered
+      else return []  // cpuBuildと一致させる（フィルター後が空なら建設しない）
 
       const sourceEffect = pa.sourceName ? ALL_BUILDING_CARDS[pa.sourceName]?.effect : undefined
       const isGainVp = sourceEffect?.kind === 'build-gain-vp'
@@ -225,11 +232,7 @@ function expandPlacementStates(
   }
 
   const branches = resolveBuildBranches(restoredState)
-  if (branches.length === 0) {
-    return [action.type === 'pub'
-      ? placeWorkerOnPublic(simState, beamPlayerId, action.id, true)
-      : placeWorkerOnBuilding(simState, beamPlayerId, action.id, true)]
-  }
+  if (branches.length === 0) return []  // 建設対象なし → ビームから除外（スキップを評価しない）
   return branches
 }
 
