@@ -8,6 +8,9 @@ export type ConditionalDiscount =
 
 export type CpuStrategy = 'random' | 'greedy' | 'beam' | 'mcts' | 'disruptive'
 
+// ビームサーチ中間評価・アクション多様性選択に使用するカードカテゴリ
+export type BeamCategory = 'builder' | 'draw-building' | 'draw-consumption' | 'income' | 'worker'
+
 export interface BuildingCardDef {
   name: string
   cost: number        // cards to discard when building
@@ -18,6 +21,7 @@ export interface BuildingCardDef {
   effect: GameEffect
   count: number
   constructionDiscount?: ConditionalDiscount  // 建設時の条件付きコスト割引
+  beamCategory?: BeamCategory                 // ビームサーチ評価・多様性選択カテゴリ
 }
 
 export type GameEffect =

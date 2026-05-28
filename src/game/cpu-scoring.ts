@@ -3,7 +3,7 @@ import { getPlayer, getMaxWorkers, ALL_BUILDING_CARDS } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { GREEDY_BUILD_EXCLUDED, getConstructionDiscountForPlayer } from './cpu'
 import { calculateScores } from './round'
-import type { GameState, BuildingCard, GameEffect, Player, PublicWorkplace, OwnedBuilding } from './types'
+import type { GameState, BuildingCard, GameEffect, Player, PublicWorkplace, OwnedBuilding, BeamCategory } from './types'
 
 // ---- GA 用スコア重みパラメータ (greedy アクション選択用) ----
 
@@ -167,56 +167,125 @@ export function getPlayerWeights(playerId: number): ScoreWeights {
 }
 
 // ---- GA 用スコア重みパラメータ (ビームサーチ中間評価用) ----
+// 全変数を early(R1-4) / late(R5-8) の2段階で管理。R9は最終スコアを使用するため不要。
+// GA最適化は整数1刻みで行う。
 
 export interface BeamEvalWeights {
-  workers3Bonus:        number  // 3人目ワーカー取得ボーナス
-  workers4Bonus:        number  // 4人目ワーカー取得ボーナス
-  workers5Bonus:        number  // 5人目ワーカー取得ボーナス
-  buildingCardValue:    number  // 手札建物カード1枚あたりの評価値
-  consumptionCardValue: number  // 手札消費財1枚あたりの評価値
-  startPlayerBonus:     number  // スタートプレイヤーボーナス
-  assetValueMult:       number  // 所有建物の assetValue への乗数
-  workplace1CostMult:   number  // 最高コスト職場のコストへの乗数
-  workplace2CostMult:   number  // 2番目コスト職場のコストへの乗数
-  workplace3CostMult:   number  // 3番目コスト職場のコストへの乗数
-  moneyMult:            number  // 所持金への乗数
-  unpaidWagesPenalty:   number  // 未払い賃金1単位あたりのペナルティ
-  vpCardValue:          number  // 勝利点カード1枚あたりの評価値
-  drawBuildingCostMult: number  // 建物カードを引く建物のコスト合算への乗数
+  workers3Bonus_early:        number  // 3人目ワーカー取得ボーナス
+  workers3Bonus_late:         number
+  workers4Bonus_early:        number  // 4人目ワーカー取得ボーナス（下限50: GA最適化でも4人目雇用を諦めないよう保証）
+  workers4Bonus_late:         number  // 下限50
+  workers5Bonus_early:        number  // 5人目ワーカー取得ボーナス
+  workers5Bonus_late:         number
+  buildingCardValue_early:    number  // 手札建物カード1枚あたりの評価値
+  buildingCardValue_late:     number
+  consumptionCardValue_early: number  // 手札消費財1枚あたりの評価値
+  consumptionCardValue_late:  number
+  startPlayerBonus_early:     number  // スタートプレイヤーボーナス
+  startPlayerBonus_late:      number
+  assetValueMult_early:       number  // 所有建物の assetValue への乗数
+  assetValueMult_late:        number
+  workplace1CostMult_early:   number  // 最高コスト職場のコストへの乗数
+  workplace1CostMult_late:    number
+  workplace2CostMult_early:   number  // 2番目コスト職場のコストへの乗数
+  workplace2CostMult_late:    number
+  workplace3CostMult_early:   number  // 3番目コスト職場のコストへの乗数（5人目前提）
+  workplace3CostMult_late:    number
+  moneyMult_early:            number  // 所持金への乗数
+  moneyMult_late:             number
+  unpaidWagesPenalty_early:   number  // 未払い賃金1単位あたりのペナルティ
+  unpaidWagesPenalty_late:    number
+  vpCardValue_early:          number  // 勝利点カード1枚あたりの評価値
+  vpCardValue_late:           number
+  drawBuildingCostMult_early: number  // 建物カードを引く建物のコスト合算への乗数
+  drawBuildingCostMult_late:  number
+  // カテゴリボーナス: カテゴリ内の所有建物の最大コスト × ボーナス（複数所有しても1棟分のみ加算）
+  builderBonus_early:         number  // 建設系建物（建設会社・ゼネコン系）
+  builderBonus_late:          number
+  drawBuildingBonus_early:    number  // 建物カードドロー系（工場・製鉄所系）
+  drawBuildingBonus_late:     number
+  drawConsumptionBonus_early: number  // 消費財ドロー系（農場・大農園系）
+  drawConsumptionBonus_late:  number
+  incomeBonus_early:          number  // 収入系（珈琲店・レストラン系）
+  incomeBonus_late:           number
 }
 
 export const DEFAULT_BEAM_EVAL_WEIGHTS: BeamEvalWeights = {
-  workers3Bonus:        762.862,
-  workers4Bonus:        10.000,
-  workers5Bonus:        1.000,
-  buildingCardValue:    26.048,
-  consumptionCardValue: 16.247,
-  startPlayerBonus:     27.096,
-  assetValueMult:       3.210,
-  workplace1CostMult:   18.393,
-  workplace2CostMult:   10.118,
-  workplace3CostMult:   0.000,
-  moneyMult:            4.735,
-  unpaidWagesPenalty:   8.958,
-  vpCardValue:          5.186,
-  drawBuildingCostMult: 7.509,
+  workers3Bonus_early:        763,
+  workers3Bonus_late:         763,
+  workers4Bonus_early:        50,
+  workers4Bonus_late:         50,
+  workers5Bonus_early:        1,
+  workers5Bonus_late:         1,
+  buildingCardValue_early:    26,
+  buildingCardValue_late:     26,
+  consumptionCardValue_early: 16,
+  consumptionCardValue_late:  16,
+  startPlayerBonus_early:     27,
+  startPlayerBonus_late:      27,
+  assetValueMult_early:       3,
+  assetValueMult_late:        3,
+  workplace1CostMult_early:   18,
+  workplace1CostMult_late:    18,
+  workplace2CostMult_early:   10,
+  workplace2CostMult_late:    10,
+  workplace3CostMult_early:   0,
+  workplace3CostMult_late:    0,
+  moneyMult_early:            5,
+  moneyMult_late:             5,
+  unpaidWagesPenalty_early:   9,
+  unpaidWagesPenalty_late:    9,
+  vpCardValue_early:          5,
+  vpCardValue_late:           5,
+  drawBuildingCostMult_early: 8,
+  drawBuildingCostMult_late:  8,
+  builderBonus_early:         0,
+  builderBonus_late:          0,
+  drawBuildingBonus_early:    0,
+  drawBuildingBonus_late:     0,
+  drawConsumptionBonus_early: 0,
+  drawConsumptionBonus_late:  0,
+  incomeBonus_early:          0,
+  incomeBonus_late:           0,
 }
 
 export const BEAM_EVAL_WEIGHT_BOUNDS: Record<keyof BeamEvalWeights, [number, number]> = {
-  workers3Bonus:        [0, 2000],
-  workers4Bonus:        [0, 200],
-  workers5Bonus:        [0, 100],
-  buildingCardValue:    [0, 60],
-  consumptionCardValue: [0, 20],
-  startPlayerBonus:     [0, 50],
-  assetValueMult:       [0, 15],
-  workplace1CostMult:   [10, 50],
-  workplace2CostMult:   [10, 40],
-  workplace3CostMult:   [1, 30],
-  moneyMult:            [0, 5],
-  unpaidWagesPenalty:   [0, 20],
-  vpCardValue:          [0, 20],
-  drawBuildingCostMult: [0, 20],
+  workers3Bonus_early:        [0, 1000],
+  workers3Bonus_late:         [0, 1000],
+  workers4Bonus_early:        [50, 200],  // 下限50: GA最適化でも4人目雇用を諦めないよう保証
+  workers4Bonus_late:         [50, 200],  // 下限50
+  workers5Bonus_early:        [0, 100],
+  workers5Bonus_late:         [0, 100],
+  buildingCardValue_early:    [0, 60],
+  buildingCardValue_late:     [0, 60],
+  consumptionCardValue_early: [0, 30],
+  consumptionCardValue_late:  [0, 30],
+  startPlayerBonus_early:     [0, 50],
+  startPlayerBonus_late:      [0, 50],
+  assetValueMult_early:       [0, 15],
+  assetValueMult_late:        [0, 15],
+  workplace1CostMult_early:   [10, 50],
+  workplace1CostMult_late:    [10, 50],
+  workplace2CostMult_early:   [10, 40],
+  workplace2CostMult_late:    [10, 40],
+  workplace3CostMult_early:   [1, 30],
+  workplace3CostMult_late:    [1, 30],
+  moneyMult_early:            [0, 10],
+  moneyMult_late:             [0, 10],
+  unpaidWagesPenalty_early:   [0, 20],
+  unpaidWagesPenalty_late:    [0, 20],
+  vpCardValue_early:          [0, 20],
+  vpCardValue_late:           [0, 20],
+  drawBuildingCostMult_early: [0, 20],
+  drawBuildingCostMult_late:  [0, 20],
+  builderBonus_early:         [0, 20],
+  builderBonus_late:          [0, 20],
+  drawBuildingBonus_early:    [0, 20],
+  drawBuildingBonus_late:     [0, 20],
+  drawConsumptionBonus_early: [0, 20],
+  drawConsumptionBonus_late:  [0, 20],
+  incomeBonus_early:          [0, 20],
+  incomeBonus_late:           [0, 20],
 }
 
 // ビームサーチ中間評価重みストア（GA 用）
@@ -523,13 +592,24 @@ export function pickWorkerExpansion(state: GameState, playerId: number): { type:
   return null
 }
 
-const CARD_CATEGORY: Record<string, string> = {
-  '大工': 'builder', '建設会社': 'builder', 'ゼネコン': 'builder', '二胡市建設': 'builder', '開拓民': 'builder',
-  '鉱山': 'drawer', '農場': 'drawer', '大農園': 'drawer', '果樹園': 'drawer', '設計事務所': 'drawer',
-  '工場': 'drawer', '製鉄所': 'drawer', '自動車工場': 'drawer', '化学工場': 'drawer', '採石場': 'drawer',
-  '学校': 'worker', '専門学校': 'worker', '高等学校': 'worker', '大学': 'worker',
-  '露店': 'income', '市場': 'income', 'スーパーマーケット': 'income', '百貨店': 'income',
-  '万博': 'income', 'レストラン': 'income', '珈琲店': 'income', '焼畑': 'drawer',
+// 公共職場のbeamCategoryをRound_CARDSから逆引きするマップ（初回アクセス時に生成）
+let _publicWorkplaceCategories: Map<string, BeamCategory> | null = null
+function getPublicWorkplaceCategories(): Map<string, BeamCategory> {
+  if (_publicWorkplaceCategories) return _publicWorkplaceCategories
+  _publicWorkplaceCategories = new Map()
+  for (const round of ROUND_CARDS) {
+    for (const wp of round.workplaces) {
+      if (wp.beamCategory && !_publicWorkplaceCategories.has(wp.name)) {
+        _publicWorkplaceCategories.set(wp.name, wp.beamCategory)
+      }
+    }
+  }
+  return _publicWorkplaceCategories
+}
+
+// カード名からbeamCategoryを返す（所有建物はBUILDING_CARDS、公共職場はROUND_CARDS）
+function getCardBeamCategory(name: string): BeamCategory | undefined {
+  return ALL_BUILDING_CARDS[name]?.beamCategory ?? getPublicWorkplaceCategories().get(name)
 }
 
 // greedy スコアで上位 n 件のアクションを返す（beam 候補選択に使用）
@@ -574,7 +654,7 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
   const top2Count = Math.min(2, scored.length, n)
   for (let i = 0; i < top2Count; i++) {
     result.push(scored[i].option)
-    const cat = CARD_CATEGORY[scored[i].name]
+    const cat = getCardBeamCategory(scored[i].name)
     if (cat) seenCategories.add(cat)
   }
 
@@ -586,7 +666,7 @@ export function getTopNActionsGreedy(state: GameState, playerId: number, n: numb
   const greedyFallback: ActionOption[] = []
 
   for (const item of remaining) {
-    const cat = CARD_CATEGORY[item.name]
+    const cat = getCardBeamCategory(item.name)
     if (cat && !seenCategories.has(cat)) {
       diversePicks.push(item.option)
       seenCategories.add(cat)
@@ -680,9 +760,47 @@ const DRAW_BUILDING_EFFECT_KINDS = new Set([
   'draw-with-build-discount',
 ])
 
-// ラウンド終了後の中間評価関数
-export function scoreIntermediateBeam(state: GameState, playerId: number): number {
-  const w = getBeamEvalWeights()
+// early/late の2段階重みをラウンドに応じて単一オブジェクトに解決する
+interface ResolvedBeamWeights {
+  workers3Bonus: number; workers4Bonus: number; workers5Bonus: number
+  buildingCardValue: number; consumptionCardValue: number
+  startPlayerBonus: number; assetValueMult: number
+  workplace1CostMult: number; workplace2CostMult: number; workplace3CostMult: number
+  moneyMult: number; unpaidWagesPenalty: number
+  vpCardValue: number; drawBuildingCostMult: number
+  builderBonus: number; drawBuildingBonus: number
+  drawConsumptionBonus: number; incomeBonus: number
+}
+
+function resolveBeamWeights(w: BeamEvalWeights, startRound: number): ResolvedBeamWeights {
+  const late = startRound >= 5
+  return {
+    workers3Bonus:        late ? w.workers3Bonus_late        : w.workers3Bonus_early,
+    workers4Bonus:        late ? w.workers4Bonus_late        : w.workers4Bonus_early,
+    workers5Bonus:        late ? w.workers5Bonus_late        : w.workers5Bonus_early,
+    buildingCardValue:    late ? w.buildingCardValue_late    : w.buildingCardValue_early,
+    consumptionCardValue: late ? w.consumptionCardValue_late : w.consumptionCardValue_early,
+    startPlayerBonus:     late ? w.startPlayerBonus_late     : w.startPlayerBonus_early,
+    assetValueMult:       late ? w.assetValueMult_late       : w.assetValueMult_early,
+    workplace1CostMult:   late ? w.workplace1CostMult_late   : w.workplace1CostMult_early,
+    workplace2CostMult:   late ? w.workplace2CostMult_late   : w.workplace2CostMult_early,
+    workplace3CostMult:   late ? w.workplace3CostMult_late   : w.workplace3CostMult_early,
+    moneyMult:            late ? w.moneyMult_late            : w.moneyMult_early,
+    unpaidWagesPenalty:   late ? w.unpaidWagesPenalty_late   : w.unpaidWagesPenalty_early,
+    vpCardValue:          late ? w.vpCardValue_late          : w.vpCardValue_early,
+    drawBuildingCostMult: late ? w.drawBuildingCostMult_late : w.drawBuildingCostMult_early,
+    builderBonus:         late ? w.builderBonus_late         : w.builderBonus_early,
+    drawBuildingBonus:    late ? w.drawBuildingBonus_late    : w.drawBuildingBonus_early,
+    drawConsumptionBonus: late ? w.drawConsumptionBonus_late : w.drawConsumptionBonus_early,
+    incomeBonus:          late ? w.incomeBonus_late          : w.incomeBonus_early,
+  }
+}
+
+const SCORE_CATEGORIES = ['builder', 'draw-building', 'draw-consumption', 'income'] as const
+
+// ラウンド終了後の中間評価関数（startRound で early/late を切り替え）
+export function scoreIntermediateBeam(state: GameState, playerId: number, startRound: number): number {
+  const w = resolveBeamWeights(getBeamEvalWeights(), startRound)
   const player = getPlayer(state, playerId)
   const wc = player.workers.length
   let score = 0
@@ -723,13 +841,30 @@ export function scoreIntermediateBeam(state: GameState, playerId: number): numbe
   }, 0)
   score += drawBuildingCostSum * w.drawBuildingCostMult
 
+  // カテゴリボーナス: カテゴリ内の所有建物の最大コスト × ボーナス
+  for (const cat of SCORE_CATEGORIES) {
+    let maxCost = 0
+    for (const b of player.ownedBuildings) {
+      if (ALL_BUILDING_CARDS[b.name]?.beamCategory === cat) {
+        maxCost = Math.max(maxCost, ALL_BUILDING_CARDS[b.name]?.cost ?? 0)
+      }
+    }
+    if (maxCost > 0) {
+      const bonus = cat === 'builder' ? w.builderBonus
+        : cat === 'draw-building' ? w.drawBuildingBonus
+        : cat === 'draw-consumption' ? w.drawConsumptionBonus
+        : w.incomeBonus
+      score += maxCost * bonus
+    }
+  }
+
   return score
 }
 
-// startRound に対する終端評価（ラウンド8以降または game-over は実スコア、それ以外は中間評価）
+// startRound に対する終端評価（R9以降または game-over は実スコア、それ以外は中間評価）
 export function evaluateSimEnd(state: GameState, beamPlayerId: number, startRound: number): number {
-  if (startRound >= 8 || state.phase === 'game-over') {
+  if (startRound >= 9 || state.phase === 'game-over') {
     return calculateScores(state).find(sc => sc.playerId === beamPlayerId)?.total ?? 0
   }
-  return scoreIntermediateBeam(state, beamPlayerId)
+  return scoreIntermediateBeam(state, beamPlayerId, startRound)
 }
