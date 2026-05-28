@@ -186,20 +186,20 @@ export interface BeamEvalWeights {
 }
 
 export const DEFAULT_BEAM_EVAL_WEIGHTS: BeamEvalWeights = {
-  workers3Bonus:        1085.362,
-  workers4Bonus:        7.400,
-  workers5Bonus:        7.400,
-  buildingCardValue:    20.000,
-  consumptionCardValue: 7.784,
-  startPlayerBonus:     19.204,
-  assetValueMult:       4.000,
-  workplace1CostMult:   5.014,
-  workplace2CostMult:   5.014,
-  workplace3CostMult:   4.877,
-  moneyMult:            2.489,
-  unpaidWagesPenalty:   0.000,
-  vpCardValue:          0.602,
-  drawBuildingCostMult: 5.000,
+  workers3Bonus:        762.862,
+  workers4Bonus:        4.408,
+  workers5Bonus:        0.000,
+  buildingCardValue:    26.048,
+  consumptionCardValue: 16.247,
+  startPlayerBonus:     27.096,
+  assetValueMult:       3.210,
+  workplace1CostMult:   18.393,
+  workplace2CostMult:   4.118,
+  workplace3CostMult:   0.000,
+  moneyMult:            4.735,
+  unpaidWagesPenalty:   8.958,
+  vpCardValue:          5.186,
+  drawBuildingCostMult: 7.509,
 }
 
 export const BEAM_EVAL_WEIGHT_BOUNDS: Record<keyof BeamEvalWeights, [number, number]> = {
