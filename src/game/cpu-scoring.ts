@@ -611,8 +611,8 @@ export function pickDisruptive(state: GameState, playerId: number): { type: 'pub
 
   // 優先度（小さいほど優先）:
   // 2: 一般職場 cost>=5 / 3: cost4 / 4: 万博 / 5: cost3
-  // 6: 百貨店・スーパーマーケット / 7: cost2 / 8: 採石場 / 9: 市場
-  // 10: cost1 / 11: 拡張職場 / 12: 露店 / 13: 鉱山
+  // 6: 百貨店 / 7: スーパーマーケット / 8: cost2 / 9: 採石場 / 10: 市場
+  // 11: cost1 / 12: 拡張職場 / 13: 露店 / 14: 鉱山
   type Scored = { type: 'pub'; id: string; priority: number; tiebreak: number }
   const scored: Scored[] = []
 
@@ -621,28 +621,32 @@ export function pickDisruptive(state: GameState, playerId: number): { type: 'pub
       scored.push({ type: 'pub', id: wp.id, priority: 4, tiebreak: 0 })
       continue
     }
-    if (wp.name === '百貨店' || wp.name === 'スーパーマーケット') {
+    if (wp.name === '百貨店') {
       scored.push({ type: 'pub', id: wp.id, priority: 6, tiebreak: 0 })
       continue
     }
-    if (wp.name === '採石場') {
-      scored.push({ type: 'pub', id: wp.id, priority: 8, tiebreak: 0 })
+    if (wp.name === 'スーパーマーケット') {
+      scored.push({ type: 'pub', id: wp.id, priority: 7, tiebreak: 0 })
       continue
     }
-    if (wp.name === '市場') {
+    if (wp.name === '採石場') {
       scored.push({ type: 'pub', id: wp.id, priority: 9, tiebreak: 0 })
       continue
     }
+    if (wp.name === '市場') {
+      scored.push({ type: 'pub', id: wp.id, priority: 10, tiebreak: 0 })
+      continue
+    }
     if (expansionOrder.includes(wp.name)) {
-      scored.push({ type: 'pub', id: wp.id, priority: 11, tiebreak: expansionOrder.length - expansionOrder.indexOf(wp.name) })
+      scored.push({ type: 'pub', id: wp.id, priority: 12, tiebreak: expansionOrder.length - expansionOrder.indexOf(wp.name) })
       continue
     }
     if (wp.name === '露店') {
-      scored.push({ type: 'pub', id: wp.id, priority: 12, tiebreak: 0 })
+      scored.push({ type: 'pub', id: wp.id, priority: 13, tiebreak: 0 })
       continue
     }
     if (wp.name === '鉱山') {
-      scored.push({ type: 'pub', id: wp.id, priority: 13, tiebreak: 0 })
+      scored.push({ type: 'pub', id: wp.id, priority: 14, tiebreak: 0 })
       continue
     }
     if (wp.kind === 'sold') {
@@ -651,8 +655,8 @@ export function pickDisruptive(state: GameState, playerId: number): { type: 'pub
       if (cost >= 5) priority = 2
       else if (cost === 4) priority = 3
       else if (cost === 3) priority = 5
-      else if (cost === 2) priority = 7
-      else if (cost === 1) priority = 10
+      else if (cost === 2) priority = 8
+      else if (cost === 1) priority = 11
       else priority = 99
       scored.push({ type: 'pub', id: wp.id, priority, tiebreak: assetOf(wp.name) })
       continue
