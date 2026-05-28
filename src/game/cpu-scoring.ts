@@ -182,6 +182,7 @@ export interface BeamEvalWeights {
   moneyMult:            number  // 所持金への乗数
   unpaidWagesPenalty:   number  // 未払い賃金1単位あたりのペナルティ
   vpCardValue:          number  // 勝利点カード1枚あたりの評価値
+  drawBuildingCostMult: number  // 建物カードを引く建物のコスト合算への乗数
 }
 
 export const DEFAULT_BEAM_EVAL_WEIGHTS: BeamEvalWeights = {
@@ -198,6 +199,7 @@ export const DEFAULT_BEAM_EVAL_WEIGHTS: BeamEvalWeights = {
   moneyMult:            2.489,
   unpaidWagesPenalty:   0.000,
   vpCardValue:          0.602,
+  drawBuildingCostMult: 5.000,
 }
 
 export const BEAM_EVAL_WEIGHT_BOUNDS: Record<keyof BeamEvalWeights, [number, number]> = {
@@ -214,6 +216,7 @@ export const BEAM_EVAL_WEIGHT_BOUNDS: Record<keyof BeamEvalWeights, [number, num
   moneyMult:            [0, 5],
   unpaidWagesPenalty:   [0, 20],
   vpCardValue:          [0, 20],
+  drawBuildingCostMult: [0, 20],
 }
 
 // ビームサーチ中間評価重みストア（GA 用）
@@ -671,6 +674,12 @@ export function pickDisruptive(state: GameState, playerId: number): { type: 'pub
   return { type: valid[0].type, id: valid[0].id }
 }
 
+const DRAW_BUILDING_EFFECT_KINDS = new Set([
+  'draw', 'discard-draw', 'discard-draw-min-hand',
+  'reveal-pick', 'draw-if-empty', 'draw-if-mine',
+  'draw-with-build-discount',
+])
+
 // ラウンド終了後の中間評価関数
 export function scoreIntermediateBeam(state: GameState, playerId: number): number {
   const w = getBeamEvalWeights()
@@ -704,6 +713,15 @@ export function scoreIntermediateBeam(state: GameState, playerId: number): numbe
   score += player.money * w.moneyMult
   score -= player.unpaidWages * w.unpaidWagesPenalty
   score += player.victoryPoints * w.vpCardValue
+
+  const drawBuildingCostSum = player.ownedBuildings.reduce((s, b) => {
+    const ef = ALL_BUILDING_CARDS[b.name]?.effect
+    if (!ef) return s
+    if (DRAW_BUILDING_EFFECT_KINDS.has(ef.kind)) return s + (ALL_BUILDING_CARDS[b.name]?.cost ?? 0)
+    if (ef.kind === 'draw-gain-vp' && ef.drawType === 'building') return s + (ALL_BUILDING_CARDS[b.name]?.cost ?? 0)
+    return s
+  }, 0)
+  score += drawBuildingCostSum * w.drawBuildingCostMult
 
   return score
 }
