@@ -81,6 +81,12 @@ function repair(w: BeamEvalWeights): BeamEvalWeights {
   result.workplace2CostMult_late  = Math.min(result.workplace2CostMult_late,  result.workplace1CostMult_late)
   result.workplace3CostMult_late  = Math.min(result.workplace3CostMult_late,  result.workplace2CostMult_late)
 
+  // 単調制約で下限を下回る可能性があるため再クランプ
+  for (const key of GENES) {
+    const [lo, hi] = BEAM_EVAL_WEIGHT_BOUNDS[key]
+    result[key] = Math.round(Math.max(lo, Math.min(hi, result[key])))
+  }
+
   return result
 }
 

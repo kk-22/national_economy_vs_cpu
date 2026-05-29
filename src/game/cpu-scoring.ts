@@ -252,8 +252,8 @@ export const DEFAULT_BEAM_EVAL_WEIGHTS: BeamEvalWeights = {
 export const BEAM_EVAL_WEIGHT_BOUNDS: Record<keyof BeamEvalWeights, [number, number]> = {
   workers3Bonus_early:        [0, 1000],
   workers3Bonus_late:         [0, 1000],
-  workers4Bonus_early:        [50, 200],  // 下限50: GA最適化でも4人目雇用を諦めないよう保証
-  workers4Bonus_late:         [50, 200],  // 下限50
+  workers4Bonus_early:        [0, 200],
+  workers4Bonus_late:         [0, 200],
   workers5Bonus_early:        [0, 100],
   workers5Bonus_late:         [0, 100],
   buildingCardValue_early:    [0, 60],
