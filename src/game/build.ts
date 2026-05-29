@@ -198,12 +198,6 @@ export function cancelBuildTwoPayment(state: GameState): GameState {
   return { ...state, pendingAction: { kind: 'choose-build-two-first', playerId: action.playerId, sourceName: action.sourceName, sourceId: action.sourceId } }
 }
 
-export function cancelDoubleSecond(state: GameState): GameState {
-  const action = state.pendingAction
-  if (!action || action.kind !== 'choose-double-second') return state
-  return { ...state, pendingAction: { kind: 'choose-double-first', playerId: action.playerId, sourceName: action.sourceName, sourceId: action.sourceId } }
-}
-
 export function cancelDoublePayment(state: GameState): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-double-payment') return state

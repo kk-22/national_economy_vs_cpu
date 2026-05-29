@@ -12,7 +12,7 @@ import {
 } from '../game/turns'
 import {
   selectBuildTarget, selectDoubleFirst, selectDoubleSecond,
-  cancelBuildChoice, cancelBuildPayment, cancelDoubleSecond, cancelDoublePayment,
+  cancelBuildChoice, cancelBuildPayment, cancelDoublePayment,
   cancelBuildTwoPayment,
   getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards,
   getNoSellBuildableCards, getFreeBuildableCards,
@@ -451,11 +451,6 @@ export function useGame() {
     state.game = cancelBuildPayment(state.game)
   }
 
-  function clickCancelDoubleSecond() {
-    if (!state.game) return
-    state.game = cancelDoubleSecond(state.game)
-  }
-
   function clickCancelDoublePayment() {
     if (!state.game) return
     paymentSelectedIds.value = []
@@ -749,7 +744,6 @@ export function useGame() {
     clickCancelBuildChoice,
     clickCancelBuildPayment,
     clickCancelDiscardChoice,
-    clickCancelDoubleSecond,
     clickCancelDoublePayment,
     clickDoubleConfirm,
     clickDiscardCard,
