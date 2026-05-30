@@ -1,4 +1,4 @@
-import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, buildActionLog, ALL_BUILDING_CARDS } from './primitives'
+import { getPlayer, addLog, updatePlayer, availableWorkers, drawCards, drawConsumption, buildActionLog, ALL_BUILDING_CARDS } from './primitives'
 import { constructBuilding, selectBuildTwoFirst, selectBuildTwoSecond, confirmBuildTwoPayment, confirmFreeBuild, selectNoSellBuildTarget, getConstructionDiscount } from './build'
 import { applyEffect } from './effects'
 import { processRoundEnd, resolveAfterHandLimit } from './round'
@@ -44,22 +44,32 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
   const beforeSP = state.startPlayerIndex
   const beforeDiscardPile = state.discardPile
 
+  const wpDef = ALL_BUILDING_CARDS[workplace.name]
+  const koma = availableWorkers(player)
+  const worker2 = wpDef?.requiresDoubleWorker ? koma[1] : null
+
   let s = updatePlayer(state, playerId, p => ({
     ...p,
-    workers: p.workers.map(w => w.id === worker.id ? { ...w, placedAt: workplaceId } : w),
+    workers: p.workers.map(w => {
+      if (w.id === worker.id) return { ...w, placedAt: workplaceId }
+      if (worker2 && w.id === worker2.id) return { ...w, placedAt: workplaceId }
+      return w
+    }),
   }))
   s = {
     ...s,
-    publicWorkplaces: s.publicWorkplaces.map(wp =>
-      wp.id === workplaceId ? { ...wp, workerIds: [...wp.workerIds, worker.id] } : wp
-    ),
+    publicWorkplaces: s.publicWorkplaces.map(wp => {
+      if (wp.id !== workplaceId) return wp
+      const ids = worker2 ? [...wp.workerIds, worker.id, worker2.id] : [...wp.workerIds, worker.id]
+      return { ...wp, workerIds: ids }
+    }),
   }
 
   s = applyEffect(s, playerId, workplace.effect, player.isCpu, player.cpuStrategy)
 
   if (s.pendingAction) {
     const pa = s.pendingAction
-    const needsSourceId = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed' || pa.kind === 'choose-build-two-first' || pa.kind === 'choose-free-build' || pa.kind === 'choose-no-sell-build')
+    const needsSourceId = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed' || pa.kind === 'choose-build-two-first' || pa.kind === 'choose-free-build' || pa.kind === 'choose-no-sell-build' || pa.kind === 'choose-consumption-or-discard')
     const withSource = needsSourceId
       ? { ...pa, sourceName: workplace.name, sourceId: workplaceId }
       : { ...pa, sourceName: workplace.name }
@@ -93,9 +103,17 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
   const beforeSP = state.startPlayerIndex
   const beforeDiscardPile = state.discardPile
 
+  const bldDef = ALL_BUILDING_CARDS[building.name]
+  const bldKoma = availableWorkers(player)
+  const bWorker2 = bldDef?.requiresDoubleWorker ? bldKoma[1] : null
+
   let s = updatePlayer(state, playerId, p => ({
     ...p,
-    workers: p.workers.map(w => w.id === worker.id ? { ...w, placedAt: buildingId } : w),
+    workers: p.workers.map(w => {
+      if (w.id === worker.id) return { ...w, placedAt: buildingId }
+      if (bWorker2 && w.id === bWorker2.id) return { ...w, placedAt: buildingId }
+      return w
+    }),
     ownedBuildings: p.ownedBuildings.map(b => b.id === buildingId ? { ...b, workerHereId: worker.id } : b),
   }))
 
@@ -103,7 +121,7 @@ export function placeWorkerOnBuilding(state: GameState, playerId: number, buildi
 
   if (s.pendingAction) {
     const pa = s.pendingAction
-    const needsSourceId = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed' || pa.kind === 'choose-build-two-first' || pa.kind === 'choose-free-build' || pa.kind === 'choose-no-sell-build')
+    const needsSourceId = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed' || pa.kind === 'choose-build-two-first' || pa.kind === 'choose-free-build' || pa.kind === 'choose-no-sell-build' || pa.kind === 'choose-consumption-or-discard')
     const withSource = needsSourceId
       ? { ...pa, sourceName: building.name, sourceId: buildingId }
       : { ...pa, sourceName: building.name }
@@ -259,17 +277,39 @@ export function selectFarmBuildTarget(state: GameState, targetCardId: string): G
 export function confirmBuildPayment(state: GameState, paymentIds: string[]): GameState {
   const action = state.pendingAction
   if (!action || action.kind !== 'choose-build-payment') return state
-  if (paymentIds.length !== action.cost) return state
+
+  // 支払い枚数の検証（消費財2倍モードは別途計算）
+  if (action.consumptionDouble) {
+    const playerHand = getPlayer(state, action.playerId).hand
+    const consumptionPaid = paymentIds.filter(id => playerHand.find(c => c.id === id)?.kind === 'consumption').length
+    const buildingPaid = paymentIds.length - consumptionPaid
+    if (consumptionPaid * 2 + buildingPaid !== action.cost) return state
+  } else {
+    if (paymentIds.length !== action.cost) return state
+  }
+
   const beforePlayer = getPlayer(state, action.playerId)
   let s: GameState
   ;[s] = constructBuilding(state, action.playerId, action.targetId, paymentIds, action.drawAfter)
   s = { ...s, pendingAction: null }
+
   // 宮大工（build-gain-vp）経由の建設なら勝利点を加算
   const sourceEffect = action.sourceName ? ALL_BUILDING_CARDS[action.sourceName]?.effect : undefined
   if (sourceEffect?.kind === 'build-gain-vp') {
     s = updatePlayer(s, action.playerId, p => ({ ...p, victoryPoints: p.victoryPoints + 1 }))
     s = addLog(s, `${getPlayer(s, action.playerId).name} が勝利点カードを取得（計${getPlayer(s, action.playerId).victoryPoints}枚）`)
   }
+
+  // 植民団: 建設後に消費財を引く
+  if (action.consumptionAfter) {
+    s = drawConsumption(s, action.playerId, action.consumptionAfter)
+  }
+
+  // 摩天建設: 建設後に手札が0枚なら建物カードを引く
+  if (action.drawAfterEmpty && getPlayer(s, action.playerId).hand.length === 0) {
+    s = drawCards(s, action.playerId, action.drawAfterEmpty)
+  }
+
   const afterPlayer = getPlayer(s, action.playerId)
   s = addLog(s, buildActionLog(action.sourceName ?? '', 'build', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
   return afterHumanAction(s)
@@ -397,5 +437,32 @@ export function confirmFreeBuildCard(state: GameState, cardId: string): GameStat
 
 export function selectNoSellBuildCard(state: GameState, cardId: string): GameState {
   return selectNoSellBuildTarget(state, cardId)
+}
+
+// ---- グローリー専用アクション確定 ----
+
+// 農村: 消費財2枚引く OR 消費財2枚捨て建物3枚引く
+export function confirmConsumptionOrDiscard(state: GameState, choice: 'consumption' | 'discard-draw'): GameState {
+  const action = state.pendingAction
+  if (!action || action.kind !== 'choose-consumption-or-discard') return state
+  const beforePlayer = getPlayer(state, action.playerId)
+  let s: GameState = { ...state, pendingAction: null }
+
+  if (choice === 'consumption') {
+    s = drawConsumption(s, action.playerId, action.n)
+    const afterPlayer = getPlayer(s, action.playerId)
+    s = addLog(s, buildActionLog(action.sourceName ?? '', 'draw-consumption-or-discard-draw', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
+    return afterHumanAction(s)
+  } else {
+    // 消費財をn枚自動で捨てて建物カードをn+1枚引く
+    const player = getPlayer(s, action.playerId)
+    const toDiscard = player.hand.filter(c => c.kind === 'consumption').slice(0, action.n)
+    const toDiscardIds = new Set(toDiscard.map(c => c.id))
+    s = updatePlayer(s, action.playerId, p => ({ ...p, hand: p.hand.filter(c => !toDiscardIds.has(c.id)) }))
+    s = drawCards(s, action.playerId, action.n + 1)
+    const afterPlayer = getPlayer(s, action.playerId)
+    s = addLog(s, buildActionLog(action.sourceName ?? '', 'draw-consumption-or-discard-draw', beforePlayer, afterPlayer, state.startPlayerIndex, s.startPlayerIndex))
+    return afterHumanAction(s)
+  }
 }
 

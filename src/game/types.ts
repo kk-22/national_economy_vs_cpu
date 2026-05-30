@@ -1,4 +1,4 @@
-export type Tag = 'farm' | 'factory'
+export type Tag = 'farm' | 'factory' | 'agriculture' | 'industry'
 
 // 建物の建設コストに対する条件付き割引
 export type ConditionalDiscount =
@@ -20,6 +20,7 @@ export interface BuildingCardDef {
   isWorkplace: boolean
   effect: GameEffect
   count: number
+  requiresDoubleWorker?: boolean              // グローリー: 2コマ同時配置が必要
   constructionDiscount?: ConditionalDiscount  // 建設時の条件付きコスト割引
   beamCategory?: BeamCategory                 // ビームサーチ評価・多様性選択カテゴリ
 }
@@ -71,6 +72,24 @@ export type GameEffect =
   | { kind: 'p-if-no-sell-n'; threshold: number; bonus: number }
   | { kind: 'p-vp-build-discount'; vpThreshold: number; discount: number }
   | { kind: 'build-no-sell'; drawAfter: number }
+  // --- グローリー専用 ---
+  | { kind: 'on-build-gain-vp'; n: number }
+  | { kind: 'on-build-gain-automaton' }
+  | { kind: 'draw-consumption-or-discard-draw'; n: number }
+  | { kind: 'build-then-draw-consumption'; discount: number; consumption: number }
+  | { kind: 'draw-consumption-odd-even'; even: number; odd: number }
+  | { kind: 'build-draw-if-empty'; discount: number; drawAfterEmpty: number }
+  | { kind: 'gain-household-by-workers'; withWorker: number; withoutWorker: number }
+  | { kind: 'gain-household-if-hand'; exactHand: number; gain: number; otherwise: number }
+  | { kind: 'build-consumption-double' }
+  | { kind: 'draw-gain-household'; n: number; gain: number }
+  | { kind: 'build-free-any' }
+  | { kind: 'p-if-tag-asset-min'; tag: Tag; minAsset: number; bonus: number }
+  | { kind: 'p-if-has-both-tags'; tag1: Tag; tag2: Tag; bonus: number }
+  | { kind: 'p-if-vp-min'; minVp: number; bonus: number }
+  | { kind: 'p-if-workers-min'; minWorkers: number; bonus: number }
+  | { kind: 'p-if-consumption-in-hand-min'; minCount: number; bonus: number }
+  | { kind: 'p-if-only-no-sell'; bonus: number }
 
 export interface BuildingCard {
   id: string
@@ -90,6 +109,7 @@ export interface Worker {
   playerId: number
   isTraining: boolean
   placedAt: string | null
+  isAutomaton?: boolean  // グローリー: 機械人形コマ（賃金不要）
 }
 
 export interface OwnedBuilding {
@@ -123,9 +143,10 @@ export interface Player {
 }
 
 export type PendingAction =
-  | { kind: 'choose-build-target'; playerId: number; discount: number; drawAfter: number; sourceName?: string; sourceId?: string }
-  | { kind: 'choose-build-payment'; playerId: number; targetId: string; targetName: string; cost: number; drawAfter: number; discount: number; sourceName?: string; sourceId?: string }
-  | { kind: 'choose-discard'; playerId: number; count: number; gainAmount: number; selected: string[]; drawCount?: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-build-target'; playerId: number; discount: number; drawAfter: number; consumptionAfter?: number; drawAfterEmpty?: number; consumptionDouble?: boolean; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-build-payment'; playerId: number; targetId: string; targetName: string; cost: number; drawAfter: number; discount: number; consumptionAfter?: number; drawAfterEmpty?: number; consumptionDouble?: boolean; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-consumption-or-discard'; playerId: number; n: number; sourceName?: string; sourceId?: string }
+  | { kind: 'choose-discard'; playerId: number; count: number; gainAmount: number; selected: string[]; drawCount?: number; consumptionOnly?: boolean; sourceName?: string; sourceId?: string }
   | { kind: 'choose-from-revealed'; playerId: number; revealed: HandCard[]; sourceName?: string; sourceId?: string }
   | { kind: 'choose-farm-build'; playerId: number; sourceName?: string; sourceId?: string }
   | { kind: 'choose-double-first'; playerId: number; sourceName?: string; sourceId?: string }
@@ -142,7 +163,7 @@ export type PendingAction =
 
 export type GamePhase = 'placement' | 'game-over'
 
-export type GameSeries = 'progress' | 'mecenat'
+export type GameSeries = 'progress' | 'mecenat' | 'glory'
 
 export interface GameState {
   round: number

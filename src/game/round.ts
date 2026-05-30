@@ -134,7 +134,7 @@ function processWagesCash(state: GameState): GameState {
   let s = state
 
   for (const player of s.players) {
-    const totalWage = player.workers.length * wage
+    const totalWage = player.workers.filter(w => !w.isAutomaton).length * wage
     let remaining = totalWage
     const playerMoney = getPlayer(s, player.id).money
     let deferred = false
@@ -172,7 +172,7 @@ function processWagesCash(state: GameState): GameState {
 
     if (!deferred) {
       const p = getPlayer(s, player.id)
-      s = addLog(s, `${p.name}: 労働者${player.workers.length}人の賃金 $${totalWage}→残り$${p.money}`)
+      s = addLog(s, `${p.name}: 労働者${player.workers.filter(w => !w.isAutomaton).length}人の賃金 $${totalWage}→残り$${p.money}`)
     }
   }
 
@@ -385,6 +385,39 @@ export function calculateScores(state: GameState): ScoreResult[] {
         case 'p-if-no-sell-n':
           if (noSellCount >= effect.threshold) bonuses += effect.bonus
           break
+        // グローリー系
+        case 'p-if-tag-asset-min': {
+          const tagAsset = player.ownedBuildings.reduce((sum, ob) => {
+            const d = ALL_BUILDING_CARDS[ob.name]
+            return d?.tags.includes(effect.tag) ? sum + d.assetValue : sum
+          }, 0)
+          if (tagAsset >= effect.minAsset) bonuses += effect.bonus
+          break
+        }
+        case 'p-if-has-both-tags': {
+          const hasTag1 = player.ownedBuildings.some(ob => ALL_BUILDING_CARDS[ob.name]?.tags.includes(effect.tag1))
+          const hasTag2 = player.ownedBuildings.some(ob => ALL_BUILDING_CARDS[ob.name]?.tags.includes(effect.tag2))
+          if (hasTag1 && hasTag2) bonuses += effect.bonus
+          break
+        }
+        case 'p-if-vp-min':
+          if ((player.victoryPoints ?? 0) >= effect.minVp) bonuses += effect.bonus
+          break
+        case 'p-if-workers-min': {
+          const regularWorkers = player.workers.filter(w => !w.isAutomaton).length
+          if (regularWorkers >= effect.minWorkers) bonuses += effect.bonus
+          break
+        }
+        case 'p-if-consumption-in-hand-min': {
+          const consInHand = player.hand.filter(c => c.kind === 'consumption').length
+          if (consInHand >= effect.minCount) bonuses += effect.bonus
+          break
+        }
+        case 'p-if-only-no-sell': {
+          const noSellBuildings = player.ownedBuildings.filter(ob => !ALL_BUILDING_CARDS[ob.name]?.canSell)
+          if (noSellBuildings.length === 1 && noSellBuildings[0].name === b.name) bonuses += effect.bonus
+          break
+        }
       }
     }
 

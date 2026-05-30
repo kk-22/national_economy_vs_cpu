@@ -44,6 +44,7 @@ const {
   clickCancelDoublePayment, clickDoubleConfirm,
   clickDiscardCard, clickCancelDiscardChoice, clickRevealedCard, clickHandLimitCard, clickToggleSellBuilding, clickSellOption,
   clickBuildTwoConfirm, clickBuildTwoPayment, clickCancelBuildTwoPayment, clickFreeBuildCard, clickNoSellBuildCard,
+  clickConsumptionOrDiscard,
   undo, redo, canUndo, canRedo, cpuPaused,
 } = useGame()
 
@@ -250,7 +251,7 @@ const displayMoney = computed(() => {
   const player = humanPlayer.value
   if (!player) return 0
   if (pa?.kind === 'choose-sell-buildings') {
-    return (player.workers.length * currentWage.value) - pa.deficit
+    return (regularWorkers(player.workers).length * currentWage.value) - pa.deficit
   }
   return player.money
 })
@@ -321,13 +322,21 @@ function workerNames(workerIds: string[]): string[] {
     return p?.name ?? '?'
   })
 }
-function workerAvailable(workers: Worker[]): number {
-  return workers.filter(w => !w.isTraining && !w.placedAt).length
+function regularWorkers(workers: Worker[]): Worker[] {
+  return workers.filter(w => !w.isAutomaton)
 }
-
+function automatons(workers: Worker[]): Worker[] {
+  return workers.filter(w => w.isAutomaton)
+}
+function workerAvailable(workers: Worker[]): number {
+  return regularWorkers(workers).filter(w => !w.isTraining && !w.placedAt).length
+}
+function automatonAvailable(workers: Worker[]): number {
+  return automatons(workers).filter(w => !w.placedAt).length
+}
 function workerUnderCapacity(player: Player): boolean {
   const shatakuCount = player.ownedBuildings.filter(b => b.name === '社宅').length
-  return shatakuCount > 0 && player.workers.length < 5 + shatakuCount
+  return shatakuCount > 0 && regularWorkers(player.workers).length < 5 + shatakuCount
 }
 
 
@@ -393,7 +402,7 @@ function tipOn(text: string | false | null | undefined) {
                   <span class="cpu-name">{{ cpu.name }}</span>
                   <span v-if="cpu.unpaidWages > 0" class="unpaid-badge">未払い{{ cpu.unpaidWages }}</span>
                   <span v-if="cpu.victoryPoints > 0" class="vp-badge">勝利点{{ cpu.victoryPoints }}枚</span>
-                  <span class="worker-badge">労働者{{ workerAvailable(cpu.workers) }}/<span :class="{ 'worker-limit-alert': workerUnderCapacity(cpu) }">{{ cpu.workers.length }}</span></span>
+                  <span class="worker-badge">労働者{{ workerAvailable(cpu.workers) }}/<span :class="{ 'worker-limit-alert': workerUnderCapacity(cpu) }">{{ regularWorkers(cpu.workers).length }}</span><template v-if="automatons(cpu.workers).length > 0"> 機械人形{{ automatonAvailable(cpu.workers) }}/{{ automatons(cpu.workers).length }}</template></span>
                   <span class="cpu-money">${{ cpu.money }}</span>
                   <span class="hand-count"><span class="hand-count-bold">手札{{ handCount(cpu.hand) }}</span>{{ handDetail(cpu.hand) }}</span>
                   <span v-if="game.startPlayerIndex === cpu.id" class="sp-badge">🚩SP</span>
@@ -463,10 +472,10 @@ function tipOn(text: string | false | null | undefined) {
               <span class="player-name">{{ humanPlayer?.name }}</span>
               <span v-if="humanPlayer?.unpaidWages" class="unpaid-badge">未払い{{ humanPlayer.unpaidWages }}</span>
               <span v-if="(humanPlayer?.victoryPoints ?? 0) > 0" class="vp-badge">勝利点{{ humanPlayer!.victoryPoints }}枚</span>
-              <span class="worker-badge">労働者{{ humanPlayer ? workerAvailable(humanPlayer.workers) : '' }}/<span :class="{ 'worker-limit-alert': humanPlayer != null && workerUnderCapacity(humanPlayer) }">{{ humanPlayer?.workers.length ?? '' }}</span></span>
+              <span class="worker-badge">労働者{{ humanPlayer ? workerAvailable(humanPlayer.workers) : '' }}/<span :class="{ 'worker-limit-alert': humanPlayer != null && workerUnderCapacity(humanPlayer) }">{{ humanPlayer ? regularWorkers(humanPlayer.workers).length : '' }}</span><template v-if="humanPlayer && automatons(humanPlayer.workers).length > 0"> 機械人形{{ automatonAvailable(humanPlayer.workers) }}/{{ automatons(humanPlayer.workers).length }}</template></span>
               <span class="wage-summary">
                 所持金${{ displayMoney }} -
-                <span :class="displayMoney >= (humanPlayer?.workers.length ?? 0) * currentWage ? 'wage-cost wage-cost--ok' : 'wage-cost'">賃金${{ (humanPlayer?.workers.length ?? 0) * currentWage }}</span>
+                <span :class="displayMoney >= (humanPlayer ? regularWorkers(humanPlayer.workers).length : 0) * currentWage ? 'wage-cost wage-cost--ok' : 'wage-cost'">賃金${{ (humanPlayer ? regularWorkers(humanPlayer.workers).length : 0) * currentWage }}</span>
               </span>
               <span v-if="game.startPlayerIndex === humanPlayer?.id" class="sp-badge">🚩SP</span>
             </div>
@@ -546,8 +555,10 @@ function tipOn(text: string | false | null | undefined) {
                     :class="['hcard', 'selectable', {
                       selected: pendingAction.selected.includes(card.id),
                       'card-drawn': drawnIds.includes(card.id),
-                      'card-disabled': !pendingAction.selected.includes(card.id) && pendingAction.selected.length >= pendingAction.count
+                      'card-disabled': (!pendingAction.selected.includes(card.id) && pendingAction.selected.length >= pendingAction.count)
+                                    || (pendingAction.consumptionOnly && card.kind !== 'consumption')
                     }]"
+                    :disabled="pendingAction.consumptionOnly && card.kind !== 'consumption'"
                                         v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickDiscardCard(card.id)">
                     <HCard :card="card" />
@@ -698,11 +709,30 @@ function tipOn(text: string | false | null | undefined) {
                 <button class="btn-cancel" @click="clickCancelBuildTwoPayment">戻る</button>
               </template>
 
-              <!-- プレハブ工務店: コスト以下の建物を無料建設 -->
+              <!-- 農村: 消費財引く or 消費財捨てて建物引く -->
+              <template v-else-if="pendingAction.kind === 'choose-consumption-or-discard'">
+                <div class="pending-title-row">
+                  <span class="pending-title">{{ pendingAction.sourceName }}：効果を選択</span>
+                </div>
+                <div class="glory-choice-area">
+                  <button class="btn-confirm" @click="clickConsumptionOrDiscard('consumption')">
+                    消費財{{ pendingAction.n }}枚引く
+                  </button>
+                  <button class="btn-confirm"
+                    :disabled="(humanPlayer?.hand.filter(c => c.kind === 'consumption').length ?? 0) < pendingAction.n"
+                    @click="clickConsumptionOrDiscard('discard-draw')">
+                    消費財{{ pendingAction.n }}枚捨て→建物{{ pendingAction.n + 1 }}枚引く
+                  </button>
+                </div>
+              </template>
+
+              <!-- プレハブ工務店 / 転送装置: 建物を無料建設 -->
               <template v-else-if="pendingAction.kind === 'choose-free-build'">
                 <div class="hand-label-row">
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
-                  <span class="pending-title">{{ pendingAction.sourceName }}：資産価値{{ pendingAction.maxAsset }}以下の建物を無料建設</span>
+                  <span class="pending-title">
+                    {{ pendingAction.sourceName }}：{{ pendingAction.maxAsset >= 99999 ? '建物を無料建設' : `資産価値${pendingAction.maxAsset}以下の建物を無料建設` }}
+                  </span>
                 </div>
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"

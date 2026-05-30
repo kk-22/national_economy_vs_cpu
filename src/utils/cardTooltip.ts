@@ -51,6 +51,24 @@ export function effectDesc(effect: GameEffect): string {
     case 'p-if-no-sell-n':           return `ゲーム終了時、売却不可建物${effect.threshold}棟以上なら資産価値+${effect.bonus}`
     case 'p-vp-build-discount':      return `勝利点${effect.vpThreshold}枚以上で建設コスト${effect.discount}割引（建設時判定）`
     case 'none':               return `効果なし`
+    // グローリー効果
+    case 'on-build-gain-vp':              return `建てたときに勝利点カードを${effect.n}枚取る`
+    case 'on-build-gain-automaton':       return `建てたときに機械人形コマを1個得る。このラウンドから配置可・賃金不要`
+    case 'draw-consumption-or-discard-draw': return `消費財${effect.n}枚引く　OR　消費財${effect.n}枚捨てて建物カード${effect.n + 1}枚引く`
+    case 'build-then-draw-consumption':   return `建設する。その後消費財を${effect.consumption}枚引く`
+    case 'draw-consumption-odd-even':     return `手札が偶数枚なら消費財${effect.even}枚、奇数枚なら${effect.odd}枚引く`
+    case 'build-draw-if-empty':           return `建設する。建設後に手札が0枚になったら建物カードを${effect.drawAfterEmpty}枚引く`
+    case 'gain-household-by-workers':     return `手元にコマがない場合は家計から$${effect.withoutWorker}、ある場合は$${effect.withWorker}もらう`
+    case 'gain-household-if-hand':        return `手札がちょうど${effect.exactHand}枚なら家計から$${effect.gain}、そうでなければ$${effect.otherwise}もらう`
+    case 'build-consumption-double':      return `建設する。コストとして捨てる消費財は1枚を2枚分として扱う`
+    case 'draw-gain-household':           return `建物カードを${effect.n}枚引き、家計から$${effect.gain}もらう`
+    case 'build-free-any':               return `手札から建物1枚をコスト無しで建設する`
+    case 'p-if-tag-asset-min':            return `ゲーム終了時、${effect.tag === 'agriculture' ? '農業' : '工業'}マーク建物の資産価値合計が${effect.minAsset}以上なら資産価値+${effect.bonus}`
+    case 'p-if-has-both-tags':           return `ゲーム終了時、農業マーク建物と工業マーク建物の両方を所有していれば資産価値+${effect.bonus}`
+    case 'p-if-vp-min':                  return `ゲーム終了時、勝利点カードが${effect.minVp}枚以上なら資産価値+${effect.bonus}`
+    case 'p-if-workers-min':             return `ゲーム終了時、労働者が${effect.minWorkers}人以上（機械人形除く）なら資産価値+${effect.bonus}`
+    case 'p-if-consumption-in-hand-min': return `ゲーム終了時、手札の消費財が${effect.minCount}枚以上なら資産価値+${effect.bonus}`
+    case 'p-if-only-no-sell':            return `ゲーム終了時、所有する売却不可建物がこのカードだけなら資産価値+${effect.bonus}`
     default:                   return ''
   }
 }
@@ -61,6 +79,8 @@ export function cardTypeTags(name: string): string[] {
   const parts: string[] = []
   if (def.tags.includes('farm')) parts.push('農')
   if (def.tags.includes('factory')) parts.push('工')
+  if (def.tags.includes('agriculture')) parts.push('農')
+  if (def.tags.includes('industry')) parts.push('工')
   if (!def.canSell) parts.push('禁')
   return parts
 }
@@ -91,11 +111,12 @@ export function cardTooltip(name: string): string {
   const discountDesc = constructionDiscountDesc(name)
   if (discountDesc) lines.push(discountDesc)
   const tags: string[] = []
-  if (d.tags.includes('farm')) tags.push('農業マーク')
-  if (d.tags.includes('factory')) tags.push('工業マーク')
+  if (d.tags.includes('farm') || d.tags.includes('agriculture')) tags.push('農業マーク')
+  if (d.tags.includes('factory') || d.tags.includes('industry')) tags.push('工業マーク')
   const attrs: string[] = []
   if (!d.canSell) attrs.push('売却不可')
   if (!d.isWorkplace) attrs.push('使用不可')
+  if (d.requiresDoubleWorker) attrs.push('2コマ同時配置')
   if (tags.length > 0) lines.push('タイプ：' + tags.join(' / '))
   if (attrs.length > 0) lines.push(attrs.join(' / '))
   return lines.filter(Boolean).join('\n')

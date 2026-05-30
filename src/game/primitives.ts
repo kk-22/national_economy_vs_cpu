@@ -1,15 +1,19 @@
 import { BUILDING_CARDS, MAX_WORKERS_PER_PLAYER } from './constants'
 import { MECENAT_BUILDING_CARDS } from './mecenat-constants'
+import { GLORY_BUILDING_CARDS } from './glory-constants'
 import { SeededRandom } from './random'
 import type { GameState, Player, Worker, HandCard, BuildingCard, BuildingCardDef } from './types'
 
 export const ALL_BUILDING_CARDS: Record<string, BuildingCardDef> = {
   ...BUILDING_CARDS,
   ...MECENAT_BUILDING_CARDS,
+  ...GLORY_BUILDING_CARDS,
 }
 
 export function getCardDefs(state: GameState): Record<string, BuildingCardDef> {
-  return state.series === 'mecenat' ? MECENAT_BUILDING_CARDS : BUILDING_CARDS
+  if (state.series === 'mecenat') return MECENAT_BUILDING_CARDS
+  if (state.series === 'glory') return GLORY_BUILDING_CARDS
+  return BUILDING_CARDS
 }
 
 // ---- ID generation ----
@@ -172,7 +176,7 @@ export function buildActionLog(
 }
 
 export function workerCount(player: Player): number {
-  return player.workers.length
+  return player.workers.filter(w => !w.isAutomaton).length
 }
 
 export function availableWorkers(player: Player): Worker[] {

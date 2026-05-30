@@ -4,7 +4,7 @@ import { placeWorkerOnPublic, placeWorkerOnBuilding,
   selectFarmBuildTarget, confirmBuildPayment, confirmDoublePayment,
   confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard,
   selectBuildTwoFirstCard, selectBuildTwoSecondCard, confirmBuildTwoCards,
-  confirmFreeBuildCard, selectNoSellBuildCard } from './turns'
+  confirmFreeBuildCard, selectNoSellBuildCard, confirmConsumptionOrDiscard } from './turns'
 import { selectBuildTarget, selectDoubleFirst, selectDoubleSecond } from './build'
 import { confirmSellBuildings } from './round'
 
@@ -92,6 +92,13 @@ function resolvePending(state: GameState, entry: HistoryEntry): GameState {
       case 'choose-no-sell-build': {
         if (!entry.builtCard) return s
         s = selectNoSellBuildCard(s, entry.builtCard.id)
+        break
+      }
+      // ---- グローリー: 農村の効果選択 ----
+      // NOTE: pendingEntry.gloryChoice を clickConsumptionOrDiscard で記録すること。
+      case 'choose-consumption-or-discard': {
+        if (!entry.gloryChoice) return s
+        s = confirmConsumptionOrDiscard(s, entry.gloryChoice)
         break
       }
       default:

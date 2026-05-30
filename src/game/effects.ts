@@ -1,5 +1,5 @@
-import { getPlayer, drawCards, drawConsumption, shuffle, nextId, updatePlayer, workerCount, getMaxWorkers, addLog, ALL_BUILDING_CARDS } from './primitives'
-import { getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards, getNoSellBuildableCards, getFreeBuildableCards, getConstructionDiscount } from './build'
+import { getPlayer, drawCards, drawConsumption, shuffle, nextId, updatePlayer, workerCount, getMaxWorkers, addLog, availableWorkers, ALL_BUILDING_CARDS } from './primitives'
+import { getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards, getNoSellBuildableCards, getFreeBuildableCards, getBuildableCardsConsumptionDouble, getConstructionDiscount } from './build'
 import { cpuRevealPick, cpuDiscardDraw, cpuDiscardGain, cpuBuild, cpuBuildFarmFree, cpuBuildDouble, cpuBuildNoSell, cpuBuildFree, cpuBuildTwo } from './cpu'
 import type { GameState, GameEffect, Worker, HandCard, BuildingCard, CpuStrategy } from './types'
 
@@ -279,6 +279,134 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     case 'p-if-tag-n':
     case 'p-if-no-sell-n':
     case 'p-vp-build-discount':
+      return state
+
+    // --- グローリー専用 ---
+
+    // on-build-gain-vp / on-build-gain-automaton は constructBuilding 内で処理
+    case 'on-build-gain-vp':
+    case 'on-build-gain-automaton':
+      return state
+
+    case 'draw-consumption-or-discard-draw': {
+      if (isCpu) {
+        // CPU: 手札が少なければ消費財引き、多ければ消費財を直接捨てて建物引き
+        const consCount = player.hand.filter(c => c.kind === 'consumption').length
+        if (player.hand.length < 4 || consCount < effect.n) {
+          return drawConsumption(state, playerId, effect.n)
+        }
+        const toDiscard = player.hand.filter(c => c.kind === 'consumption').slice(0, effect.n)
+        const toDiscardIds = new Set(toDiscard.map(c => c.id))
+        let s = updatePlayer(state, playerId, p => ({ ...p, hand: p.hand.filter(c => !toDiscardIds.has(c.id)) }))
+        return drawCards(s, playerId, effect.n + 1)
+      }
+      return { ...state, pendingAction: { kind: 'choose-consumption-or-discard', playerId, n: effect.n } }
+    }
+
+    case 'build-then-draw-consumption': {
+      const buildable = getBuildableCards(state, playerId, effect.discount)
+      if (buildable.length === 0) return state
+      if (isCpu) {
+        const beforeLen = player.ownedBuildings.length
+        let s = cpuBuild(state, playerId, effect.discount, 0, strategy)
+        const built = getPlayer(s, playerId).ownedBuildings.length > beforeLen
+        if (built) s = drawConsumption(s, playerId, effect.consumption)
+        return s
+      }
+      return {
+        ...state,
+        pendingAction: {
+          kind: 'choose-build-target',
+          playerId,
+          discount: effect.discount,
+          drawAfter: 0,
+          consumptionAfter: effect.consumption,
+        },
+      }
+    }
+
+    case 'draw-consumption-odd-even': {
+      const handCount = player.hand.length
+      const n = handCount % 2 === 0 ? effect.even : effect.odd
+      return drawConsumption(state, playerId, n)
+    }
+
+    case 'build-draw-if-empty': {
+      const buildable = getBuildableCards(state, playerId, effect.discount)
+      if (buildable.length === 0) return state
+      if (isCpu) {
+        const beforeLen = player.ownedBuildings.length
+        let s = cpuBuild(state, playerId, effect.discount, 0, strategy)
+        const built = getPlayer(s, playerId).ownedBuildings.length > beforeLen
+        if (built && getPlayer(s, playerId).hand.length === 0) s = drawCards(s, playerId, effect.drawAfterEmpty)
+        return s
+      }
+      return {
+        ...state,
+        pendingAction: {
+          kind: 'choose-build-target',
+          playerId,
+          discount: effect.discount,
+          drawAfter: 0,
+          drawAfterEmpty: effect.drawAfterEmpty,
+        },
+      }
+    }
+
+    case 'gain-household-by-workers': {
+      const hasOtherKoma = availableWorkers(player).length > 1 || player.workers.some(w => w.placedAt !== null)
+      const gain = hasOtherKoma ? effect.withWorker : effect.withoutWorker
+      if (state.household < gain) return state
+      let s = { ...state, household: state.household - gain }
+      return updatePlayer(s, playerId, p => ({ ...p, money: p.money + gain }))
+    }
+
+    case 'gain-household-if-hand': {
+      const gain = player.hand.length === effect.exactHand ? effect.gain : effect.otherwise
+      if (state.household < gain) return state
+      let s = { ...state, household: state.household - gain }
+      return updatePlayer(s, playerId, p => ({ ...p, money: p.money + gain }))
+    }
+
+    case 'build-consumption-double': {
+      const buildable = getBuildableCardsConsumptionDouble(state, playerId)
+      if (buildable.length === 0) return state
+      if (isCpu) {
+        // CPU は通常のビルド（消費財最適化なし）
+        return cpuBuild(state, playerId, 0, 0, strategy)
+      }
+      return {
+        ...state,
+        pendingAction: {
+          kind: 'choose-build-target',
+          playerId,
+          discount: 0,
+          drawAfter: 0,
+          consumptionDouble: true,
+        },
+      }
+    }
+
+    case 'draw-gain-household': {
+      let s = drawCards(state, playerId, effect.n)
+      if (s.household < effect.gain) return s
+      s = { ...s, household: s.household - effect.gain }
+      return updatePlayer(s, playerId, p => ({ ...p, money: p.money + effect.gain }))
+    }
+
+    case 'build-free-any': {
+      if (isCpu) return cpuBuildFree(state, playerId, 99999, strategy)
+      if (getFreeBuildableCards(state, playerId, 99999).length === 0) return state
+      return { ...state, pendingAction: { kind: 'choose-free-build', playerId, maxAsset: 99999 } }
+    }
+
+    // 終了時効果はラウンド終了の calculateScores で処理するため実行時は何もしない
+    case 'p-if-tag-asset-min':
+    case 'p-if-has-both-tags':
+    case 'p-if-vp-min':
+    case 'p-if-workers-min':
+    case 'p-if-consumption-in-hand-min':
+    case 'p-if-only-no-sell':
       return state
 
     default: return state

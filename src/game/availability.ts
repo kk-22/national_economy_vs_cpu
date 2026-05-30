@@ -84,7 +84,41 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity, 
       const cost = Math.max(0, def.cost - effect.discount - selfDiscount)
       return player.hand.length - 1 >= cost
     })
-    default:                return true
+    // --- グローリー専用 ---
+    case 'draw-consumption-or-discard-draw': return true
+    case 'build-then-draw-consumption': return player.hand.some(c => {
+      if (c.kind !== 'building') return false
+      const def = ALL_BUILDING_CARDS[c.name]
+      if (!def) return false
+      const selfDiscount = state ? getConstructionDiscount(state, player.id, c.name) : 0
+      const cost = Math.max(0, def.cost - effect.discount - selfDiscount)
+      return player.hand.length - 1 >= cost
+    })
+    case 'draw-consumption-odd-even': return true
+    case 'build-draw-if-empty': return player.hand.some(c => {
+      if (c.kind !== 'building') return false
+      const def = ALL_BUILDING_CARDS[c.name]
+      if (!def) return false
+      const selfDiscount = state ? getConstructionDiscount(state, player.id, c.name) : 0
+      const cost = Math.max(0, def.cost - effect.discount - selfDiscount)
+      return player.hand.length - 1 >= cost
+    })
+    case 'gain-household-by-workers': return household >= effect.withoutWorker
+    case 'gain-household-if-hand':    return household >= effect.otherwise
+    case 'build-consumption-double':  return player.hand.some(c => {
+      if (c.kind !== 'building') return false
+      const def = ALL_BUILDING_CARDS[c.name]
+      if (!def) return false
+      const selfDiscount = state ? getConstructionDiscount(state, player.id, c.name) : 0
+      const cost = Math.max(0, def.cost - selfDiscount)
+      const rest = player.hand.filter(h => h.id !== c.id)
+      const buildingSlots = rest.filter(h => h.kind === 'building').length
+      const consumptionSlots = rest.filter(h => h.kind === 'consumption').length * 2
+      return buildingSlots + consumptionSlots >= cost
+    })
+    case 'draw-gain-household': return household >= effect.gain
+    case 'build-free-any':      return player.hand.some(c => c.kind === 'building')
+    default:                    return true
   }
 }
 
@@ -93,19 +127,27 @@ function canUseWorkplace(effect: GameEffect, currentWorkers: number, allowMultip
   return canUseEffect(effect, player, household, state)
 }
 
-export function getAvailablePublicWorkplaces(state: GameState, playerId: number): PublicWorkplace[] {
-  const player = getPlayer(state, playerId)
-  if (availableWorkers(player).length === 0) return []
-  return state.publicWorkplaces.filter(wp => canUseWorkplace(wp.effect, wp.workerIds.length, wp.allowMultiple, player, state.household, state))
-}
 
 export function getAvailableOwnedBuildings(state: GameState, playerId: number): OwnedBuilding[] {
   const player = getPlayer(state, playerId)
-  if (availableWorkers(player).length === 0) return []
+  const freeKoma = availableWorkers(player).length
+  if (freeKoma === 0) return []
   return player.ownedBuildings.filter(b => {
     const def = ALL_BUILDING_CARDS[b.name]
     if (!def || !def.isWorkplace) return false
     if (b.workerHereId !== null) return false
+    if (def.requiresDoubleWorker && freeKoma < 2) return false
     return canUseEffect(def.effect, player, state.household, state)
+  })
+}
+
+export function getAvailablePublicWorkplaces(state: GameState, playerId: number): PublicWorkplace[] {
+  const player = getPlayer(state, playerId)
+  const freeKoma = availableWorkers(player).length
+  if (freeKoma === 0) return []
+  return state.publicWorkplaces.filter(wp => {
+    const def = ALL_BUILDING_CARDS[wp.name]
+    if (def?.requiresDoubleWorker && freeKoma < 2) return false
+    return canUseWorkplace(wp.effect, wp.workerIds.length, wp.allowMultiple, player, state.household, state)
   })
 }

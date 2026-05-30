@@ -109,6 +109,10 @@ const DIFFICULTY_OPTIONS: { label: string; strategy: CpuStrategy }[] = [
           <input type="radio" :checked="setupSeries === 'mecenat'" @change="emit('update:setupSeries', 'mecenat')" />
           <span>メセナ</span>
         </label>
+        <label class="radio-item">
+          <input type="radio" :checked="setupSeries === 'glory'" @change="emit('update:setupSeries', 'glory')" />
+          <span>グローリー</span>
+        </label>
       </div>
 
       <div class="radio-group-label">人数</div>

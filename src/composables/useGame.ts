@@ -9,6 +9,7 @@ import {
   selectFarmBuildTarget, confirmBuildPayment, confirmDoublePayment,
   confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard,
   selectBuildTwoFirstCard, selectBuildTwoSecondCard, confirmBuildTwoCards, confirmFreeBuildCard, selectNoSellBuildCard,
+  confirmConsumptionOrDiscard,
 } from '../game/turns'
 import {
   selectBuildTarget, selectDoubleFirst, selectDoubleSecond,
@@ -614,6 +615,14 @@ export function useGame() {
     state.game = confirmFreeBuildCard(state.game, cardId)
   }
 
+  function clickConsumptionOrDiscard(choice: 'consumption' | 'discard-draw') {
+    if (!state.game) return
+    if (pendingEntry) {
+      pendingEntry.gloryChoice = choice
+    }
+    state.game = confirmConsumptionOrDiscard(state.game, choice)
+  }
+
   function clickNoSellBuildCard(cardId: string) {
     if (!state.game) return
     // pendingEntry に建設対象を記録（undo リプレイで choose-no-sell-build を解決するため）
@@ -764,6 +773,7 @@ export function useGame() {
     clickCancelBuildTwoPayment,
     clickFreeBuildCard,
     clickNoSellBuildCard,
+    clickConsumptionOrDiscard,
     undo,
     redo,
     replayError,

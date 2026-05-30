@@ -87,6 +87,24 @@ export function createGame(config: GameConfig): GameState {
   }
 
   state = flipRoundCard(state, 1, playerCount)
+
+  // グローリー: 遺跡を初期一般職場として追加
+  if (state.series === 'glory') {
+    let wpId: string
+    ;[state, wpId] = genId(state, 'wp-')
+    state = {
+      ...state,
+      publicWorkplaces: [...state.publicWorkplaces, {
+        id: wpId,
+        kind: 'round' as const,
+        name: '遺跡',
+        effect: { kind: 'draw-gain-vp' as const, n: 1, drawType: 'consumption' as const },
+        allowMultiple: false,
+        workerIds: [],
+      }],
+    }
+  }
+
   state = addLog(state, 'ゲーム開始！')
 
   return state

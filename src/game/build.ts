@@ -1,5 +1,5 @@
-import { getPlayer, updatePlayer, addLog, genId, drawCards, ALL_BUILDING_CARDS, buildActionLog } from './primitives'
-import type { GameState, HandCard, BuildingCard, OwnedBuilding } from './types'
+import { getPlayer, updatePlayer, addLog, genId, drawCards, nextId, ALL_BUILDING_CARDS, buildActionLog } from './primitives'
+import type { GameState, HandCard, BuildingCard, OwnedBuilding, Worker } from './types'
 
 /** 建設する建物の条件付きコスト割引を計算する */
 export function getConstructionDiscount(state: GameState, playerId: number, cardName: string): number {
@@ -40,6 +40,20 @@ export function constructBuilding(state: GameState, playerId: number, cardId: st
   s = updatePlayer(s, playerId, p => ({ ...p, ownedBuildings: [...p.ownedBuildings, owned] }))
 
   if (drawAfter > 0) s = drawCards(s, playerId, drawAfter)
+
+  // グローリー: 建設時トリガー効果
+  const builtDef = ALL_BUILDING_CARDS[card.name]
+  if (builtDef?.effect.kind === 'on-build-gain-vp') {
+    const n = builtDef.effect.n
+    s = updatePlayer(s, playerId, p => ({ ...p, victoryPoints: p.victoryPoints + n }))
+    s = addLog(s, `${getPlayer(s, playerId).name} が勝利点カードを取得（計${getPlayer(s, playerId).victoryPoints}枚）`)
+  } else if (builtDef?.effect.kind === 'on-build-gain-automaton') {
+    let autoId: string
+    ;[s, autoId] = nextId(s)
+    const automaton: Worker = { id: autoId, playerId, isTraining: false, placedAt: null, isAutomaton: true }
+    s = updatePlayer(s, playerId, p => ({ ...p, workers: [...p.workers, automaton] }))
+    s = addLog(s, `${getPlayer(s, playerId).name} が機械人形コマを取得`)
+  }
 
   return [s]
 }
@@ -126,7 +140,13 @@ export function selectBuildTarget(state: GameState, targetCardId: string): GameS
   const def = ALL_BUILDING_CARDS[card.name]!
   const selfDiscount = getConstructionDiscount(state, action.playerId, card.name)
   const cost = Math.max(0, def.cost - action.discount - selfDiscount)
-  if (player.hand.length - 1 < cost) return state
+  if (action.consumptionDouble) {
+    const rest = player.hand.filter(h => h.id !== card.id)
+    const maxSlots = rest.filter(h => h.kind === 'building').length + rest.filter(h => h.kind === 'consumption').length * 2
+    if (maxSlots < cost) return state
+  } else {
+    if (player.hand.length - 1 < cost) return state
+  }
   return {
     ...state,
     pendingAction: {
@@ -137,6 +157,9 @@ export function selectBuildTarget(state: GameState, targetCardId: string): GameS
       cost,
       drawAfter: action.drawAfter,
       discount: action.discount,
+      consumptionAfter: action.consumptionAfter,
+      drawAfterEmpty: action.drawAfterEmpty,
+      consumptionDouble: action.consumptionDouble,
       sourceName: action.sourceName,
       sourceId: action.sourceId,
     },
@@ -177,7 +200,7 @@ export function cancelBuildChoice(state: GameState): GameState {
   if (pa.kind !== 'choose-build-target' && pa.kind !== 'choose-farm-build' && pa.kind !== 'choose-double-first'
     && pa.kind !== 'choose-build-two-first' && pa.kind !== 'choose-free-build' && pa.kind !== 'choose-no-sell-build') return state
   const player = getPlayer(state, pa.playerId)
-  let s = undoWorkerPlacement(state, pa.playerId, ['build', 'build-farm-free', 'build-double', 'build-two', 'build-free-if-cheap', 'build-no-sell'], pa.sourceId)
+  let s = undoWorkerPlacement(state, pa.playerId, ['build', 'build-farm-free', 'build-double', 'build-two', 'build-free-if-cheap', 'build-no-sell', 'build-then-draw-consumption', 'build-draw-if-empty', 'build-consumption-double', 'build-free-any'], pa.sourceId)
   return addLog(s, `${player.name}: ${pa.sourceName ?? ''} → キャンセル`)
 }
 
@@ -227,6 +250,22 @@ export function getFreeBuildableCards(state: GameState, playerId: number, maxAss
     const def = ALL_BUILDING_CARDS[c.name]
     if (!def) return false
     return def.assetValue <= maxAsset
+  }) as (HandCard & { kind: 'building' })[]
+}
+
+// モダニズム建設: 消費財1枚を2枚分として建設可能な建物
+export function getBuildableCardsConsumptionDouble(state: GameState, playerId: number): (HandCard & { kind: 'building' })[] {
+  const player = getPlayer(state, playerId)
+  return player.hand.filter(c => {
+    if (c.kind !== 'building') return false
+    const def = ALL_BUILDING_CARDS[c.name]
+    if (!def) return false
+    const selfDiscount = getConstructionDiscount(state, playerId, c.name)
+    const cost = Math.max(0, def.cost - selfDiscount)
+    const rest = player.hand.filter(h => h.id !== c.id)
+    const buildingSlots = rest.filter(h => h.kind === 'building').length
+    const consumptionSlots = rest.filter(h => h.kind === 'consumption').length * 2
+    return buildingSlots + consumptionSlots >= cost
   }) as (HandCard & { kind: 'building' })[]
 }
 
