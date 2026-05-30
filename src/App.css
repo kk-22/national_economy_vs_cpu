@@ -274,6 +274,7 @@ button { font: inherit; }
   gap: 2px;
   cursor: default;
   user-select: none;
+  -webkit-touch-callout: none;
 }
 .bcard-cost {
   position: absolute;
@@ -317,6 +318,7 @@ button { font: inherit; }
   gap: 2px;
   cursor: default;
   user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* ===== Workplace card ===== */

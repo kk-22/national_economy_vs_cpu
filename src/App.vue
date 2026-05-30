@@ -86,6 +86,10 @@ onMounted(() => {
   }
   lastStartedDebug.value = localStorage.getItem('ne-setup-debug') === 'true'
 
+  document.addEventListener('touchstart', () => {
+    if (longPressShowing) { tooltipState.value = null; longPressShowing = false }
+  }, { passive: true, capture: true })
+
   if (!localStorage.getItem('ne-manual-seen')) {
     showManual.value = true
   }
@@ -269,7 +273,7 @@ const tooltipEl = ref<HTMLElement | null>(null)
 const tooltipStyle = ref({ left: '0px', top: '0px' })
 
 watch(tooltipState, async (state) => {
-  if (!state) return
+  if (!state) { longPressShowing = false; return }
   await nextTick()
   if (!tooltipEl.value) return
   const rect = tooltipEl.value.getBoundingClientRect()
@@ -286,6 +290,37 @@ function onTipEnter(e: MouseEvent, text: string) {
   tooltipState.value = { text, x: e.clientX, y: e.clientY }
 }
 function onTipLeave() { tooltipState.value = null }
+
+// ---- タッチ長押しツールチップ (iOS対応) ----
+let longPressTimer: ReturnType<typeof setTimeout> | null = null
+let longPressShowing = false
+let touchStartX = 0
+let touchStartY = 0
+
+function onTipTouchStart(e: TouchEvent, text: string) {
+  if (!text) return
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
+  const touch = e.touches[0]
+  touchStartX = touch.clientX
+  touchStartY = touch.clientY
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null
+    longPressShowing = true
+    tooltipState.value = { text, x: touch.clientX, y: touch.clientY }
+  }, 500)
+}
+
+function onTipTouchEnd() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
+}
+
+function onTipTouchMove(e: TouchEvent) {
+  if (!longPressTimer) return
+  const touch = e.touches[0]
+  const dx = touch.clientX - touchStartX
+  const dy = touch.clientY - touchStartY
+  if (dx * dx + dy * dy > 100) { clearTimeout(longPressTimer); longPressTimer = null }
+}
 
 // ---- ゲーム操作 ----
 let setupSnapshot: {
@@ -435,6 +470,9 @@ function replayGame() {
       :cpuThinkingPlayerId="cpuThinkingPlayerId"
       :tipEnter="onTipEnter"
       :tipLeave="onTipLeave"
+      :tipTouchStart="onTipTouchStart"
+      :tipTouchEnd="onTipTouchEnd"
+      :tipTouchMove="onTipTouchMove"
       @menuOpen="menuOpen = true"
       @openSetup="openSetup"
       @openSummary="showSummary = true"

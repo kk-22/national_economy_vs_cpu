@@ -20,6 +20,9 @@ const props = defineProps<{
   cpuThinkingPlayerId: number | null
   tipEnter: (e: MouseEvent, text: string) => void
   tipLeave: () => void
+  tipTouchStart: (e: TouchEvent, text: string) => void
+  tipTouchEnd: () => void
+  tipTouchMove: (e: TouchEvent) => void
 }>()
 
 const emit = defineEmits<{
@@ -331,6 +334,18 @@ function isDiscounted(playerId: number, cardName: string): boolean {
   if (!game.value) return false
   return getConstructionDiscount(game.value, playerId, cardName) > 0
 }
+
+function tipOn(text: string | false | null | undefined) {
+  if (!text) return {}
+  return {
+    onMouseenter: (e: MouseEvent) => props.tipEnter(e, text),
+    onMouseleave: props.tipLeave,
+    onTouchstart: (e: TouchEvent) => props.tipTouchStart(e, text),
+    onTouchend: props.tipTouchEnd,
+    onTouchcancel: props.tipTouchEnd,
+    onTouchmove: (e: TouchEvent) => props.tipTouchMove(e),
+  }
+}
 </script>
 
 <template>
@@ -379,8 +394,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                   <div class="card-wrap">
                     <div v-for="b in cpu.ownedBuildings" :key="b.id"
                       :class="['bcard', { used: b.workerHereId !== null, 'card-activated': activatedIds.includes(b.id), 'card-built': builtIds.includes(b.id) }]"
-                      @mouseenter="tipEnter($event, cardTooltip(b.name))"
-                      @mouseleave="tipLeave">
+                                            v-bind="tipOn(cardTooltip(b.name))">
                       <span v-if="b.workerHereId !== null && game.phase !== 'game-over'" class="bcard-used-label">使用済</span>
                       <span :class="['bcard-cost', { 'bcard-cost--discounted': isDiscounted(cpu.id, b.name) }]">{{ effectiveCost(cpu.id, b.name) }}</span>
                       <span class="bcard-name" :style="bcardNameStyle(b.name, true)">{{ b.name }}</span>
@@ -415,8 +429,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                 <div
                   v-for="wp in sortedPublicWorkplaces" :key="wp.id"
                   :class="['wpcard', { used: wp.workerIds.length > 0 && !wp.allowMultiple, available: canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id), 'card-activated': activatedIds.includes(wp.id), 'card-built': builtIds.includes(wp.id) }]"
-                  @mouseenter="tipEnter($event, effectDesc(wp.effect))"
-                  @mouseleave="tipLeave"
+                                    v-bind="tipOn(effectDesc(wp.effect))"
                   @click="canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id) && clickPublicWorkplace(wp.id)"
                 >
                   <div class="wpcard-name">{{ wp.name }}</div>
@@ -463,8 +476,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
                     :class="['hcard', 'selectable', { 'card-disabled': !buildableCards.some(b => b.id === card.id) }]"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave"
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickBuildTarget(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -481,8 +493,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
                     :class="['hcard', 'selectable', { selected: doubleSelectedIds.includes(card.id), 'card-disabled': isDoubleCardDisabled(card.id) }]"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave"
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickDoubleSelect(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -509,8 +520,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                       'card-drawn': drawnIds.includes(card.id),
                       'card-disabled': card.id === (pendingAction as any).targetId || card.id === (pendingAction as any).firstId || card.id === (pendingAction as any).secondId
                     }]"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave"
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickPaymentCard(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -530,8 +540,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                       'card-drawn': drawnIds.includes(card.id),
                       'card-disabled': !pendingAction.selected.includes(card.id) && pendingAction.selected.length >= pendingAction.count
                     }]"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave"
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickDiscardCard(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -546,8 +555,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                 <div class="card-wrap">
                   <button v-for="card in pendingAction.revealed" :key="card.id"
                     class="bcard selectable"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave"
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickRevealedCard(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -558,8 +566,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                 <div v-if="humanPlayer?.ownedBuildings.length" class="card-wrap">
                   <div v-for="b in humanPlayer.ownedBuildings" :key="b.id"
                     class="bcard card-disabled"
-                    @mouseenter="tipEnter($event, cardTooltip(b.name))"
-                    @mouseleave="tipLeave">
+                                        v-bind="tipOn(cardTooltip(b.name))">
                     <span :class="['bcard-cost', { 'bcard-cost--discounted': isDiscounted(humanPlayer!.id, b.name) }]">{{ effectiveCost(humanPlayer!.id, b.name) }}</span>
                     <span class="bcard-name" :style="bcardNameStyle(b.name)">{{ b.name }}</span>
                     <span class="bcard-asset">{{ getBuildingDef(b.name)?.assetValue }}</span>
@@ -573,8 +580,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                 </div>
                 <div v-if="humanPlayer?.hand.length" class="card-wrap">
                   <div v-for="card in sortedHand" :key="card.id" class="hcard card-disabled"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave">
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')">
                     <HCard :card="card" />
                   </div>
                 </div>
@@ -595,8 +601,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                       'card-drawn': drawnIds.includes(card.id),
                       'card-disabled': !pendingAction.selected.includes(card.id) && pendingAction.selected.length >= pendingAction.count
                     }]"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave"
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickHandLimitCard(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -615,8 +620,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                       v-for="b in humanPlayer?.ownedBuildings ?? []" :key="b.id"
                       :class="['bcard', pendingAction.sellableIds.includes(b.id) ? 'selectable' : 'card-disabled', { selected: pendingAction.selected.includes(b.id) }]"
                       :disabled="!pendingAction.sellableIds.includes(b.id)"
-                      @mouseenter="tipEnter($event, cardTooltip(b.name))"
-                      @mouseleave="tipLeave"
+                                            v-bind="tipOn(cardTooltip(b.name))"
                       @click="pendingAction.sellableIds.includes(b.id) && clickToggleSellBuilding(b.id)">
                       <span :class="['bcard-cost', { 'bcard-cost--discounted': isDiscounted(humanPlayer!.id, b.name) }]">{{ effectiveCost(humanPlayer!.id, b.name) }}</span>
                       <span class="bcard-name" :style="bcardNameStyle(b.name)">{{ b.name }}</span>
@@ -636,8 +640,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                 </div>
                 <div v-if="humanPlayer?.hand.length" class="card-wrap">
                   <div v-for="card in sortedHand" :key="card.id" class="hcard card-disabled"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave">
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')">
                     <HCard :card="card" />
                   </div>
                 </div>
@@ -658,8 +661,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                       selected: buildTwoSelectedIds.includes(card.id),
                       'card-disabled': isBuildTwoCardDisabled(card.id),
                     }]"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave"
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickBuildTwoSelect(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -682,8 +684,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                       selected: paymentSelected.includes(card.id),
                       'card-disabled': card.id === pendingAction.firstId || card.id === pendingAction.secondId
                     }]"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave"
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickBuildTwoPayment(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -700,8 +701,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
                     :class="['hcard', 'selectable', { 'card-disabled': !buildableCards.some(b => b.id === card.id) }]"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave"
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickFreeBuildCard(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -718,8 +718,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                 <div class="card-wrap">
                   <button v-for="card in sortedHand" :key="card.id"
                     :class="['hcard', 'selectable', { 'card-disabled': !buildableCards.some(b => b.id === card.id) }]"
-                    @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                    @mouseleave="tipLeave"
+                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickNoSellBuildCard(card.id)">
                     <HCard :card="card" />
                   </button>
@@ -736,8 +735,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                   <div class="card-wrap">
                     <div v-for="b in humanPlayer.ownedBuildings" :key="b.id"
                       :class="['bcard', { used: b.workerHereId !== null, available: canPlayerAct && availableOwnedBuildings.some(x => x.id === b.id), 'card-activated': activatedIds.includes(b.id), 'card-built': builtIds.includes(b.id) }]"
-                      @mouseenter="tipEnter($event, cardTooltip(b.name))"
-                      @mouseleave="tipLeave"
+                                            v-bind="tipOn(cardTooltip(b.name))"
                       @click="canPlayerAct && availableOwnedBuildings.some(x => x.id === b.id) && clickOwnedBuilding(b.id)">
                       <span v-if="b.workerHereId !== null" class="bcard-used-label">使用済</span>
                       <span :class="['bcard-cost', { 'bcard-cost--discounted': isDiscounted(humanPlayer!.id, b.name) }]">{{ effectiveCost(humanPlayer!.id, b.name) }}</span>
@@ -758,8 +756,7 @@ function isDiscounted(playerId: number, cardName: string): boolean {
                   <div class="card-wrap">
                     <div v-for="card in sortedHand" :key="card.id"
                       :class="['hcard', { 'card-drawn': drawnIds.includes(card.id) }]"
-                      @mouseenter="card.kind === 'building' && tipEnter($event, cardTooltip(card.name!))"
-                      @mouseleave="tipLeave">
+                                            v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')">
                       <span v-if="card.kind === 'building'" :class="['bcard-cost', { 'bcard-cost--discounted': isDiscounted(humanPlayer!.id, card.name!) }]">{{ effectiveCost(humanPlayer!.id, card.name!) }}</span>
                       <span class="bcard-name" :style="card.kind === 'building' ? bcardNameStyle(card.name!) : {}">{{ cardLabel(card) }}</span>
                       <span v-if="card.kind === 'building'" class="bcard-asset">{{ getBuildingDef(card.name!)?.assetValue }}</span>
