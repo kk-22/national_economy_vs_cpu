@@ -621,7 +621,9 @@ function tipOn(text: string | false | null | undefined) {
                   <span :class="['pending-title', sellSelectedTotal >= pendingAction.deficit ? 'sell-ok' : 'sell-warning']">
                     ⚠ 賃金不足のため売却する建物を選択（選択中 ${{ sellSelectedTotal }} / 必要額 ${{ pendingAction.deficit }}）
                   </span>
+                  <button class="btn-confirm" :disabled="pendingAction.selected.length === 0" @click="clickConfirmSellBuildings">確定</button>
                 </div>
+                <div v-if="sellBuildingError" class="sell-error">{{ sellBuildingError }}</div>
                 <div class="sell-buildings-row">
                   <div class="card-wrap">
                     <button
@@ -637,10 +639,6 @@ function tipOn(text: string | false | null | undefined) {
                         <span v-for="t in cardTypeTags(b.name)" :key="t" :class="['bcard-type-badge', tagBadgeClass(t)]">{{ t }}</span>
                       </span>
                     </button>
-                  </div>
-                  <div class="sell-confirm-col">
-                    <div v-if="sellBuildingError" class="sell-error">{{ sellBuildingError }}</div>
-                    <button class="btn-confirm" :disabled="pendingAction.selected.length === 0" @click="clickConfirmSellBuildings">確定</button>
                   </div>
                 </div>
                 <div v-if="humanPlayer?.hand.length" class="hand-label-row" style="margin-top: 6px;">

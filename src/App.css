@@ -475,6 +475,7 @@ button { font: inherit; }
 .pending-title-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   width: 100%;
 }
@@ -513,20 +514,14 @@ button { font: inherit; }
 }
 .sell-buildings-row {
   display: flex;
-  align-items: stretch;
   gap: 8px;
-}
-.sell-buildings-row > .card-wrap {
-  flex: 1;
-  min-width: 0;
 }
 .sell-confirm-col {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 4px;
-  flex-shrink: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
 }
 .btn-confirm {
   background: #3b82f6; color: #fff; border: none; border-radius: 6px;
