@@ -61,8 +61,8 @@ function updateStrategy(idx: number, val: CpuStrategy) {
 }
 
 const DIFFICULTY_OPTIONS: { label: string; strategy: CpuStrategy }[] = [
-  { label: '初級', strategy: 'disruptive' },
-  { label: '中級', strategy: 'greedy' },
+  { label: '初級', strategy: 'greedy' },
+  { label: '中級', strategy: 'disruptive' },
   { label: '上級', strategy: 'beam' },
 ]
 </script>
