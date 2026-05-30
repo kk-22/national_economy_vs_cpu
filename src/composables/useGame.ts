@@ -60,7 +60,15 @@ export function useGame() {
       if (!raw) return false
       const data = JSON.parse(raw)
       if (!data?.game) return false
-      state.game = data.game as GameState
+      const restoredGame = data.game as GameState
+      // 旧バージョンの保存データにないフィールドを補完
+      restoredGame.players = restoredGame.players.map(p => ({
+        ...p,
+        money: p.money ?? 0,
+        unpaidWages: p.unpaidWages ?? 0,
+        victoryPoints: p.victoryPoints ?? 0,
+      }))
+      state.game = restoredGame
       if (data.history) {
         history = GameHistory.fromObject(data.history)
       } else {
