@@ -1,4 +1,5 @@
 import { getPlayer, drawCards, drawConsumption, shuffle, nextId, updatePlayer, workerCount, getMaxWorkers, addLog, availableWorkers, ALL_BUILDING_CARDS } from './primitives'
+import { FREE_BUILD_ANY_LIMIT } from './constants'
 import { getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards, getNoSellBuildableCards, getFreeBuildableCards, getBuildableCardsConsumptionDouble, getConstructionDiscount } from './build'
 import { cpuRevealPick, cpuDiscardDraw, cpuDiscardGain, cpuBuild, cpuBuildFarmFree, cpuBuildDouble, cpuBuildNoSell, cpuBuildFree, cpuBuildTwo } from './cpu'
 import type { GameState, GameEffect, Worker, HandCard, BuildingCard, CpuStrategy } from './types'
@@ -395,9 +396,9 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'build-free-any': {
-      if (isCpu) return cpuBuildFree(state, playerId, 99999, strategy)
-      if (getFreeBuildableCards(state, playerId, 99999).length === 0) return state
-      return { ...state, pendingAction: { kind: 'choose-free-build', playerId, maxAsset: 99999 } }
+      if (isCpu) return cpuBuildFree(state, playerId, FREE_BUILD_ANY_LIMIT, strategy)
+      if (getFreeBuildableCards(state, playerId, FREE_BUILD_ANY_LIMIT).length === 0) return state
+      return { ...state, pendingAction: { kind: 'choose-free-build', playerId, maxAsset: FREE_BUILD_ANY_LIMIT } }
     }
 
     // 終了時効果はラウンド終了の calculateScores で処理するため実行時は何もしない
@@ -409,6 +410,9 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     case 'p-if-only-no-sell':
       return state
 
-    default: return state
+    default: {
+      const _exhaustive: never = effect
+      return _exhaustive
+    }
   }
 }

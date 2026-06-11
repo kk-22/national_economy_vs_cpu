@@ -83,3 +83,6 @@ export const ROUND_CARDS: RoundCard[] = [
 ]
 
 export const MAX_WORKERS_PER_PLAYER = 5
+
+// build-free-any 効果で使う「制限なし」を表す番兵値
+export const FREE_BUILD_ANY_LIMIT = 99999

@@ -5,7 +5,7 @@ import { useLogHighlight } from '../composables/useLogHighlight'
 import type { Worker, Player } from '../game/types'
 import { bcardNameStyle, cardLabel, handCount, handDetail, tagBadgeClass } from '../utils/cardDisplay'
 import { cardTypeTags, cardTooltip, workplaceTooltip } from '../utils/cardTooltip'
-import { ROUND_CARDS } from '../game/constants'
+import { ROUND_CARDS, FREE_BUILD_ANY_LIMIT } from '../game/constants'
 import { ALL_BUILDING_CARDS } from '../game/primitives'
 import { getBuildTwoSecondCards, getConstructionDiscount } from '../game/build'
 import HandSortHeader from './HandSortHeader.vue'
@@ -731,7 +731,7 @@ function tipOn(text: string | false | null | undefined) {
                 <div class="hand-label-row">
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">
-                    {{ pendingAction.sourceName }}：{{ pendingAction.maxAsset >= 99999 ? '建物を無料建設' : `資産価値${pendingAction.maxAsset}以下の建物を無料建設` }}
+                    {{ pendingAction.sourceName }}：{{ pendingAction.maxAsset >= FREE_BUILD_ANY_LIMIT ? '建物を無料建設' : `資産価値${pendingAction.maxAsset}以下の建物を無料建設` }}
                   </span>
                 </div>
                 <div class="card-wrap">

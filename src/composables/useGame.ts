@@ -1,5 +1,5 @@
 import { shallowReactive, computed, ref, toRaw } from 'vue'
-import type { GameConfig, GameSeries, GameState } from '../game/types'
+import type { GameConfig, GameSeries, GameState, HandCard, PendingAction } from '../game/types'
 import { createGame, createDebugGame } from '../game/init'
 import { calculateScores, confirmSellBuildings, processRoundEnd } from '../game/round'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from '../game/availability'
@@ -290,26 +290,7 @@ export function useGame() {
       state.game = selectBuildTarget(state.game, cardId)
       const newPa = state.game.pendingAction
       if (newPa?.kind === 'choose-build-payment') {
-        if (newPa.cost === 0) {
-          if (pendingEntry) {
-            pendingEntry.builtCard = { id: newPa.targetId, name: newPa.targetName }
-            pendingEntry.paymentCards = []
-          }
-          state.game = confirmBuildPayment(state.game, [])
-        } else {
-          const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
-          const payable = hand.filter(c => c.id !== newPa.targetId)
-          if (payable.length === newPa.cost) {
-            const ids = payable.map(c => c.id)
-            if (pendingEntry) {
-              pendingEntry.builtCard = { id: newPa.targetId, name: newPa.targetName }
-              pendingEntry.paymentCards = payable.map(c => ({ id: c.id, name: c.kind === 'building' ? c.name : '消費財' }))
-            }
-            state.game = confirmBuildPayment(state.game, ids)
-          } else {
-            paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.cost)
-          }
-        }
+        resolveSingleBuildPayment(newPa)
       }
     }
     else if (pa.kind === 'choose-farm-build') {
@@ -323,23 +304,7 @@ export function useGame() {
     else if (pa.kind === 'choose-double-second') {
       state.game = selectDoubleSecond(state.game, cardId)
       const newPa = state.game.pendingAction
-      if (newPa?.kind === 'choose-double-payment') {
-        const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
-        const payable = hand.filter(c => c.id !== newPa.firstId && c.id !== newPa.secondId)
-        if (payable.length === newPa.cost) {
-          const ids = payable.map(c => c.id)
-          if (pendingEntry) {
-            const player = state.game.players.find(p => p.id === newPa.playerId)
-            const findName = (id: string) => { const c = player?.hand.find(h => h.id === id); return c?.kind === 'building' ? c.name : id }
-            pendingEntry.builtCard = { id: newPa.firstId, name: findName(newPa.firstId) }
-            pendingEntry.secondBuiltCard = { id: newPa.secondId, name: findName(newPa.secondId) }
-            pendingEntry.paymentCards = payable.map(c => ({ id: c.id, name: c.kind === 'building' ? c.name : '消費財' }))
-          }
-          state.game = confirmDoublePayment(state.game, ids)
-        } else {
-          paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.cost)
-        }
-      }
+      if (newPa?.kind === 'choose-double-payment') resolveDoublePayment(newPa)
     }
   }
 
@@ -348,23 +313,7 @@ export function useGame() {
     state.game = selectDoubleFirst(state.game, firstId)
     state.game = selectDoubleSecond(state.game, secondId)
     const newPa = state.game.pendingAction
-    if (newPa?.kind === 'choose-double-payment') {
-      const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
-      const payable = hand.filter(c => c.id !== newPa.firstId && c.id !== newPa.secondId)
-      if (payable.length === newPa.cost) {
-        const ids = payable.map(c => c.id)
-        if (pendingEntry) {
-          const player = state.game.players.find(p => p.id === newPa.playerId)
-          const findName = (id: string) => { const c = player?.hand.find(h => h.id === id); return c?.kind === 'building' ? c.name : id }
-          pendingEntry.builtCard = { id: newPa.firstId, name: findName(newPa.firstId) }
-          pendingEntry.secondBuiltCard = { id: newPa.secondId, name: findName(newPa.secondId) }
-          pendingEntry.paymentCards = payable.map(c => ({ id: c.id, name: c.kind === 'building' ? c.name : '消費財' }))
-        }
-        state.game = confirmDoublePayment(state.game, ids)
-      } else {
-        paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.cost)
-      }
-    }
+    if (newPa?.kind === 'choose-double-payment') resolveDoublePayment(newPa)
   }
 
   // メセナシリーズでは消費財を最低1枚残す
@@ -374,6 +323,59 @@ export function useGame() {
       ? Math.max(0, Math.min(cost - 1, consumptions.length - 1))
       : Math.max(0, cost - 1)
     return consumptions.slice(0, maxAutoSelect).map(c => c.id)
+  }
+
+  // 手札からカードの表示名を返す（支払いカード用: 建物以外は '消費財'）
+  function toCardRef(hand: HandCard[], id: string): { id: string; name: string } {
+    const c = hand.find(h => h.id === id)
+    return { id, name: c?.kind === 'building' ? c.name : '消費財' }
+  }
+
+  // 手札からカード名を返す（建設対象名用: 見つからない場合は id をフォールバック）
+  function handCardName(hand: HandCard[], id: string): string {
+    const c = hand.find(h => h.id === id)
+    return c?.kind === 'building' ? c.name : id
+  }
+
+  // choose-double-payment の pendingEntry 記録 + 確定
+  function confirmDoublePaymentWithEntry(
+    pa: Extract<PendingAction, { kind: 'choose-double-payment' }>,
+    ids: string[],
+  ): void {
+    const hand = state.game!.players.find(p => p.id === pa.playerId)?.hand ?? []
+    if (pendingEntry) {
+      pendingEntry.builtCard = { id: pa.firstId, name: handCardName(hand, pa.firstId) }
+      pendingEntry.secondBuiltCard = { id: pa.secondId, name: handCardName(hand, pa.secondId) }
+      pendingEntry.paymentCards = ids.map(id => toCardRef(hand, id))
+    }
+    state.game = confirmDoublePayment(state.game!, ids)
+  }
+
+  // choose-double-payment: 自動確定 or 選択前置き
+  function resolveDoublePayment(pa: Extract<PendingAction, { kind: 'choose-double-payment' }>): void {
+    const hand = state.game!.players.find(p => p.id === pa.playerId)?.hand ?? []
+    const payable = hand.filter(c => c.id !== pa.firstId && c.id !== pa.secondId)
+    if (payable.length === pa.cost) {
+      confirmDoublePaymentWithEntry(pa, payable.map(c => c.id))
+    } else {
+      paymentSelectedIds.value = autoSelectConsumptionIds(payable, pa.cost)
+    }
+  }
+
+  // choose-build-payment: 自動確定 or 選択前置き（pendingEntry.builtCard も更新）
+  function resolveSingleBuildPayment(pa: Extract<PendingAction, { kind: 'choose-build-payment' }>): void {
+    const hand = state.game!.players.find(p => p.id === pa.playerId)?.hand ?? []
+    const payable = hand.filter(c => c.id !== pa.targetId)
+    if (pa.cost === 0 || payable.length === pa.cost) {
+      const ids = payable.slice(0, pa.cost).map(c => c.id)
+      if (pendingEntry) {
+        pendingEntry.builtCard = { id: pa.targetId, name: pa.targetName }
+        pendingEntry.paymentCards = ids.map(id => toCardRef(hand, id))
+      }
+      state.game = confirmBuildPayment(state.game!, ids)
+    } else {
+      paymentSelectedIds.value = autoSelectConsumptionIds(payable, pa.cost)
+    }
   }
 
   const paymentSelectedIds = ref<string[]>([])
@@ -389,29 +391,14 @@ export function useGame() {
       const ids = [...paymentSelectedIds.value]
       paymentSelectedIds.value = []
       if (pa.kind === 'choose-build-payment') {
+        const hand = state.game!.players.find(p => p.id === pa.playerId)?.hand ?? []
         if (pendingEntry) {
           pendingEntry.builtCard = { id: pa.targetId, name: pa.targetName }
-          pendingEntry.paymentCards = ids.map(pid => {
-            const card = state.game!.players.find(p => p.id === pa.playerId)?.hand.find(c => c.id === pid)
-            return { id: pid, name: card?.kind === 'building' ? card.name : '消費財' }
-          })
+          pendingEntry.paymentCards = ids.map(id => toCardRef(hand, id))
         }
         state.game = confirmBuildPayment(state.game, ids)
       } else {
-        if (pendingEntry) {
-          const player = state.game!.players.find(p => p.id === pa.playerId)
-          const findName = (id: string) => {
-            const c = player?.hand.find(h => h.id === id)
-            return c?.kind === 'building' ? c.name : id
-          }
-          pendingEntry.builtCard = { id: pa.firstId, name: findName(pa.firstId) }
-          pendingEntry.secondBuiltCard = { id: pa.secondId, name: findName(pa.secondId) }
-          pendingEntry.paymentCards = ids.map(pid => {
-            const card = player?.hand.find(c => c.id === pid)
-            return { id: pid, name: card?.kind === 'building' ? card.name : '消費財' }
-          })
-        }
-        state.game = confirmDoublePayment(state.game, ids)
+        confirmDoublePaymentWithEntry(pa, ids)
       }
     }
   }
@@ -425,10 +412,8 @@ export function useGame() {
     if (!pa || pa.kind !== 'choose-discard') return
     if (pa.selected.length < pa.count) return
     if (pendingEntry) {
-      pendingEntry.discardedCards = pa.selected.map(sid => {
-        const card = state.game!.players.find(p => p.id === pa.playerId)?.hand.find(c => c.id === sid)
-        return { id: sid, name: card?.kind === 'building' ? card.name : '消費財' }
-      })
+      const hand = state.game!.players.find(p => p.id === pa.playerId)?.hand ?? []
+      pendingEntry.discardedCards = pa.selected.map(sid => toCardRef(hand, sid))
     }
     if (pa.gainAmount === -1) {
       state.game = confirmDiscardDraw(state.game, pa.drawCount ?? 4)
@@ -485,8 +470,7 @@ export function useGame() {
     if (pendingEntry) {
       const pa = state.game.pendingAction
       if (pa?.kind === 'choose-from-revealed') {
-        const card = pa.revealed.find(c => c.id === cardId)
-        if (card) pendingEntry.pickedCard = { id: cardId, name: card.kind === 'building' ? card.name : '消費財' }
+        pendingEntry.pickedCard = toCardRef(pa.revealed, cardId)
       }
     }
     state.game = pickRevealedCard(state.game, cardId)
@@ -550,19 +534,16 @@ export function useGame() {
     state.game = selectBuildTwoSecondCard(state.game, secondId)
     const newPa = state.game.pendingAction
     if (newPa?.kind === 'choose-build-two-payment') {
+      const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
       // pendingEntry に建設対象を記録（undo リプレイで choose-build-two-first/second を解決するため）
       if (pendingEntry) {
-        const player = state.game.players.find(p => p.id === newPa.playerId)
-        const findName = (id: string) => { const c = player?.hand.find(h => h.id === id); return c?.kind === 'building' ? c.name : id }
-        pendingEntry.builtCard = { id: newPa.firstId, name: findName(newPa.firstId) }
-        pendingEntry.secondBuiltCard = { id: newPa.secondId, name: findName(newPa.secondId) }
+        pendingEntry.builtCard = { id: newPa.firstId, name: handCardName(hand, newPa.firstId) }
+        pendingEntry.secondBuiltCard = { id: newPa.secondId, name: handCardName(hand, newPa.secondId) }
       }
-      const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
       const payable = hand.filter(c => c.id !== newPa.firstId && c.id !== newPa.secondId)
       if (payable.length === newPa.totalCost) {
-        // 支払いカードが残り手札と一致する場合は自動確定
         if (pendingEntry) {
-          pendingEntry.paymentCards = payable.map(c => ({ id: c.id, name: c.kind === 'building' ? c.name : '消費財' }))
+          pendingEntry.paymentCards = payable.map(c => toCardRef(hand, c.id))
         }
         state.game = confirmBuildTwoCards(state.game, payable.map(c => c.id))
       } else {
@@ -589,14 +570,10 @@ export function useGame() {
       paymentSelectedIds.value = []
       // pendingEntry に建設対象と支払いを記録（undo リプレイで choose-build-two-* を解決するため）
       if (pendingEntry) {
-        const player = state.game.players.find(p => p.id === pa.playerId)
-        const findName = (id: string) => { const c = player?.hand.find(h => h.id === id); return c?.kind === 'building' ? c.name : id }
-        pendingEntry.builtCard = { id: pa.firstId, name: findName(pa.firstId) }
-        pendingEntry.secondBuiltCard = { id: pa.secondId, name: findName(pa.secondId) }
-        pendingEntry.paymentCards = ids.map(pid => {
-          const c = player?.hand.find(h => h.id === pid)
-          return { id: pid, name: c?.kind === 'building' ? c.name : '消費財' }
-        })
+        const hand = state.game!.players.find(p => p.id === pa.playerId)?.hand ?? []
+        pendingEntry.builtCard = { id: pa.firstId, name: handCardName(hand, pa.firstId) }
+        pendingEntry.secondBuiltCard = { id: pa.secondId, name: handCardName(hand, pa.secondId) }
+        pendingEntry.paymentCards = ids.map(id => toCardRef(hand, id))
       }
       state.game = confirmBuildTwoCards(state.game, ids)
     }
@@ -608,8 +585,8 @@ export function useGame() {
     if (pendingEntry) {
       const pa = state.game.pendingAction
       if (pa?.kind === 'choose-free-build') {
-        const card = state.game.players.find(p => p.id === pa.playerId)?.hand.find(c => c.id === cardId)
-        pendingEntry.builtCard = { id: cardId, name: card?.kind === 'building' ? card.name : cardId }
+        const hand = state.game.players.find(p => p.id === pa.playerId)?.hand ?? []
+        pendingEntry.builtCard = { id: cardId, name: handCardName(hand, cardId) }
       }
     }
     state.game = confirmFreeBuildCard(state.game, cardId)
@@ -629,27 +606,13 @@ export function useGame() {
     if (pendingEntry) {
       const pa = state.game.pendingAction
       if (pa?.kind === 'choose-no-sell-build') {
-        const card = state.game.players.find(p => p.id === pa.playerId)?.hand.find(c => c.id === cardId)
-        pendingEntry.builtCard = { id: cardId, name: card?.kind === 'building' ? card.name : cardId }
+        const hand = state.game.players.find(p => p.id === pa.playerId)?.hand ?? []
+        pendingEntry.builtCard = { id: cardId, name: handCardName(hand, cardId) }
       }
     }
     state.game = selectNoSellBuildCard(state.game, cardId)
     const newPa = state.game.pendingAction
-    if (newPa?.kind === 'choose-build-payment') {
-      const hand = state.game.players.find(p => p.id === newPa.playerId)?.hand ?? []
-      const payable = hand.filter(c => c.id !== newPa.targetId)
-      if (payable.length === newPa.cost) {
-        if (pendingEntry) {
-          pendingEntry.paymentCards = payable.map(c => ({ id: c.id, name: c.kind === 'building' ? c.name : '消費財' }))
-        }
-        state.game = confirmBuildPayment(state.game, payable.map(c => c.id))
-      } else if (newPa.cost === 0) {
-        if (pendingEntry) pendingEntry.paymentCards = []
-        state.game = confirmBuildPayment(state.game, [])
-      } else {
-        paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.cost)
-      }
-    }
+    if (newPa?.kind === 'choose-build-payment') resolveSingleBuildPayment(newPa)
   }
 
   const MANDATORY_IDS = new Set(['__hand-limit__', '__sell__'])
