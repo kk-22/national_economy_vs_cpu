@@ -5,4 +5,8 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   base: '/national_economy_vs_cpu/',
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
 })
