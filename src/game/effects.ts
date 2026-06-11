@@ -401,7 +401,15 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       return { ...state, pendingAction: { kind: 'choose-free-build', playerId, maxAsset: FREE_BUILD_ANY_LIMIT } }
     }
 
-    // 終了時効果はラウンド終了の calculateScores で処理するため実行時は何もしない
+    // 恒久効果・終了時効果は他の箇所で処理するため実行時は何もしない
+    case 'p-hand-limit':
+    case 'p-worker-limit':
+    case 'p-forgive-wages':
+    case 'p-per-building':
+    case 'p-per-consumption':
+    case 'p-per-worker':
+    case 'p-per-no-sell':
+    case 'p-per-factory':
     case 'p-if-tag-asset-min':
     case 'p-if-has-both-tags':
     case 'p-if-vp-min':
