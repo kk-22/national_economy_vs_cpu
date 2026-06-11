@@ -134,8 +134,8 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
         // パッシブ効果: R8以降で得点があれば建設対象
         return state.round >= 8 && def.assetValue > 0
       }
-      // 7ラウンド以下は職場として使えない建物（倉庫など）を建設対象から除外
-      if (state.round <= 7 && !def.isWorkplace) return false
+      // 7ラウンド以下は職場として使えない建物（倉庫など）を建設対象から除外（機械人形は例外）
+      if (state.round <= 7 && !def.isWorkplace && c.name !== '機械人形') return false
       if (availableAfter >= 1) {
         const selfDiscount = getConstructionDiscount(state, playerId, c.name)
         const remainingHand = player.hand.length - 1 - Math.max(0, def.cost - discount - selfDiscount)

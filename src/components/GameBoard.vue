@@ -4,7 +4,7 @@ import { useGame } from '../composables/useGame'
 import { useLogHighlight } from '../composables/useLogHighlight'
 import type { Worker, Player } from '../game/types'
 import { bcardNameStyle, cardLabel, handCount, handDetail, tagBadgeClass } from '../utils/cardDisplay'
-import { effectDesc, cardTypeTags, cardTooltip } from '../utils/cardTooltip'
+import { cardTypeTags, cardTooltip, workplaceTooltip } from '../utils/cardTooltip'
 import { ROUND_CARDS } from '../game/constants'
 import { ALL_BUILDING_CARDS } from '../game/primitives'
 import { getBuildTwoSecondCards, getConstructionDiscount } from '../game/build'
@@ -446,7 +446,7 @@ function tipOn(text: string | false | null | undefined) {
                 <div
                   v-for="wp in sortedPublicWorkplaces" :key="wp.id"
                   :class="['wpcard', { used: wp.workerIds.length > 0 && !wp.allowMultiple, available: canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id), 'card-activated': activatedIds.includes(wp.id), 'card-built': builtIds.includes(wp.id) }]"
-                                    v-bind="tipOn(effectDesc(wp.effect))"
+                                    v-bind="tipOn(workplaceTooltip(wp.name, wp.effect))"
                   @click="canPlayerAct && availablePublicWorkplaces.some(w => w.id === wp.id) && clickPublicWorkplace(wp.id)"
                 >
                   <div class="wpcard-name">{{ wp.name }}</div>

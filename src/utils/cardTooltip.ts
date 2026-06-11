@@ -104,10 +104,18 @@ export function constructionDiscountDesc(name: string): string {
   return ''
 }
 
+export function workplaceTooltip(name: string, effect: GameEffect): string {
+  const desc = effectDesc(effect)
+  const d = ALL_BUILDING_CARDS[name]
+  if (!d?.requiresDoubleWorker) return desc
+  return desc + '\n使用時に労働者2人必要'
+}
+
 export function cardTooltip(name: string): string {
   const d = ALL_BUILDING_CARDS[name]
   if (!d) return ''
   const lines: string[] = [effectDesc(d.effect)]
+  if (d.requiresDoubleWorker) lines.push('使用時に労働者2人必要')
   const discountDesc = constructionDiscountDesc(name)
   if (discountDesc) lines.push(discountDesc)
   const tags: string[] = []
@@ -116,7 +124,6 @@ export function cardTooltip(name: string): string {
   const attrs: string[] = []
   if (!d.canSell) attrs.push('売却不可')
   if (!d.isWorkplace) attrs.push('使用不可')
-  if (d.requiresDoubleWorker) attrs.push('2コマ同時配置')
   if (tags.length > 0) lines.push('タイプ：' + tags.join(' / '))
   if (attrs.length > 0) lines.push(attrs.join(' / '))
   return lines.filter(Boolean).join('\n')
