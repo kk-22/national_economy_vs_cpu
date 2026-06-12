@@ -1,5 +1,6 @@
 import { ROUND_CARDS } from './constants'
-import { getPlayer, updatePlayer, addLog, genId, ALL_BUILDING_CARDS } from './primitives'
+import { getPlayer, updatePlayer, addLog, genId, workerCount, ALL_BUILDING_CARDS } from './primitives'
+import { preSelectConsumptions } from './effects'
 import type { GameState, BuildingCard, PublicWorkplace, Player, ScoreResult, OwnedBuilding } from './types'
 
 // Circular dep with turns.ts (processCpuTurns calls processRoundEnd; processRoundEnd/startNextRound call processCpuTurns)
@@ -134,7 +135,7 @@ function processWagesCash(state: GameState): GameState {
   let s = state
 
   for (const player of s.players) {
-    const totalWage = player.workers.filter(w => !w.isAutomaton).length * wage
+    const totalWage = workerCount(player) * wage
     let remaining = totalWage
     const playerMoney = getPlayer(s, player.id).money
     let deferred = false
@@ -172,7 +173,7 @@ function processWagesCash(state: GameState): GameState {
 
     if (!deferred) {
       const p = getPlayer(s, player.id)
-      s = addLog(s, `${p.name}: 労働者${player.workers.filter(w => !w.isAutomaton).length}人の賃金 $${totalWage}→残り$${p.money}`)
+      s = addLog(s, `${p.name}: 労働者${workerCount(player)}人の賃金 $${totalWage}→残り$${p.money}`)
     }
   }
 
@@ -210,12 +211,8 @@ function finishRoundEnd(state: GameState, noCpu: boolean): GameState {
     const limit = getHandLimit(p)
     if (p.hand.length <= limit) continue
     const excess = p.hand.length - limit
-    const consumptions = p.hand.filter(c => c.kind === 'consumption')
     // メセナシリーズでは消費財を最低1枚残す（消費財1枚だけの場合は自動選択しない）
-    const maxAutoSelect = s.series === 'mecenat'
-      ? Math.min(excess - 1, consumptions.length - 1)
-      : excess - 1
-    const preSelected = consumptions.slice(0, maxAutoSelect).map(c => c.id)
+    const preSelected = preSelectConsumptions(p.hand, excess - 1, s.series)
     s = { ...s, pendingAction: { kind: 'choose-hand-limit', playerId: player.id, limit, count: excess, selected: preSelected, noCpu } }
     return s
   }
@@ -239,7 +236,7 @@ export function resolveAfterHandLimit(state: GameState, noCpu: boolean): GameSta
         s = autoSellForWages(s, playerId, options[0], deficit)
         const wage = ROUND_CARDS[s.round - 1].wage
         const p = getPlayer(s, playerId)
-        s = addLog(s, `${p.name}: 労働者${p.workers.length}人の賃金 $${p.workers.length * wage}→残り$${p.money}`)
+        s = addLog(s, `${p.name}: 労働者${workerCount(p)}人の賃金 $${workerCount(p) * wage}→残り$${p.money}`)
         return startNextRound(s, noCpu)
       }
       return {
@@ -261,7 +258,7 @@ export function confirmSellBuildings(state: GameState, selectedIds: string[]): G
   s = autoSellForWages(s, playerId, selectedIds, deficit)
   const wage = ROUND_CARDS[s.round - 1].wage
   const p = getPlayer(s, playerId)
-  s = addLog(s, `${p.name}: 労働者${p.workers.length}人の賃金 $${p.workers.length * wage}→残り$${p.money}`)
+  s = addLog(s, `${p.name}: 労働者${workerCount(p)}人の賃金 $${workerCount(p) * wage}→残り$${p.money}`)
   return startNextRound(s, noCpu)
 }
 

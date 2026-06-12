@@ -4,7 +4,8 @@ import { getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards,
 import { cpuRevealPick, cpuDiscardDraw, cpuDiscardGain, cpuBuild, cpuBuildFarmFree, cpuBuildDouble, cpuBuildNoSell, cpuBuildFree, cpuBuildTwo } from './cpu'
 import type { GameState, GameEffect, Worker, HandCard, BuildingCard, CpuStrategy } from './types'
 
-function preSelectConsumptions(hand: HandCard[], count: number, series: string): string[] {
+// round.ts の手札上限処理でも使用する
+export function preSelectConsumptions(hand: HandCard[], count: number, series: string): string[] {
   const consumptions = hand.filter(c => c.kind === 'consumption')
   // メセナシリーズでは消費財を最低1枚残す
   const maxAutoSelect = series === 'mecenat'

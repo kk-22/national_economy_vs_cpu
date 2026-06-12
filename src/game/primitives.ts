@@ -76,10 +76,15 @@ export function makeConsumption(state: GameState): [GameState, HandCard] {
 export function drawCards(state: GameState, playerId: number, n: number): GameState {
   let s = state
   let drawn = 0
+  let loggedExhausted = false
 
   while (drawn < n) {
     if (s.buildingDeck.length === 0) {
       if (s.discardPile.length === 0) {
+        if (!loggedExhausted) {
+          s = addLog(s, '山札と捨て札が尽きたため消費財で代替しました')
+          loggedExhausted = true
+        }
         let card: HandCard
         ;[s, card] = makeConsumption(s)
         s = updatePlayer(s, playerId, p => ({ ...p, hand: [...p.hand, card] }))

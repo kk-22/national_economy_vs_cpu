@@ -1,5 +1,5 @@
 import { ROUND_CARDS } from './constants'
-import { getPlayer, getMaxWorkers, ALL_BUILDING_CARDS } from './primitives'
+import { getPlayer, getMaxWorkers, workerCount as countRegularWorkers, ALL_BUILDING_CARDS } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { GREEDY_BUILD_EXCLUDED, getConstructionDiscountForPlayer } from './cpu'
 import { calculateScores } from './round'
@@ -52,7 +52,7 @@ export function filterDominatedWorkplaces(
 
 export function scoreEffect(effect: GameEffect, player: Player, household: number, round: number, availWorkers: number = 1, isStartPlayer: boolean = false, weights: ScoreWeights = DEFAULT_WEIGHTS): number {
   const w = weights
-  const workerCount = player.workers.length
+  const workerCount = countRegularWorkers(player)
   const wage = ROUND_CARDS[round - 1]?.wage ?? 0
   const expectedWage = workerCount * wage
 
@@ -75,8 +75,8 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
         if (def.effect.kind.startsWith('p-')) {
           if (round < 8 || def.assetValue <= 0) continue
         } else {
-          // 7ラウンド以下は職場として使えない建物（倉庫など）を建設対象から除外
-          if (round <= 7 && !def.isWorkplace) continue
+          // 7ラウンド以下は職場として使えない建物（倉庫など）を建設対象から除外（機械人形は例外）
+          if (round <= 7 && !def.isWorkplace && (c as BuildingCard).name !== '機械人形') continue
           if (availableAfterBuild < 1) {
             // Fix 1: money が賃金以上なら最後のワーカーでも建設可（assetValue制限を外す）
             if (player.money < expectedWage) {
@@ -204,7 +204,7 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
     }
     case 'build-gain-vp': {
       const VP_CARD_VALUE = 8
-      if (availWorkers < 2 && player.money < player.workers.length * (ROUND_CARDS[round - 1]?.wage ?? 0)) return -Infinity
+      if (availWorkers < 2 && player.money < expectedWage) return -Infinity
       return (w.buildBase + 5 * w.buildCostMult) + VP_CARD_VALUE
     }
     case 'draw-consumption-by-hand': {
@@ -256,7 +256,7 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
     }
     case 'build-no-sell': {
       // 建築会社: 売却禁止建物を建設。buildBase + コスト評価
-      if (availWorkers < 2 && player.money < player.workers.length * (ROUND_CARDS[round - 1]?.wage ?? 0)) return -Infinity
+      if (availWorkers < 2 && player.money < expectedWage) return -Infinity
       return (w.buildBase + 5 * w.buildCostMult) + effect.drawAfter * w.buildDrawAfterBonus
     }
     case 'build-free-if-cheap': {

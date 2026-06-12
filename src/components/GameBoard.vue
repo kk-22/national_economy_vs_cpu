@@ -232,6 +232,18 @@ function handCardName(cardId: string): string {
   return card?.kind === 'building' ? card.name : ''
 }
 
+// 建設コスト支払い選択の表示情報（choose-build-payment / choose-double-payment 共通）
+const paymentInfo = computed(() => {
+  const pa = pendingAction.value
+  if (pa?.kind === 'choose-build-payment') {
+    return { title: pa.targetName, cost: pa.cost, disabledIds: [pa.targetId] }
+  }
+  if (pa?.kind === 'choose-double-payment') {
+    return { title: `${handCardName(pa.firstId)}と${handCardName(pa.secondId)}`, cost: pa.cost, disabledIds: [pa.firstId, pa.secondId] }
+  }
+  return null
+})
+
 // ---- 建物売却選択 ----
 const sellBuildingError = ref<string | null>(null)
 
@@ -523,9 +535,7 @@ function tipOn(text: string | false | null | undefined) {
                 <div class="hand-label-row">
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">
-                    {{ pendingAction.kind === 'choose-build-payment'
-                      ? pendingAction.targetName
-                      : `${(humanPlayer!.hand.find(c => c.id === (pendingAction as any).firstId) as any)?.name}と${(humanPlayer!.hand.find(c => c.id === (pendingAction as any).secondId) as any)?.name}` }}の建設コスト{{ (pendingAction as any).cost }}枚選択 ({{ paymentSelected.length }}/{{ (pendingAction as any).cost }})
+                    {{ paymentInfo?.title }}の建設コスト{{ paymentInfo?.cost }}枚選択 ({{ paymentSelected.length }}/{{ paymentInfo?.cost }})
                   </span>
                 </div>
                 <div class="card-wrap">
@@ -535,7 +545,7 @@ function tipOn(text: string | false | null | undefined) {
                     :class="['hcard', 'selectable', {
                       selected: paymentSelected.includes(card.id),
                       'card-drawn': drawnIds.includes(card.id),
-                      'card-disabled': card.id === (pendingAction as any).targetId || card.id === (pendingAction as any).firstId || card.id === (pendingAction as any).secondId
+                      'card-disabled': paymentInfo?.disabledIds.includes(card.id)
                     }]"
                                         v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
                     @click="clickPaymentCard(card.id)">

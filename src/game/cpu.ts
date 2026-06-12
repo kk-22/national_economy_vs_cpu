@@ -1,5 +1,5 @@
 import { ROUND_CARDS } from './constants'
-import { rngNext, shuffle, updatePlayer, getPlayer, drawCards, ALL_BUILDING_CARDS } from './primitives'
+import { rngNext, shuffle, updatePlayer, getPlayer, drawCards, workerCount, ALL_BUILDING_CARDS } from './primitives'
 import { constructBuilding, getConstructionDiscount } from './build'
 import type { GameState, HandCard, BuildingCard, CpuStrategy } from './types'
 
@@ -143,7 +143,7 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
         return true
       }
       // availableAfter === 0: Fix 1 - money が賃金以上なら建設OK
-      const expectedWageCpu = player.workers.length * (ROUND_CARDS[state.round - 1]?.wage ?? 0)
+      const expectedWageCpu = workerCount(player) * (ROUND_CARDS[state.round - 1]?.wage ?? 0)
       if (player.money >= expectedWageCpu) return true
       const cardCost = Math.max(0, def.cost - discount) + 1
       return def.assetValue > cardCost * 6

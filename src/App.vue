@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import './App.css'
-import { ref, onMounted, computed, watch, watchEffect, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, watchEffect, nextTick } from 'vue'
 import { useGame } from './composables/useGame'
 import { useLogHighlight } from './composables/useLogHighlight'
 import type { CpuStrategy, GameSeries } from './game/types'
@@ -71,12 +71,20 @@ function syncSetupFromGame(g: typeof game.value) {
   setupCpuStrategies.value = next
 }
 
+function onGlobalTouchStart() {
+  if (longPressShowing) { tooltipState.value = null; longPressShowing = false }
+}
+
+onUnmounted(() => {
+  document.removeEventListener('touchstart', onGlobalTouchStart, { capture: true })
+})
+
 onMounted(() => {
   const order = Number(localStorage.getItem('ne-setup-order'))
   if (order >= 0 && order <= 4) setupPlayerOrder.value = order
 
   const savedSeries = localStorage.getItem('ne-setup-series')
-  if (savedSeries === 'progress' || savedSeries === 'mecenat') setupSeries.value = savedSeries
+  if (savedSeries === 'progress' || savedSeries === 'mecenat' || savedSeries === 'glory') setupSeries.value = savedSeries
 
   const savedSpeed = localStorage.getItem('ne-setup-anim-speed')
   if (savedSpeed === 'none' || savedSpeed === 'short' || savedSpeed === 'long') {
@@ -86,9 +94,7 @@ onMounted(() => {
   }
   lastStartedDebug.value = localStorage.getItem('ne-setup-debug') === 'true'
 
-  document.addEventListener('touchstart', () => {
-    if (longPressShowing) { tooltipState.value = null; longPressShowing = false }
-  }, { passive: true, capture: true })
+  document.addEventListener('touchstart', onGlobalTouchStart, { passive: true, capture: true })
 
   if (!localStorage.getItem('ne-manual-seen')) {
     showManual.value = true
