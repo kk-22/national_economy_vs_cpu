@@ -10,6 +10,7 @@ import { ALL_BUILDING_CARDS } from '../game/primitives'
 import { getBuildTwoSecondCards, getConstructionDiscount } from '../game/build'
 import HandSortHeader from './HandSortHeader.vue'
 import HCard from './HCard.vue'
+import RoundJumpDialog from './RoundJumpDialog.vue'
 
 const props = defineProps<{
   activatedIds: string[]
@@ -46,7 +47,35 @@ const {
   clickBuildTwoConfirm, clickBuildTwoPayment, clickCancelBuildTwoPayment, clickFreeBuildCard, clickNoSellBuildCard,
   clickConsumptionOrDiscard,
   undo, redo, canUndo, canRedo, cpuPaused,
+  availableRoundsForJump, jumpToRound,
 } = useGame()
+
+const showRoundJumpDialog = ref(false)
+let longPressTimer: ReturnType<typeof setTimeout> | null = null
+let longPressTriggered = false
+
+function startLongPress() {
+  if (!canUndo.value) return
+  longPressTriggered = false
+  longPressTimer = setTimeout(() => {
+    longPressTriggered = true
+    showRoundJumpDialog.value = true
+  }, 600)
+}
+
+function cancelLongPress() {
+  if (longPressTimer !== null) { clearTimeout(longPressTimer); longPressTimer = null }
+}
+
+function handleUndoClick() {
+  if (longPressTriggered) { longPressTriggered = false; return }
+  undo()
+}
+
+function handleRoundJump(round: number) {
+  showRoundJumpDialog.value = false
+  jumpToRound(round)
+}
 
 const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
 
@@ -388,7 +417,16 @@ function tipOn(text: string | false | null | undefined) {
         <span class="hbadge">家計 ${{ game.household }}</span>
       </div>
       <div class="mobile-undo-bar">
-        <button class="btn-undo" :disabled="!canUndo" @click="undo">◀</button>
+        <button
+          class="btn-undo"
+          :disabled="!canUndo"
+          @mousedown="startLongPress"
+          @mouseup="cancelLongPress"
+          @mouseleave="cancelLongPress"
+          @touchstart.prevent="startLongPress"
+          @touchend="cancelLongPress"
+          @click="handleUndoClick"
+        >◀</button>
         <button v-if="game?.phase === 'game-over'" class="btn-redo" @click="emit('openResult')">結果表示</button>
         <button v-else-if="(cpuPaused && !canRedo || settingsPaused)" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
         <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">次へ ▶</button>
@@ -836,7 +874,16 @@ function tipOn(text: string | false | null | undefined) {
           <button class="btn-restart" @click="emit('openSummary')">📋 ラウンド毎の情報</button>
         </div>
         <div class="log-undo-bar">
-          <button class="btn-undo" :disabled="!canUndo" @click="undo">◀ 戻る</button>
+          <button
+            class="btn-undo"
+            :disabled="!canUndo"
+            @mousedown="startLongPress"
+            @mouseup="cancelLongPress"
+            @mouseleave="cancelLongPress"
+            @touchstart.prevent="startLongPress"
+            @touchend="cancelLongPress"
+            @click="handleUndoClick"
+          >◀ 戻る</button>
           <button v-if="game?.phase === 'game-over'" class="btn-redo" @click="emit('openResult')">結果表示</button>
           <button v-else-if="(cpuPaused && !canRedo || settingsPaused)" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
           <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">次へ ▶</button>
@@ -856,6 +903,13 @@ function tipOn(text: string | false | null | undefined) {
 
     </div><!-- /game-body -->
   </div>
+
+  <RoundJumpDialog
+    v-if="showRoundJumpDialog"
+    :available-rounds="availableRoundsForJump"
+    @close="showRoundJumpDialog = false"
+    @jump="handleRoundJump"
+  />
 </template>
 
 <style scoped>

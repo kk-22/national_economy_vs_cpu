@@ -65,6 +65,11 @@ export class GameHistory {
     return entry
   }
 
+  truncateTo(idx: number): void {
+    this.actionLog.length = idx
+    this._redoLog = []
+  }
+
   clearRedo(): void {
     this._redoLog = []
   }

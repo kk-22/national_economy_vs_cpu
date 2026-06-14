@@ -662,6 +662,38 @@ export function useGame() {
     cpuPaused.value = false
   }
 
+  const availableRoundsForJump = computed<number[]>(() => {
+    if (!state.game || !history.canUndo) return []
+    return Array.from({ length: state.game.round }, (_, i) => i + 1)
+  })
+
+  function jumpToRound(targetRound: number) {
+    if (!state.game || !history.initialState) return
+    const snapshot = history.snapshotForUndo()
+    const log = history.actionLog
+    let idx = log.length
+    if (targetRound <= 1) {
+      idx = 0
+    } else {
+      for (let i = 0; i < log.length; i++) {
+        const s = replayToIndex(history.initialState, log.slice(0, i + 1))
+        if (s.round >= targetRound) { idx = i + 1; break }
+      }
+    }
+    history.truncateTo(idx)
+    isUndoRedo.value = true
+    historyVersion.value++
+    pendingEntry = null
+    paymentSelectedIds.value = []
+    cpuPaused.value = false
+    try {
+      state.game = replayToIndex(history.initialState, history.actionLog)
+    } catch (e) {
+      history.restoreSnapshot(snapshot)
+      replayError.value = e instanceof Error ? e.message : String(e)
+    }
+  }
+
   function redo() {
     if (!state.game || !history.canRedo || !history.initialState) return
     const hasHumanPlayer = state.game.players.some(p => !p.isCpu)
@@ -739,6 +771,8 @@ export function useGame() {
     clickConsumptionOrDiscard,
     undo,
     redo,
+    availableRoundsForJump,
+    jumpToRound,
     replayError,
     clearReplayError: () => { replayError.value = null },
   }
