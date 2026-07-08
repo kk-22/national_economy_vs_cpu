@@ -1,9 +1,16 @@
 <script setup lang="ts">
-defineProps<{ availableRounds: number[] }>()
+const props = defineProps<{
+  availableRounds: number[]
+  mode?: 'undo' | 'redo'
+}>()
 const emit = defineEmits<{
   close: []
   jump: [round: number]
+  jumpEnd: []
 }>()
+
+const isRedo = props.mode === 'redo'
+const title = isRedo ? 'ラウンドへ進む' : 'ラウンドに戻る'
 </script>
 
 <template>
@@ -11,7 +18,7 @@ const emit = defineEmits<{
     <div class="modal-overlay" @click.self="emit('close')">
       <div class="modal round-jump-modal">
         <div class="modal-header">
-          <h2>ラウンドに戻る</h2>
+          <h2>{{ title }}</h2>
           <button class="modal-close-btn" @click="emit('close')">✕</button>
         </div>
         <div class="round-jump-list">
@@ -20,7 +27,12 @@ const emit = defineEmits<{
             :key="round"
             class="btn-round-jump"
             @click="emit('jump', round)"
-          >{{ round }}ラウンド目に戻る</button>
+          >{{ round }}ラウンド目{{ isRedo ? 'の最初へ' : 'に戻る' }}</button>
+          <button
+            v-if="isRedo"
+            class="btn-round-jump btn-round-jump-end"
+            @click="emit('jumpEnd')"
+          >最後まで進む</button>
         </div>
       </div>
     </div>

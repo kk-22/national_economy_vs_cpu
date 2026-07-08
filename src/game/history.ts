@@ -70,6 +70,30 @@ export class GameHistory {
     this._redoLog = []
   }
 
+  // ラウンドジャンプ用: カットしたエントリを既存redoの前に積む
+  truncateToPreserveRedo(idx: number): void {
+    const removed = this.actionLog.splice(idx)
+    this._redoLog = [...removed, ...this._redoLog]
+  }
+
+  // actionLog + redoLog の結合（読み取り専用）
+  get fullLog(): HistoryEntry[] {
+    return [...this.actionLog, ...this._redoLog]
+  }
+
+  // redoLog への読み取りアクセス
+  get redoLog(): HistoryEntry[] {
+    return this._redoLog
+  }
+
+  // fullLog を idx で分割して actionLog / redoLog を更新
+  splitAt(idx: number): void {
+    const full = this.fullLog
+    this.actionLog.length = 0
+    this.actionLog.push(...full.slice(0, idx))
+    this._redoLog = full.slice(idx)
+  }
+
   clearRedo(): void {
     this._redoLog = []
   }

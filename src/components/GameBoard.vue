@@ -47,9 +47,10 @@ const {
   clickBuildTwoConfirm, clickBuildTwoPayment, clickCancelBuildTwoPayment, clickFreeBuildCard, clickNoSellBuildCard,
   clickConsumptionOrDiscard,
   undo, redo, canUndo, canRedo, cpuPaused,
-  availableRoundsForJump, jumpToRound,
+  availableRoundsForJump, availableRedoRoundsForJump, jumpToRound, jumpToEnd,
 } = useGame()
 
+// ---- 戻る 長押し ----
 const showRoundJumpDialog = ref(false)
 let longPressTimer: ReturnType<typeof setTimeout> | null = null
 let longPressTriggered = false
@@ -67,6 +68,12 @@ function cancelLongPress() {
   if (longPressTimer !== null) { clearTimeout(longPressTimer); longPressTimer = null }
 }
 
+function handleTouchEnd() {
+  cancelLongPress()
+  if (!longPressTriggered) undo()
+  longPressTriggered = false
+}
+
 function handleUndoClick() {
   if (longPressTriggered) { longPressTriggered = false; return }
   undo()
@@ -75,6 +82,45 @@ function handleUndoClick() {
 function handleRoundJump(round: number) {
   showRoundJumpDialog.value = false
   jumpToRound(round)
+}
+
+// ---- 次へ 長押し ----
+const showRedoJumpDialog = ref(false)
+let redoLongPressTimer: ReturnType<typeof setTimeout> | null = null
+let redoLongPressTriggered = false
+
+function startRedoLongPress() {
+  if (!canRedo.value) return
+  redoLongPressTriggered = false
+  redoLongPressTimer = setTimeout(() => {
+    redoLongPressTriggered = true
+    showRedoJumpDialog.value = true
+  }, 600)
+}
+
+function cancelRedoLongPress() {
+  if (redoLongPressTimer !== null) { clearTimeout(redoLongPressTimer); redoLongPressTimer = null }
+}
+
+function handleRedoTouchEnd() {
+  cancelRedoLongPress()
+  if (!redoLongPressTriggered) redo()
+  redoLongPressTriggered = false
+}
+
+function handleRedoClick() {
+  if (redoLongPressTriggered) { redoLongPressTriggered = false; return }
+  redo()
+}
+
+function handleRedoRoundJump(round: number) {
+  showRedoJumpDialog.value = false
+  jumpToRound(round)
+}
+
+function handleRedoJumpEnd() {
+  showRedoJumpDialog.value = false
+  jumpToEnd()
 }
 
 const cpuPlayers = computed(() => game.value?.players.filter(p => p.isCpu) ?? [])
@@ -423,13 +469,23 @@ function tipOn(text: string | false | null | undefined) {
           @mousedown="startLongPress"
           @mouseup="cancelLongPress"
           @mouseleave="cancelLongPress"
-          @touchstart.prevent="startLongPress"
-          @touchend="cancelLongPress"
+          @touchstart="startLongPress"
+          @touchend.prevent="handleTouchEnd"
           @click="handleUndoClick"
         >◀</button>
         <button v-if="game?.phase === 'game-over'" class="btn-redo" @click="emit('openResult')">結果表示</button>
         <button v-else-if="(cpuPaused && !canRedo || settingsPaused)" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
-        <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">次へ ▶</button>
+        <button
+          v-else
+          class="btn-redo"
+          :disabled="!canRedo"
+          @mousedown="startRedoLongPress"
+          @mouseup="cancelRedoLongPress"
+          @mouseleave="cancelRedoLongPress"
+          @touchstart="startRedoLongPress"
+          @touchend.prevent="handleRedoTouchEnd"
+          @click="handleRedoClick"
+        >次へ ▶</button>
       </div>
       <button class="menu-btn" @click="emit('menuOpen')">☰</button>
     </div>
@@ -880,13 +936,23 @@ function tipOn(text: string | false | null | undefined) {
             @mousedown="startLongPress"
             @mouseup="cancelLongPress"
             @mouseleave="cancelLongPress"
-            @touchstart.prevent="startLongPress"
-            @touchend="cancelLongPress"
+            @touchstart="startLongPress"
+            @touchend.prevent="handleTouchEnd"
             @click="handleUndoClick"
           >◀ 戻る</button>
           <button v-if="game?.phase === 'game-over'" class="btn-redo" @click="emit('openResult')">結果表示</button>
           <button v-else-if="(cpuPaused && !canRedo || settingsPaused)" class="btn-redo" @click="emit('resume')">▶ 続ける</button>
-          <button v-else class="btn-redo" :disabled="!canRedo" @click="redo">次へ ▶</button>
+          <button
+          v-else
+          class="btn-redo"
+          :disabled="!canRedo"
+          @mousedown="startRedoLongPress"
+          @mouseup="cancelRedoLongPress"
+          @mouseleave="cancelRedoLongPress"
+          @touchstart="startRedoLongPress"
+          @touchend.prevent="handleRedoTouchEnd"
+          @click="handleRedoClick"
+        >次へ ▶</button>
         </div>
         <div class="log-label">ログ</div>
         <div class="log-scroll">
@@ -909,6 +975,14 @@ function tipOn(text: string | false | null | undefined) {
     :available-rounds="availableRoundsForJump"
     @close="showRoundJumpDialog = false"
     @jump="handleRoundJump"
+  />
+  <RoundJumpDialog
+    v-if="showRedoJumpDialog"
+    mode="redo"
+    :available-rounds="availableRedoRoundsForJump"
+    @close="showRedoJumpDialog = false"
+    @jump="handleRedoRoundJump"
+    @jump-end="handleRedoJumpEnd"
   />
 </template>
 

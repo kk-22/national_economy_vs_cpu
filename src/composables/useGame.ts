@@ -667,20 +667,68 @@ export function useGame() {
     return Array.from({ length: state.game.round }, (_, i) => i + 1)
   })
 
+  const availableRedoRoundsForJump = computed<number[]>(() => {
+    if (!state.game || !history.canRedo) return []
+    historyVersion.value
+    const currentRound = state.game.round
+    const rounds: number[] = []
+    let s: GameState = state.game
+    let lastRound = currentRound
+    for (const entry of history.redoLog) {
+      try { s = replayToIndex(s, [entry]) } catch { break }
+      if (s.round > lastRound) {
+        if (s.round > currentRound) rounds.push(s.round)
+        lastRound = s.round
+      }
+    }
+    return rounds
+  })
+
+  // フルログ上で targetRound の最初の人間手番直前に history を分割する
+  function splitAtFirstHumanOfRound(targetRound: number) {
+    if (!history.initialState) return
+    const full = history.fullLog
+    let idx = 0
+    let inTargetRound = targetRound <= 1
+
+    for (let i = 0; i < full.length; i++) {
+      if (!inTargetRound) {
+        const s = replayToIndex(history.initialState, full.slice(0, i + 1))
+        if (s.round >= targetRound) inTargetRound = true
+        continue
+      }
+      const entry = full[i]
+      if (entry.targetId !== '__cpu__' && !MANDATORY_IDS.has(entry.targetId)) {
+        idx = i
+        break
+      }
+      idx = i + 1
+    }
+
+    history.splitAt(idx)
+  }
+
   function jumpToRound(targetRound: number) {
     if (!state.game || !history.initialState) return
     const snapshot = history.snapshotForUndo()
-    const log = history.actionLog
-    let idx = log.length
-    if (targetRound <= 1) {
-      idx = 0
-    } else {
-      for (let i = 0; i < log.length; i++) {
-        const s = replayToIndex(history.initialState, log.slice(0, i + 1))
-        if (s.round >= targetRound) { idx = i + 1; break }
-      }
+    try {
+      splitAtFirstHumanOfRound(targetRound)
+      isUndoRedo.value = true
+      historyVersion.value++
+      pendingEntry = null
+      paymentSelectedIds.value = []
+      cpuPaused.value = false
+      state.game = replayToIndex(history.initialState, history.actionLog)
+    } catch (e) {
+      history.restoreSnapshot(snapshot)
+      replayError.value = e instanceof Error ? e.message : String(e)
     }
-    history.truncateTo(idx)
+  }
+
+  function jumpToEnd() {
+    if (!state.game || !history.canRedo || !history.initialState) return
+    const snapshot = history.snapshotForUndo()
+    history.splitAt(history.fullLog.length)
     isUndoRedo.value = true
     historyVersion.value++
     pendingEntry = null
@@ -772,7 +820,9 @@ export function useGame() {
     undo,
     redo,
     availableRoundsForJump,
+    availableRedoRoundsForJump,
     jumpToRound,
+    jumpToEnd,
     replayError,
     clearReplayError: () => { replayError.value = null },
   }
