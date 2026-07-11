@@ -356,7 +356,8 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
     }
 
     case 'gain-household-by-workers': {
-      const hasOtherKoma = availableWorkers(player).length > 1 || player.workers.some(w => w.placedAt !== null)
+      // このコマは既に配置済みの状態で呼ばれるため、他に未配置のコマが残っているかで判定する
+      const hasOtherKoma = availableWorkers(player).length > 0
       const gain = hasOtherKoma ? effect.withWorker : effect.withoutWorker
       if (state.household < gain) return state
       let s = { ...state, household: state.household - gain }

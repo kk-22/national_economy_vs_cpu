@@ -103,8 +103,16 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity, 
       const cost = Math.max(0, def.cost - effect.discount - selfDiscount)
       return player.hand.length - 1 >= cost
     })
-    case 'gain-household-by-workers': return household >= effect.withoutWorker
-    case 'gain-household-if-hand':    return household >= effect.otherwise
+    case 'gain-household-by-workers': {
+      // 配置後に他の未配置コマが残るかどうかで実際の獲得額を予測する（effects.ts と一致させる）
+      const willHaveOtherKoma = availableWorkers(player).length > 1
+      const predictedGain = willHaveOtherKoma ? effect.withWorker : effect.withoutWorker
+      return household >= predictedGain
+    }
+    case 'gain-household-if-hand': {
+      const predictedGain = player.hand.length === effect.exactHand ? effect.gain : effect.otherwise
+      return household >= predictedGain
+    }
     case 'build-consumption-double':  return player.hand.some(c => {
       if (c.kind !== 'building') return false
       const def = ALL_BUILDING_CARDS[c.name]
