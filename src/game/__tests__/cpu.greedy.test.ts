@@ -66,7 +66,7 @@ describe('greedy: 労働者2人なら学校を選ぶ', () => {
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     // 学校を使った証拠: 研修中ワーカーが追加される
     expect(result.players[0].workers.length).toBe(3)
@@ -91,7 +91,7 @@ describe('greedy: 労働者2人なら学校を選ぶ', () => {
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(result.players[0].workers.length).toBe(3)
     expect(result.players[0].workers.some(w => w.isTraining)).toBe(true)
@@ -111,7 +111,7 @@ describe('greedy: 労働者2人なら学校を選ぶ', () => {
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(result.players[0].workers.length).toBe(3)
     expect(result.players[0].workers.some(w => w.isTraining)).toBe(true)
@@ -144,7 +144,7 @@ describe('greedy: 残り1ワーカー・建設か市場か', () => {
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(builtBuilding(state, result, 0)).toBe('農場')
   })
@@ -171,7 +171,7 @@ describe('greedy: 残り1ワーカー・建設か市場か', () => {
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(builtBuilding(state, result, 0)).toBeNull()
     expect(usedPublicWorkplace(state, result)).toBe('露店')
@@ -204,7 +204,7 @@ describe('greedy: 残り2ワーカー・建設か既存施設使用か', () => {
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(builtBuilding(state, result, 0)).toBe('工場')
   })
@@ -226,7 +226,7 @@ describe('greedy: 残り2ワーカー・建設か既存施設使用か', () => {
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(builtBuilding(state, result, 0)).toBeNull()
     expect(usedOwnedBuilding(state, result, 0)).toBe('製鉄所')
@@ -260,13 +260,13 @@ describe('greedy: 残り2ワーカー・建設か既存施設使用か', () => {
     })
 
     // Worker 1: 大工 → 工場建設（ラウンドはまだ終了しない）
-    const after1 = cpuOneTurnStep(state)
+    const after1 = cpuOneTurnStep(state).state
     expect(builtBuilding(state, after1, 0)).toBe('工場')
     expect(after1.players[0].hand.length).toBe(2)  // 工場+消費財×2 を消費
 
     // Worker 2: 工場を使う → discard2, draw4 → 手札 2→4 枚
     // （ラウンド終了後も手札はそのまま保持される）
-    const after2 = cpuOneTurnStep(after1)
+    const after2 = cpuOneTurnStep(after1).state
     expect(after2.players[0].hand.length).toBe(4)
   })
 
@@ -291,7 +291,7 @@ describe('greedy: 残り2ワーカー・建設か既存施設使用か', () => {
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(builtBuilding(state, result, 0)).not.toBe('ゼネコン')
   })
@@ -319,7 +319,7 @@ describe('greedy: 建設対象外の建物を建設しない', () => {
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(builtBuilding(state, result, 0)).toBe('農場')
   })
@@ -339,7 +339,7 @@ describe('greedy: 建設対象外の建物を建設しない', () => {
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(builtBuilding(state, result, 0)).toBeNull()
   })
@@ -382,7 +382,7 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
         makePublicWorkplace('万博', { kind: 'discard-gain', discard: 5, gain: 30 }),
       ],
     })
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
     expect(usedPublicWorkplace(state, result)).toBe('万博')
   })
 
@@ -400,7 +400,7 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
         makePublicWorkplace('露店', { kind: 'discard-gain', discard: 1, gain: 6 }),
       ],
     })
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
     expect(usedOwnedBuilding(state, result, 0)).toBe('農場')
   })
 
@@ -417,7 +417,7 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
         makePublicWorkplace('農場', { kind: 'draw-consumption', n: 2 }),
       ],
     })
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
     expect(usedPublicWorkplace(state, result)).toBe('農場')
   })
 
@@ -434,7 +434,7 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
         makePublicWorkplace('農場', { kind: 'draw-consumption', n: 2 }),
       ],
     })
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
     expect(usedOwnedBuilding(state, result, 0)).toBe('製鉄所')
   })
 
@@ -451,7 +451,7 @@ describe('greedy: 施設利用とお金稼ぎの優先度', () => {
         makePublicWorkplace('製鉄所', { kind: 'draw', n: 3 }),
       ],
     })
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
     expect(usedPublicWorkplace(state, result)).toBe('製鉄所')
   })
 })

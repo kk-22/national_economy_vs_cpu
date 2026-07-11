@@ -2,8 +2,8 @@ import { ROUND_CARDS } from './constants'
 import { getPlayer, ALL_BUILDING_CARDS } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { scoreEffect, filterDominatedWorkplaces, getPlayerWeights } from './cpu-scoring'
-import { setLastCpuNoAutoTarget } from './turns'
 import { placeWorkerOnPublic, placeWorkerOnBuilding, afterAction, afterHumanAction } from './turns'
+import type { CpuNoAutoResult } from './turns'
 import { cpuTakeTurnRandom, cpuTakeTurnRandomNoAuto } from './cpu-strategy-random'
 import type { GameState, BuildingCard, PublicWorkplace, OwnedBuilding } from './types'
 
@@ -54,12 +54,12 @@ export function cpuTakeTurnGreedy(state: GameState, playerId: number): GameState
   return afterAction(state)
 }
 
-export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): GameState {
+export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number, deferRoundEnd = false): CpuNoAutoResult {
   const { pubOptions, bldOptions } = filterDominatedWorkplaces(
     getAvailablePublicWorkplaces(state, playerId),
     getAvailableOwnedBuildings(state, playerId),
   )
-  if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
+  if (pubOptions.length === 0 && bldOptions.length === 0) return { state: afterHumanAction(state, deferRoundEnd), target: null }
 
   const player = getPlayer(state, playerId)
   const weights = getPlayerWeights(playerId)
@@ -92,8 +92,7 @@ export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): Gam
         return def && def.isWorkplace && def.cost >= bestBuildableCost
       })
       if (equivBld) {
-        setLastCpuNoAutoTarget({ id: equivBld.id, type: 'bld' })
-        return placeWorkerOnBuilding(state, playerId, equivBld.id, true)
+        return { state: placeWorkerOnBuilding(state, playerId, equivBld.id, true, deferRoundEnd), target: { id: equivBld.id, type: 'bld' } }
       }
     }
   }
@@ -122,15 +121,13 @@ export function cpuTakeTurnGreedyNoAuto(state: GameState, playerId: number): Gam
     if (sc > bestScore) { bestScore = sc; bestBld = bld; bestPub = null }
   }
 
-  if (bestScore === -Infinity) return cpuTakeTurnRandomNoAuto(state, playerId)
+  if (bestScore === -Infinity) return cpuTakeTurnRandomNoAuto(state, playerId, deferRoundEnd)
 
   if (bestPub) {
-    setLastCpuNoAutoTarget({ id: bestPub.id, type: 'pub' })
-    return placeWorkerOnPublic(state, playerId, bestPub.id, true)
+    return { state: placeWorkerOnPublic(state, playerId, bestPub.id, true, deferRoundEnd), target: { id: bestPub.id, type: 'pub' } }
   }
   if (bestBld) {
-    setLastCpuNoAutoTarget({ id: bestBld.id, type: 'bld' })
-    return placeWorkerOnBuilding(state, playerId, bestBld.id, true)
+    return { state: placeWorkerOnBuilding(state, playerId, bestBld.id, true, deferRoundEnd), target: { id: bestBld.id, type: 'bld' } }
   }
-  return afterHumanAction(state)
+  return { state: afterHumanAction(state, deferRoundEnd), target: null }
 }

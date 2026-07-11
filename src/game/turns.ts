@@ -7,7 +7,7 @@ import { cpuTakeTurnBeam, cpuTakeTurnBeamNoAuto } from './cpu-strategy-beam'
 import { cpuTakeTurnMCTS, cpuTakeTurnMCTSNoAuto } from './cpu-strategy-mcts'
 import { cpuTakeTurnDisruptive, cpuTakeTurnDisruptiveNoAuto } from './cpu-strategy-disruptive'
 import { cpuTakeTurnRandom, cpuTakeTurnRandomNoAuto } from './cpu-strategy-random'
-import type { GameState, BuildingCard, Player } from './types'
+import type { GameState, BuildingCard, Player, GameEffect } from './types'
 
 function computeDrewAfterBuildTwo(beforeState: GameState, beforePlayer: Player, afterPlayer: Player): boolean {
   const newBuildings = afterPlayer.ownedBuildings.filter(b => !beforePlayer.ownedBuildings.some(ob => ob.id === b.id))
@@ -19,24 +19,36 @@ function computeDrewAfterBuildTwo(beforeState: GameState, beforePlayer: Player, 
   return beforePlayer.hand.length - 2 - totalCost === 0
 }
 
-// CPU NoAuto ターンで選択した配置先を一時保持（replay 高速化用）
-let _lastCpuNoAutoTarget: { id: string; type: 'pub' | 'bld' } | null = null
-
-export function consumeLastCpuNoAutoTarget(): { id: string; type: 'pub' | 'bld' } | null {
-  const t = _lastCpuNoAutoTarget
-  _lastCpuNoAutoTarget = null
-  return t
-}
-
-export function setLastCpuNoAutoTarget(target: { id: string; type: 'pub' | 'bld' } | null): void {
-  _lastCpuNoAutoTarget = target
-}
+// CPU NoAuto ターンで選択した配置先（replay 高速化用）。戻り値として呼び出し元に伝搬する。
+export interface CpuTarget { id: string; type: 'pub' | 'bld' }
+export interface CpuNoAutoResult { state: GameState; target: CpuTarget | null }
 
 // ---- Worker placement ----
 
-export function placeWorkerOnPublic(state: GameState, playerId: number, workplaceId: string, forceHumanPath = false): GameState {
+interface PlacementTarget {
+  id: string
+  name: string
+  effect: GameEffect
+}
+
+// PendingAction のうち、配置元（一般職場 or 自分の建物）のIDをsourceIdとして記録する必要がある種類
+function needsPlacementSourceId(paKind: string): boolean {
+  return paKind === 'choose-build-target' || paKind === 'choose-farm-build' || paKind === 'choose-double-first'
+    || paKind === 'choose-discard' || paKind === 'choose-from-revealed' || paKind === 'choose-build-two-first'
+    || paKind === 'choose-free-build' || paKind === 'choose-no-sell-build' || paKind === 'choose-consumption-or-discard'
+}
+
+// 一般職場・自分の建物どちらへの配置にも共通するロジック（コマ配置→効果適用→ログ→ターン進行）。
+// applyPlacement で配置先固有のデータ構造（publicWorkplaces.workerIds / ownedBuilding.workerHereId）を更新する。
+function placeWorkerCommon(
+  state: GameState,
+  playerId: number,
+  target: PlacementTarget,
+  applyPlacement: (s: GameState, workerId: string, worker2Id: string | null) => GameState,
+  forceHumanPath: boolean,
+  deferRoundEnd = false,
+): GameState {
   const player = getPlayer(state, playerId)
-  const workplace = state.publicWorkplaces.find(w => w.id === workplaceId)!
   const worker = availableWorkers(player)[0]
   if (!worker) return state
 
@@ -44,111 +56,69 @@ export function placeWorkerOnPublic(state: GameState, playerId: number, workplac
   const beforeSP = state.startPlayerIndex
   const beforeDiscardPile = state.discardPile
 
-  const wpDef = ALL_BUILDING_CARDS[workplace.name]
+  const def = ALL_BUILDING_CARDS[target.name]
   const koma = availableWorkers(player)
-  const worker2 = wpDef?.requiresDoubleWorker ? koma[1] : null
+  const worker2 = def?.requiresDoubleWorker ? koma[1] : null
 
   let s = updatePlayer(state, playerId, p => ({
     ...p,
     workers: p.workers.map(w => {
-      if (w.id === worker.id) return { ...w, placedAt: workplaceId }
-      if (worker2 && w.id === worker2.id) return { ...w, placedAt: workplaceId }
+      if (w.id === worker.id) return { ...w, placedAt: target.id }
+      if (worker2 && w.id === worker2.id) return { ...w, placedAt: target.id }
       return w
     }),
   }))
-  s = {
+  s = applyPlacement(s, worker.id, worker2?.id ?? null)
+
+  s = applyEffect(s, playerId, target.effect, player.isCpu, player.cpuStrategy)
+
+  if (s.pendingAction) {
+    const pa = s.pendingAction
+    const withSource = needsPlacementSourceId(pa.kind)
+      ? { ...pa, sourceName: target.name, sourceId: target.id }
+      : { ...pa, sourceName: target.name }
+    s = { ...s, pendingAction: withSource }
+    return s
+  }
+
+  const afterPlayer = getPlayer(s, playerId)
+  let revealPickInfo: { picked: string; discarded: string[] } | undefined
+  if (target.effect.kind === 'reveal-pick') {
+    const pickedCard = afterPlayer.hand.find(c => c.kind === 'building' && !beforePlayer.hand.some(b => b.id === c.id)) as (typeof afterPlayer.hand[number] & { kind: 'building' }) | undefined
+    const newDiscarded = s.discardPile.filter(c => !beforeDiscardPile.some(b => b.id === c.id))
+    revealPickInfo = { picked: pickedCard?.name ?? '不明', discarded: newDiscarded.map(c => c.name) }
+  }
+  const drewAfterBuildTwo = target.effect.kind === 'build-two'
+    ? computeDrewAfterBuildTwo(state, beforePlayer, afterPlayer)
+    : undefined
+  s = addLog(s, buildActionLog(target.name, target.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex, revealPickInfo, drewAfterBuildTwo))
+
+  return (!player.isCpu || forceHumanPath) ? afterHumanAction(s, deferRoundEnd) : afterAction(s)
+}
+
+export function placeWorkerOnPublic(state: GameState, playerId: number, workplaceId: string, forceHumanPath = false, deferRoundEnd = false): GameState {
+  const workplace = state.publicWorkplaces.find(w => w.id === workplaceId)!
+  return placeWorkerCommon(state, playerId, workplace, (s, workerId, worker2Id) => ({
     ...s,
     publicWorkplaces: s.publicWorkplaces.map(wp => {
       if (wp.id !== workplaceId) return wp
-      const ids = worker2 ? [...wp.workerIds, worker.id, worker2.id] : [...wp.workerIds, worker.id]
+      const ids = worker2Id ? [...wp.workerIds, workerId, worker2Id] : [...wp.workerIds, workerId]
       return { ...wp, workerIds: ids }
     }),
-  }
-
-  s = applyEffect(s, playerId, workplace.effect, player.isCpu, player.cpuStrategy)
-
-  if (s.pendingAction) {
-    const pa = s.pendingAction
-    const needsSourceId = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed' || pa.kind === 'choose-build-two-first' || pa.kind === 'choose-free-build' || pa.kind === 'choose-no-sell-build' || pa.kind === 'choose-consumption-or-discard')
-    const withSource = needsSourceId
-      ? { ...pa, sourceName: workplace.name, sourceId: workplaceId }
-      : { ...pa, sourceName: workplace.name }
-    s = { ...s, pendingAction: withSource }
-    return s
-  }
-
-  const afterPlayer = getPlayer(s, playerId)
-  let revealPickInfo: { picked: string; discarded: string[] } | undefined
-  if (workplace.effect.kind === 'reveal-pick') {
-    const pickedCard = afterPlayer.hand.find(c => c.kind === 'building' && !beforePlayer.hand.some(b => b.id === c.id)) as (typeof afterPlayer.hand[number] & { kind: 'building' }) | undefined
-    const newDiscarded = s.discardPile.filter(c => !beforeDiscardPile.some(b => b.id === c.id))
-    revealPickInfo = { picked: pickedCard?.name ?? '不明', discarded: newDiscarded.map(c => c.name) }
-  }
-  const drewAfterBuildTwoPub = workplace.effect.kind === 'build-two'
-    ? computeDrewAfterBuildTwo(state, beforePlayer, afterPlayer)
-    : undefined
-  s = addLog(s, buildActionLog(workplace.name, workplace.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex, revealPickInfo, drewAfterBuildTwoPub))
-
-  return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
+  }), forceHumanPath, deferRoundEnd)
 }
 
-export function placeWorkerOnBuilding(state: GameState, playerId: number, buildingId: string, forceHumanPath = false): GameState {
+export function placeWorkerOnBuilding(state: GameState, playerId: number, buildingId: string, forceHumanPath = false, deferRoundEnd = false): GameState {
   const player = getPlayer(state, playerId)
   const building = player.ownedBuildings.find(b => b.id === buildingId)!
   const def = ALL_BUILDING_CARDS[building.name]!
-  const worker = availableWorkers(player)[0]
-  if (!worker) return state
-
-  const beforePlayer = player
-  const beforeSP = state.startPlayerIndex
-  const beforeDiscardPile = state.discardPile
-
-  const bldDef = ALL_BUILDING_CARDS[building.name]
-  const bldKoma = availableWorkers(player)
-  const bWorker2 = bldDef?.requiresDoubleWorker ? bldKoma[1] : null
-
-  let s = updatePlayer(state, playerId, p => ({
+  return placeWorkerCommon(state, playerId, { id: building.id, name: building.name, effect: def.effect }, (s, workerId) => updatePlayer(s, playerId, p => ({
     ...p,
-    workers: p.workers.map(w => {
-      if (w.id === worker.id) return { ...w, placedAt: buildingId }
-      if (bWorker2 && w.id === bWorker2.id) return { ...w, placedAt: buildingId }
-      return w
-    }),
-    ownedBuildings: p.ownedBuildings.map(b => b.id === buildingId ? { ...b, workerHereId: worker.id } : b),
-  }))
-
-  s = applyEffect(s, playerId, def.effect, player.isCpu, player.cpuStrategy)
-
-  if (s.pendingAction) {
-    const pa = s.pendingAction
-    const needsSourceId = (pa.kind === 'choose-build-target' || pa.kind === 'choose-farm-build' || pa.kind === 'choose-double-first' || pa.kind === 'choose-discard' || pa.kind === 'choose-from-revealed' || pa.kind === 'choose-build-two-first' || pa.kind === 'choose-free-build' || pa.kind === 'choose-no-sell-build' || pa.kind === 'choose-consumption-or-discard')
-    const withSource = needsSourceId
-      ? { ...pa, sourceName: building.name, sourceId: buildingId }
-      : { ...pa, sourceName: building.name }
-    s = { ...s, pendingAction: withSource }
-    return s
-  }
-
-  const afterPlayer = getPlayer(s, playerId)
-  let revealPickInfo: { picked: string; discarded: string[] } | undefined
-  if (def.effect.kind === 'reveal-pick') {
-    const pickedCard = afterPlayer.hand.find(c => c.kind === 'building' && !beforePlayer.hand.some(b => b.id === c.id)) as (typeof afterPlayer.hand[number] & { kind: 'building' }) | undefined
-    const newDiscarded = s.discardPile.filter(c => !beforeDiscardPile.some(b => b.id === c.id))
-    revealPickInfo = { picked: pickedCard?.name ?? '不明', discarded: newDiscarded.map(c => c.name) }
-  }
-  const drewAfterBuildTwoBld = def.effect.kind === 'build-two'
-    ? computeDrewAfterBuildTwo(state, beforePlayer, afterPlayer)
-    : undefined
-  s = addLog(s, buildActionLog(building.name, def.effect.kind, beforePlayer, afterPlayer, beforeSP, s.startPlayerIndex, revealPickInfo, drewAfterBuildTwoBld))
-
-  return (!player.isCpu || forceHumanPath) ? afterHumanAction(s) : afterAction(s)
+    ownedBuildings: p.ownedBuildings.map(b => b.id === buildingId ? { ...b, workerHereId: workerId } : b),
+  })), forceHumanPath, deferRoundEnd)
 }
 
 // ---- Turn sequencing ----
-
-// Vue層のアニメーション待ちのため、ラウンド終了を_pendingRoundEndフラグで遅延させるか否か
-let _deferRoundEnd = false
-export function setDeferRoundEnd(v: boolean) { _deferRoundEnd = v }
 
 export function afterAction(state: GameState): GameState {
   if (state.pendingAction) return state
@@ -157,11 +127,12 @@ export function afterAction(state: GameState): GameState {
   return advanceTurn(state)
 }
 
-export function afterHumanAction(state: GameState): GameState {
+// deferRoundEnd: Vue層のアニメーション待ちのため、ラウンド終了を_pendingRoundEndフラグで遅延させるか否か
+export function afterHumanAction(state: GameState, deferRoundEnd = false): GameState {
   if (state.pendingAction) return state
   const allPlaced = state.players.every(p => p.workers.every(w => w.isTraining || w.placedAt !== null))
   if (allPlaced) {
-    if (_deferRoundEnd) return { ...state, _pendingRoundEnd: true }
+    if (deferRoundEnd) return { ...state, _pendingRoundEnd: true }
     return processRoundEnd(state, true)
   }
   return advanceTurnNoCpu(state)
@@ -228,24 +199,25 @@ function cpuTakeTurn(state: GameState, playerId: number): GameState {
   }
 }
 
-function cpuTakeTurnNoAuto(state: GameState, playerId: number): GameState {
+function cpuTakeTurnNoAuto(state: GameState, playerId: number, deferRoundEnd: boolean): CpuNoAutoResult {
   const player = getPlayer(state, playerId)
   switch (player.cpuStrategy) {
-    case 'greedy':     return cpuTakeTurnGreedyNoAuto(state, playerId)
-    case 'beam':       return cpuTakeTurnBeamNoAuto(state, playerId)
-    case 'mcts':       return cpuTakeTurnMCTSNoAuto(state, playerId)
-    case 'disruptive': return cpuTakeTurnDisruptiveNoAuto(state, playerId)
-    default:           return cpuTakeTurnRandomNoAuto(state, playerId)
+    case 'greedy':     return cpuTakeTurnGreedyNoAuto(state, playerId, deferRoundEnd)
+    case 'beam':       return cpuTakeTurnBeamNoAuto(state, playerId, deferRoundEnd)
+    case 'mcts':       return cpuTakeTurnMCTSNoAuto(state, playerId, deferRoundEnd)
+    case 'disruptive': return cpuTakeTurnDisruptiveNoAuto(state, playerId, deferRoundEnd)
+    default:           return cpuTakeTurnRandomNoAuto(state, playerId, deferRoundEnd)
   }
 }
 
-export function cpuOneTurnStep(state: GameState): GameState {
-  if (state.pendingAction) return state
+// deferRoundEnd: Vue層のアニメーション待ちのため、ラウンド終了を_pendingRoundEndフラグで遅延させるか否か
+export function cpuOneTurnStep(state: GameState, deferRoundEnd = false): CpuNoAutoResult {
+  if (state.pendingAction) return { state, target: null }
   const current = state.players[state.currentPlayerIndex]
-  if (!current?.isCpu) return state
+  if (!current?.isCpu) return { state, target: null }
   const avail = availableWorkers(current)
-  if (avail.length === 0) return advanceTurnNoCpu(state)
-  return cpuTakeTurnNoAuto(state, current.id)
+  if (avail.length === 0) return { state: advanceTurnNoCpu(state), target: null }
+  return cpuTakeTurnNoAuto(state, current.id, deferRoundEnd)
 }
 
 export function skipEmptyPlayerTurn(state: GameState): GameState {

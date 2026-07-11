@@ -2,8 +2,8 @@ import { rngNext } from './primitives'
 import { calculateScores } from './round'
 import { MCTS_SIMULATIONS } from './cpu'
 import { pickWorkerExpansion } from './cpu-scoring'
-import { setLastCpuNoAutoTarget } from './turns'
 import { placeWorkerOnPublic, placeWorkerOnBuilding, afterAction, afterHumanAction } from './turns'
+import type { CpuNoAutoResult } from './turns'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import type { GameState } from './types'
 
@@ -68,15 +68,14 @@ export function cpuTakeTurnMCTS(state: GameState, playerId: number): GameState {
   return placeWorkerOnBuilding(state, playerId, bestOption.id)
 }
 
-export function cpuTakeTurnMCTSNoAuto(state: GameState, playerId: number): GameState {
+export function cpuTakeTurnMCTSNoAuto(state: GameState, playerId: number, deferRoundEnd = false): CpuNoAutoResult {
   const pubOptions = getAvailablePublicWorkplaces(state, playerId)
   const bldOptions = getAvailableOwnedBuildings(state, playerId)
-  if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
+  if (pubOptions.length === 0 && bldOptions.length === 0) return { state: afterHumanAction(state, deferRoundEnd), target: null }
 
   const expansion = pickWorkerExpansion(state, playerId)
   if (expansion) {
-    setLastCpuNoAutoTarget({ id: expansion.id, type: 'pub' })
-    return placeWorkerOnPublic(state, playerId, expansion.id, true)
+    return { state: placeWorkerOnPublic(state, playerId, expansion.id, true, deferRoundEnd), target: { id: expansion.id, type: 'pub' } }
   }
 
   const pubNames = new Set(pubOptions.map(wp => wp.name))
@@ -124,7 +123,8 @@ export function cpuTakeTurnMCTSNoAuto(state: GameState, playerId: number): GameS
     if (avg > bestScore) { bestScore = avg; bestOption = opt }
   }
 
-  setLastCpuNoAutoTarget({ id: bestOption.id, type: bestOption.type })
-  if (bestOption.type === 'pub') return placeWorkerOnPublic(state, playerId, bestOption.id, true)
-  return placeWorkerOnBuilding(state, playerId, bestOption.id, true)
+  const s = bestOption.type === 'pub'
+    ? placeWorkerOnPublic(state, playerId, bestOption.id, true, deferRoundEnd)
+    : placeWorkerOnBuilding(state, playerId, bestOption.id, true, deferRoundEnd)
+  return { state: s, target: { id: bestOption.id, type: bestOption.type } }
 }

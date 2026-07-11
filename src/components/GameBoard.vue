@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useGame } from '../composables/useGame'
 import { useLogHighlight } from '../composables/useLogHighlight'
-import type { Worker, Player } from '../game/types'
+import { useRowResize } from '../composables/useRowResize'
+import { useLongPressAction } from '../composables/useLongPressAction'
+import { useWorkplaceSort } from '../composables/useWorkplaceSort'
+import { useHandSort } from '../composables/useHandSort'
+import { regularWorkers, automatons, workerAvailable, automatonAvailable, workerUnderCapacity } from '../utils/workerDisplay'
 import { bcardNameStyle, cardLabel, handCount, handDetail, tagBadgeClass } from '../utils/cardDisplay'
 import { cardTypeTags, cardTooltip, workplaceTooltip } from '../utils/cardTooltip'
 import { ROUND_CARDS, FREE_BUILD_ANY_LIMIT } from '../game/constants'
@@ -51,33 +55,11 @@ const {
 } = useGame()
 
 // ---- 戻る 長押し ----
-const showRoundJumpDialog = ref(false)
-let longPressTimer: ReturnType<typeof setTimeout> | null = null
-let longPressTriggered = false
-
-function startLongPress() {
-  if (!canUndo.value) return
-  longPressTriggered = false
-  longPressTimer = setTimeout(() => {
-    longPressTriggered = true
-    showRoundJumpDialog.value = true
-  }, 600)
-}
-
-function cancelLongPress() {
-  if (longPressTimer !== null) { clearTimeout(longPressTimer); longPressTimer = null }
-}
-
-function handleTouchEnd() {
-  cancelLongPress()
-  if (!longPressTriggered) undo()
-  longPressTriggered = false
-}
-
-function handleUndoClick() {
-  if (longPressTriggered) { longPressTriggered = false; return }
-  undo()
-}
+const {
+  showDialog: showRoundJumpDialog,
+  startLongPress, cancelLongPress, handleTouchEnd,
+  handleClick: handleUndoClick,
+} = useLongPressAction(canUndo, undo)
 
 function handleRoundJump(round: number) {
   showRoundJumpDialog.value = false
@@ -85,33 +67,11 @@ function handleRoundJump(round: number) {
 }
 
 // ---- 次へ 長押し ----
-const showRedoJumpDialog = ref(false)
-let redoLongPressTimer: ReturnType<typeof setTimeout> | null = null
-let redoLongPressTriggered = false
-
-function startRedoLongPress() {
-  if (!canRedo.value) return
-  redoLongPressTriggered = false
-  redoLongPressTimer = setTimeout(() => {
-    redoLongPressTriggered = true
-    showRedoJumpDialog.value = true
-  }, 600)
-}
-
-function cancelRedoLongPress() {
-  if (redoLongPressTimer !== null) { clearTimeout(redoLongPressTimer); redoLongPressTimer = null }
-}
-
-function handleRedoTouchEnd() {
-  cancelRedoLongPress()
-  if (!redoLongPressTriggered) redo()
-  redoLongPressTriggered = false
-}
-
-function handleRedoClick() {
-  if (redoLongPressTriggered) { redoLongPressTriggered = false; return }
-  redo()
-}
+const {
+  showDialog: showRedoJumpDialog,
+  startLongPress: startRedoLongPress, cancelLongPress: cancelRedoLongPress, handleTouchEnd: handleRedoTouchEnd,
+  handleClick: handleRedoClick,
+} = useLongPressAction(canRedo, redo)
 
 function handleRedoRoundJump(round: number) {
   showRedoJumpDialog.value = false
@@ -135,58 +95,7 @@ const publicWorkplacesLabel = computed(() => {
 })
 
 // ---- 一般職場ソート ----
-type WpSortOrder = 'added' | 'cost' | 'role'
-const wpSortOrder = ref<WpSortOrder>(
-  (localStorage.getItem('ne-wp-sort') as WpSortOrder) ?? 'added'
-)
-watch(wpSortOrder, v => localStorage.setItem('ne-wp-sort', v))
-
-const ROLE_RANK: Record<string, number> = {
-  'draw-become-start': -1, 'draw': 0, 'draw-if-empty': 0, 'discard-draw': 0, 'reveal-pick': 0,
-  'draw-consumption': 1, 'draw-consumption-to': 1, 'gain-supply': 1,
-  'add-worker': 2, 'fill-workers': 2,
-  'build': 3, 'build-farm-free': 3, 'build-double': 3,
-  'discard-gain': 4,
-}
-
-// 職場名→追加ラウンド（ラウンドカード職場のみ。sold は Infinity）
-const WP_ADDED_ROUND = new Map<string, number>(
-  ROUND_CARDS.flatMap((rc, i) => rc.workplaces.map(wp => [wp.name, i + 1] as [string, number]))
-)
-
-function wpCostKey(name: string): [number, number, string] {
-  const def = ALL_BUILDING_CARDS[name]
-  return [def?.cost ?? 0, def?.assetValue ?? 0, name]
-}
-
-const sortedPublicWorkplaces = computed(() => {
-  const wps = game.value?.publicWorkplaces ?? []
-  if (wpSortOrder.value === 'added') return wps
-
-  if (wpSortOrder.value === 'cost') {
-    // ラウンドカード職場を追加順（降順）で先頭に、続いて売却建物をコスト順
-    const roundWps = wps.filter(wp => wp.kind === 'round')
-    const soldWps = wps.filter(wp => wp.kind === 'sold').sort((a, b) => {
-      const [ca, va, na] = wpCostKey(a.name)
-      const [cb, vb, nb] = wpCostKey(b.name)
-      return ca !== cb ? ca - cb : va !== vb ? va - vb : na.localeCompare(nb)
-    })
-    return [...roundWps, ...soldWps]
-  }
-
-  // 役割順: 第1=役割ランク / 第2=追加ラウンド(sold は末尾) / 第3=コスト / 第4=資産価値 / 第5=名前
-  return [...wps].sort((a, b) => {
-    const ra = ROLE_RANK[a.effect.kind] ?? 99
-    const rb = ROLE_RANK[b.effect.kind] ?? 99
-    if (ra !== rb) return ra - rb
-    const roundA = WP_ADDED_ROUND.get(a.name) ?? Infinity
-    const roundB = WP_ADDED_ROUND.get(b.name) ?? Infinity
-    if (roundA !== roundB) return roundA - roundB
-    const [ca, va, na] = wpCostKey(a.name)
-    const [cb, vb, nb] = wpCostKey(b.name)
-    return ca !== cb ? ca - cb : va !== vb ? va - vb : na.localeCompare(nb)
-  })
-})
+const { wpSortOrder, sortedPublicWorkplaces } = useWorkplaceSort(game)
 
 // ---- ログ行ハイライト ----
 const { getLogState, onLogMouseenter, onLogMouseleave, onLogClick } = useLogHighlight(
@@ -201,31 +110,7 @@ function logLineClass(msg: string): string {
 }
 
 // ---- 手札ソート ----
-type HandSort = 'order' | 'cost'
-const HAND_SORT_KEY = 'ne-hand-sort'
-const handSort = ref<HandSort>(
-  localStorage.getItem(HAND_SORT_KEY) === 'cost' ? 'cost' : 'order'
-)
-watch(handSort, (v) => { localStorage.setItem(HAND_SORT_KEY, v) })
-
-function sortByCost<T extends { kind: string; name?: string }>(cards: T[]): T[] {
-  return [...cards].sort((a, b) => {
-    const costA = a.kind === 'building' ? (getBuildingDef(a.name!)?.cost ?? 0) : 0
-    const costB = b.kind === 'building' ? (getBuildingDef(b.name!)?.cost ?? 0) : 0
-    if (costB !== costA) return costB - costA
-    const assetA = a.kind === 'building' ? (getBuildingDef(a.name!)?.assetValue ?? 0) : 0
-    const assetB = b.kind === 'building' ? (getBuildingDef(b.name!)?.assetValue ?? 0) : 0
-    return assetB - assetA
-  })
-}
-
-const sortedHand = computed(() => {
-  const hand = humanPlayer.value?.hand ?? []
-  const consumptions = hand.filter(c => c.kind === 'consumption')
-  const buildings = hand.filter(c => c.kind === 'building')
-  const sortedBuildings = handSort.value === 'cost' ? sortByCost(buildings) : buildings
-  return [...sortedBuildings, ...consumptions]
-})
+const { handSort, sortedHand } = useHandSort(humanPlayer, getBuildingDef)
 
 
 // ---- ニコイチ建設 2枚同時選択 ----
@@ -365,42 +250,7 @@ function clickConfirmSellBuildings() {
 
 // ---- 3行リサイズ（縦3分割） ----
 const gameMRef = ref<HTMLElement | null>(null)
-const rowHeights = ref([33.33, 33.33, 33.34])
-
-let resizingState: {
-  dividerIdx: number; startY: number; startH0: number; startH1: number
-} | null = null
-
-function startResize(dividerIdx: number, e: MouseEvent) {
-  e.preventDefault()
-  resizingState = {
-    dividerIdx, startY: e.clientY,
-    startH0: rowHeights.value[dividerIdx],
-    startH1: rowHeights.value[dividerIdx + 1],
-  }
-  window.addEventListener('mousemove', onResizeMove)
-  window.addEventListener('mouseup', stopResize)
-}
-function onResizeMove(e: MouseEvent) {
-  if (!resizingState || !gameMRef.value) return
-  const totalH = gameMRef.value.getBoundingClientRect().height
-  const dp = ((e.clientY - resizingState.startY) / totalH) * 100
-  const hs = [...rowHeights.value]
-  hs[resizingState.dividerIdx]     = Math.max(10, resizingState.startH0 + dp)
-  hs[resizingState.dividerIdx + 1] = Math.max(10, resizingState.startH1 - dp)
-  rowHeights.value = hs
-}
-function stopResize() {
-  resizingState = null
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
-}
-
-onUnmounted(() => {
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
-})
-
+const { rowHeights, startResize } = useRowResize(gameMRef)
 
 function workerNames(workerIds: string[]): string[] {
   if (!game.value) return []
@@ -408,22 +258,6 @@ function workerNames(workerIds: string[]): string[] {
     const p = game.value!.players.find(pl => pl.workers.some(w => w.id === wid))
     return p?.name ?? '?'
   })
-}
-function regularWorkers(workers: Worker[]): Worker[] {
-  return workers.filter(w => !w.isAutomaton)
-}
-function automatons(workers: Worker[]): Worker[] {
-  return workers.filter(w => w.isAutomaton)
-}
-function workerAvailable(workers: Worker[]): number {
-  return regularWorkers(workers).filter(w => !w.isTraining && !w.placedAt).length
-}
-function automatonAvailable(workers: Worker[]): number {
-  return automatons(workers).filter(w => !w.placedAt).length
-}
-function workerUnderCapacity(player: Player): boolean {
-  const shatakuCount = player.ownedBuildings.filter(b => b.name === '社宅').length
-  return shatakuCount > 0 && regularWorkers(player.workers).length < 5 + shatakuCount
 }
 
 

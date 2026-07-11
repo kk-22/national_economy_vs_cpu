@@ -34,8 +34,7 @@ npm run deploy       # GitHub Pagesへデプロイ (gh-pages -d dist)
 
 ## カードデータ
 
-- `docs/building-cards.md` に一覧あり
-- ゲーム内では `src/game/constants.ts` にTypeScriptオブジェクトとして定義する
+- `src/game/constants.ts`（プログレス）・`src/game/mecenat-constants.ts`（メセナ）・`src/game/glory-constants.ts`（グローリー）にTypeScriptオブジェクトとして定義する
 
 ## ゲームログの読み方
 

@@ -3,8 +3,8 @@ import { ROUND_CARDS } from './constants'
 import { processRoundEnd } from './round'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { evaluateSimEnd, getTopNActionsGreedy, pickWorkerExpansion } from './cpu-scoring'
-import { setLastCpuNoAutoTarget } from './turns'
 import { placeWorkerOnPublic, placeWorkerOnBuilding, afterAction, afterHumanAction } from './turns'
+import type { CpuNoAutoResult } from './turns'
 import { cpuTakeTurnGreedy, cpuTakeTurnGreedyNoAuto } from './cpu-strategy-greedy'
 import { cpuTakeTurnDisruptiveNoAuto } from './cpu-strategy-disruptive'
 import {
@@ -51,7 +51,8 @@ function simulateUntilBeamOrEnd(state: GameState, beamPlayerId: number, startRou
 
     if (current.id === beamPlayerId) return s
 
-    s = cpuTakeTurnDisruptiveNoAuto(s, current.id)
+    // 探索用の使い捨てシミュレーションのため deferRoundEnd は常にfalseでよい
+    s = cpuTakeTurnDisruptiveNoAuto(s, current.id, false).state
   }
 }
 
@@ -385,25 +386,25 @@ export function cpuTakeTurnBeam(state: GameState, playerId: number): GameState {
   return placeWorkerOnBuilding(state, playerId, bestAction.id)
 }
 
-export function cpuTakeTurnBeamNoAuto(state: GameState, playerId: number): GameState {
+export function cpuTakeTurnBeamNoAuto(state: GameState, playerId: number, deferRoundEnd = false): CpuNoAutoResult {
   const pubOptions = getAvailablePublicWorkplaces(state, playerId)
   const bldOptions = getAvailableOwnedBuildings(state, playerId)
-  if (pubOptions.length === 0 && bldOptions.length === 0) return afterHumanAction(state)
+  if (pubOptions.length === 0 && bldOptions.length === 0) return { state: afterHumanAction(state, deferRoundEnd), target: null }
 
   const expansion = pickWorkerExpansion(state, playerId)
   if (expansion) {
-    setLastCpuNoAutoTarget({ id: expansion.id, type: 'pub' })
-    return placeWorkerOnPublic(state, playerId, expansion.id, true)
+    return { state: placeWorkerOnPublic(state, playerId, expansion.id, true, deferRoundEnd), target: { id: expansion.id, type: 'pub' } }
   }
 
   const startRound = state.round
   const r2Width = computeR2Width(state, playerId)
   const leaves = collectR1Leaves(buildSimState(state), playerId, startRound, R1_BEAM_START_WIDTH, null, r2Width)
-  if (leaves.length === 0) return cpuTakeTurnGreedyNoAuto(state, playerId)
+  if (leaves.length === 0) return cpuTakeTurnGreedyNoAuto(state, playerId, deferRoundEnd)
 
   const bestAction = selectBestFirstAction(leaves, playerId, startRound)
 
-  setLastCpuNoAutoTarget({ id: bestAction.id, type: bestAction.type })
-  if (bestAction.type === 'pub') return placeWorkerOnPublic(state, playerId, bestAction.id, true)
-  return placeWorkerOnBuilding(state, playerId, bestAction.id, true)
+  const s = bestAction.type === 'pub'
+    ? placeWorkerOnPublic(state, playerId, bestAction.id, true, deferRoundEnd)
+    : placeWorkerOnBuilding(state, playerId, bestAction.id, true, deferRoundEnd)
+  return { state: s, target: { id: bestAction.id, type: bestAction.type } }
 }

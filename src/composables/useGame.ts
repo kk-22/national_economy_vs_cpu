@@ -1,11 +1,10 @@
 import { shallowReactive, computed, ref, toRaw } from 'vue'
 import type { GameConfig, GameSeries, GameState, HandCard, PendingAction } from '../game/types'
 import { createGame, createDebugGame } from '../game/init'
-import { calculateScores, confirmSellBuildings, processRoundEnd } from '../game/round'
+import { calculateScores, confirmSellBuildings } from '../game/round'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from '../game/availability'
 import {
   placeWorkerOnPublic, placeWorkerOnBuilding,
-  cpuOneTurnStep, consumeLastCpuNoAutoTarget, skipEmptyPlayerTurn, setDeferRoundEnd,
   selectFarmBuildTarget, confirmBuildPayment, confirmDoublePayment,
   confirmDiscard, confirmDiscardDraw, pickRevealedCard, confirmHandLimitDiscard,
   selectBuildTwoFirstCard, selectBuildTwoSecondCard, confirmBuildTwoCards, confirmFreeBuildCard, selectNoSellBuildCard,
@@ -20,13 +19,13 @@ import {
   getBuildTwoFirstCards,
 } from '../game/build'
 import { toggleDiscardSelection, cancelDiscardChoice, toggleHandLimitSelection } from '../game/resolution'
-import { availableWorkers, ALL_BUILDING_CARDS } from '../game/primitives'
+import { ALL_BUILDING_CARDS } from '../game/primitives'
 import { ROUND_CARDS } from '../game/constants'
 import { GameHistory } from '../game/history'
 import type { HistoryEntry } from '../game/history'
 import { replayToIndex } from '../game/replay'
-
-const SAVE_KEY = 'ne-game-save'
+import { useGamePersistence } from './useGamePersistence'
+import { useCpuTurns } from './useCpuTurns'
 
 const state = shallowReactive<{ game: GameState | null }>({ game: null })
 let history = new GameHistory(1)
@@ -37,31 +36,17 @@ const cpuPaused = ref(false)
 const historyVersion = ref(0)  // incremented after each history mutation to drive canUndo/canRedo reactivity
 
 export function useGame() {
+  const { saveGameState: savePersisted, hasSavedGame, loadSavedGame, clearSavedGame } = useGamePersistence()
 
   function saveGameState(): void {
-    if (!state.game) return
-    try {
-      const data = { game: toRaw(state.game), history: history.toObject() }
-      localStorage.setItem(SAVE_KEY, JSON.stringify(data))
-    } catch { /* quota超過などは無視 */ }
-  }
-
-  function hasSavedGame(): boolean {
-    try {
-      const raw = localStorage.getItem(SAVE_KEY)
-      if (!raw) return false
-      const data = JSON.parse(raw)
-      return !!data?.game
-    } catch { return false }
+    savePersisted(state.game, history.toObject())
   }
 
   function restoreGame(): boolean {
     try {
-      const raw = localStorage.getItem(SAVE_KEY)
-      if (!raw) return false
-      const data = JSON.parse(raw)
-      if (!data?.game) return false
-      const restoredGame = data.game as GameState
+      const loaded = loadSavedGame()
+      if (!loaded) return false
+      const restoredGame = loaded.game
       // 旧バージョンの保存データにないフィールドを補完
       restoredGame.players = restoredGame.players.map(p => ({
         ...p,
@@ -70,11 +55,7 @@ export function useGame() {
         victoryPoints: p.victoryPoints ?? 0,
       }))
       state.game = restoredGame
-      if (data.history) {
-        history = GameHistory.fromObject(data.history)
-      } else {
-        history = new GameHistory((data.game as GameState)._rngSeed)
-      }
+      history = loaded.historyObj ? GameHistory.fromObject(loaded.historyObj) : new GameHistory(restoredGame._rngSeed)
       if (!history.initialState) {
         history.setInitialState(toRaw(state.game))
       }
@@ -83,10 +64,6 @@ export function useGame() {
       cpuPaused.value = false
       return true
     } catch { return false }
-  }
-
-  function clearSavedGame(): void {
-    localStorage.removeItem(SAVE_KEY)
   }
 
   function startGame(config: GameConfig) {
@@ -109,77 +86,10 @@ export function useGame() {
     historyVersion.value++
   }
 
-  // 安全策: プレイヤーのターンなのにワーカーが0のとき自動スキップ
-  function autoAdvanceIfStuck() {
-    if (!state.game) return
-    state.game = skipEmptyPlayerTurn(state.game)
-  }
-
-  // バッチ実行（スキップモード用）— 1ステップずつ history に記録する
-  function runCpuTurns() {
-    if (!state.game || state.game.phase !== 'placement') return
-    if (state.game.pendingAction) return
-    const firstCurrent = state.game.players[state.game.currentPlayerIndex]
-    if (!firstCurrent?.isCpu) return
-
-    let maxSteps = 500  // 安全上限
-    while (maxSteps-- > 0) {
-      if (!state.game || state.game.phase !== 'placement' || state.game.pendingAction) break
-      const curr = state.game.players[state.game.currentPlayerIndex]
-      if (!curr?.isCpu) break
-
-      // ワーカーを置くステップのみ history に記録（turn advance は記録しない）
-      const hadWorkers = availableWorkers(curr).length > 0
-      if (hadWorkers) {
-        const entry: HistoryEntry = { playerId: curr.id, targetId: '__cpu__', targetName: curr.name, timestamp: Date.now() }
-        history.push(entry)
-        historyVersion.value++
-        const next = cpuOneTurnStep(state.game)
-        if (next === state.game) break  // 変化なし（安全策）
-        const captured = consumeLastCpuNoAutoTarget()
-        if (captured) {
-          entry.cpuTargetId = captured.id
-          entry.cpuTargetType = captured.type
-        }
-        state.game = next
-      } else {
-        const next = cpuOneTurnStep(state.game)
-        if (next === state.game) break
-        state.game = next
-      }
-    }
-  }
-
-  // 1ステップ実行（アニメーションあり）
-  function cpuStepAction() {
-    if (!state.game || state.game.phase !== 'placement') return
-    if (state.game.pendingAction) return  // 保留アクション中は実行しない
-    const current = state.game.players[state.game.currentPlayerIndex]
-    if (!current?.isCpu) return
-    const hadWorkers = availableWorkers(current).length > 0
-    if (hadWorkers) {
-      const entry: HistoryEntry = { playerId: current.id, targetId: '__cpu__', targetName: current.name, timestamp: Date.now() }
-      history.push(entry)
-      historyVersion.value++
-      setDeferRoundEnd(true)
-      const next = cpuOneTurnStep(state.game)
-      setDeferRoundEnd(false)
-      const captured = consumeLastCpuNoAutoTarget()
-      if (captured) {
-        entry.cpuTargetId = captured.id
-        entry.cpuTargetType = captured.type
-      }
-      state.game = next
-    } else {
-      const next = cpuOneTurnStep(state.game)
-      if (next !== state.game) state.game = next
-    }
-  }
-
-  function triggerRoundEnd() {
-    if (!state.game?._pendingRoundEnd) return
-    state.game = processRoundEnd({ ...state.game, _pendingRoundEnd: undefined }, true)
-  }
+  const { autoAdvanceIfStuck, runCpuTurns, cpuStepAction, triggerRoundEnd } = useCpuTurns({
+    state,
+    pushHistoryEntry: (entry) => { history.push(entry); historyVersion.value++ },
+  })
 
   const game = computed(() => state.game)
   const humanPlayer = computed(() => state.game?.players.find(p => !p.isCpu) ?? null)

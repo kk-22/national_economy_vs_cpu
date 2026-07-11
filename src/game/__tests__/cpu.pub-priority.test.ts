@@ -141,7 +141,7 @@ describe('greedy: 同名施設があれば自分の場の施設は選択肢か�
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(usedPublicWorkplace(state, result)).toBe('農場')
     expect(usedOwnedBuilding(state, result, 0)).toBeNull()
@@ -161,7 +161,7 @@ describe('greedy: 同名施設があれば自分の場の施設は選択肢か�
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(usedPublicWorkplace(state, result)).toBe('製鉄所')
     expect(usedOwnedBuilding(state, result, 0)).toBeNull()
@@ -183,7 +183,7 @@ describe('random: 同名施設があれば自分の場の施設は選択肢か�
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(usedPublicWorkplace(state, result)).toBe('農場')
     expect(usedOwnedBuilding(state, result, 0)).toBeNull()
@@ -203,7 +203,7 @@ describe('random: 同名施設があれば自分の場の施設は選択肢か�
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(usedPublicWorkplace(state, result)).toBe('製鉄所')
     expect(usedOwnedBuilding(state, result, 0)).toBeNull()
@@ -244,7 +244,7 @@ describe('mcts: 同名施設があれば自分の場の施設は選択肢から�
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(usedPublicWorkplace(state, result)).toBe('農場')
     expect(usedOwnedBuilding(state, result, 0)).toBeNull()
@@ -265,7 +265,7 @@ describe('mcts: 同名施設があれば自分の場の施設は選択肢から�
       ],
     })
 
-    const result = cpuOneTurnStep(state)
+    const result = cpuOneTurnStep(state).state
 
     expect(usedPublicWorkplace(state, result)).toBe('製鉄所')
     expect(usedOwnedBuilding(state, result, 0)).toBeNull()
