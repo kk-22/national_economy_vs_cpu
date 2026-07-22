@@ -276,6 +276,19 @@ export function useGame() {
   function resolveSingleBuildPayment(pa: Extract<PendingAction, { kind: 'choose-build-payment' }>): void {
     const hand = state.game!.players.find(p => p.id === pa.playerId)?.hand ?? []
     const payable = hand.filter(c => c.id !== pa.targetId)
+    // モダニズム建設（consumptionDouble）: cost=0のみ自動確定、消費財のデフォルト選択なし
+    if (pa.consumptionDouble) {
+      if (pa.cost === 0) {
+        if (pendingEntry) {
+          pendingEntry.builtCard = { id: pa.targetId, name: pa.targetName }
+          pendingEntry.paymentCards = []
+        }
+        state.game = confirmBuildPayment(state.game!, [])
+      } else {
+        paymentSelectedIds.value = []
+      }
+      return
+    }
     if (pa.cost === 0 || payable.length === pa.cost) {
       const ids = payable.slice(0, pa.cost).map(c => c.id)
       if (pendingEntry) {
@@ -297,7 +310,15 @@ export function useGame() {
     const idx = paymentSelectedIds.value.indexOf(cardId)
     if (idx >= 0) paymentSelectedIds.value.splice(idx, 1)
     else paymentSelectedIds.value.push(cardId)
-    if (paymentSelectedIds.value.length === pa.cost) {
+    // consumptionDouble時は消費財1枚=2コストとして実効値を計算
+    let effectiveValue = paymentSelectedIds.value.length
+    if (pa.kind === 'choose-build-payment' && pa.consumptionDouble) {
+      const hand = state.game.players.find(p => p.id === pa.playerId)?.hand ?? []
+      const consumptionCount = paymentSelectedIds.value.filter(id => hand.find(c => c.id === id)?.kind === 'consumption').length
+      effectiveValue = consumptionCount * 2 + (paymentSelectedIds.value.length - consumptionCount)
+    }
+    // consumptionDouble時は超過払い可（奇数コストを消費財のみで払う場合等）
+    if (pa.kind === 'choose-build-payment' && pa.consumptionDouble ? effectiveValue >= pa.cost : effectiveValue === pa.cost) {
       const ids = [...paymentSelectedIds.value]
       paymentSelectedIds.value = []
       if (pa.kind === 'choose-build-payment') {
@@ -314,6 +335,17 @@ export function useGame() {
   }
 
   const paymentSelected = computed(() => paymentSelectedIds.value)
+
+  // consumptionDouble時は消費財1枚=2コストとして実効選択値を返す
+  const paymentEffectiveSelected = computed(() => {
+    const pa = state.game?.pendingAction
+    if (pa?.kind === 'choose-build-payment' && pa.consumptionDouble) {
+      const hand = state.game!.players.find(p => p.id === pa.playerId)?.hand ?? []
+      const consumptionCount = paymentSelectedIds.value.filter(id => hand.find(c => c.id === id)?.kind === 'consumption').length
+      return consumptionCount * 2 + (paymentSelectedIds.value.length - consumptionCount)
+    }
+    return paymentSelectedIds.value.length
+  })
 
   function clickDiscardCard(cardId: string) {
     if (!state.game) return
@@ -689,6 +721,7 @@ export function useGame() {
     availableOwnedBuildings,
     pendingAction,
     paymentSelected,
+    paymentEffectiveSelected,
     buildableCards,
     scores,
     canUndo,

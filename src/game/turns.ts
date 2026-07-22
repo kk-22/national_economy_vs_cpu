@@ -255,7 +255,7 @@ export function confirmBuildPayment(state: GameState, paymentIds: string[]): Gam
     const playerHand = getPlayer(state, action.playerId).hand
     const consumptionPaid = paymentIds.filter(id => playerHand.find(c => c.id === id)?.kind === 'consumption').length
     const buildingPaid = paymentIds.length - consumptionPaid
-    if (consumptionPaid * 2 + buildingPaid !== action.cost) return state
+    if (consumptionPaid * 2 + buildingPaid < action.cost) return state
   } else {
     if (paymentIds.length !== action.cost) return state
   }

@@ -42,7 +42,7 @@ const emit = defineEmits<{
 const {
   game, humanPlayer,
   availablePublicWorkplaces, availableOwnedBuildings,
-  pendingAction, paymentSelected, buildableCards, currentWage,
+  pendingAction, paymentSelected, paymentEffectiveSelected, buildableCards, currentWage,
   getBuildingDef,
   clickPublicWorkplace, clickOwnedBuilding,
   clickBuildTarget, clickPaymentCard, clickCancelBuildChoice, clickCancelBuildPayment,
@@ -463,7 +463,7 @@ function tipOn(text: string | false | null | undefined) {
                 <div class="hand-label-row">
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">
-                    {{ paymentInfo?.title }}の建設コスト{{ paymentInfo?.cost }}枚選択 ({{ paymentSelected.length }}/{{ paymentInfo?.cost }})
+                    {{ paymentInfo?.title }}の建設コスト{{ paymentInfo?.cost }}{{ pendingAction.kind === 'choose-build-payment' && pendingAction.consumptionDouble ? '（消費財2倍）' : '枚' }}選択 ({{ paymentEffectiveSelected }}/{{ paymentInfo?.cost }})
                   </span>
                 </div>
                 <div class="card-wrap">
