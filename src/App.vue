@@ -575,7 +575,7 @@ function replayGame() {
     </div>
     <ManualDialog v-if="showManual" @close="closeManual" />
 
-    <div v-if="replayError" class="modal-overlay">
+    <div v-if="replayError" class="modal-overlay" @click.self="clearReplayError()">
       <div class="modal replay-error-modal">
         <div class="modal-header">
           <h2>リプレイエラー</h2>
