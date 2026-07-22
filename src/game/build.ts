@@ -212,7 +212,7 @@ export function cancelBuildPayment(state: GameState): GameState {
   if (sourceEffect?.kind === 'build-no-sell') {
     return { ...state, pendingAction: { kind: 'choose-no-sell-build', playerId: action.playerId, drawAfter: sourceEffect.drawAfter, sourceName: action.sourceName, sourceId: action.sourceId } }
   }
-  return { ...state, pendingAction: { kind: 'choose-build-target', playerId: action.playerId, discount: action.discount, drawAfter: action.drawAfter, sourceName: action.sourceName, sourceId: action.sourceId } }
+  return { ...state, pendingAction: { kind: 'choose-build-target', playerId: action.playerId, discount: action.discount, drawAfter: action.drawAfter, consumptionAfter: action.consumptionAfter, drawAfterEmpty: action.drawAfterEmpty, consumptionDouble: action.consumptionDouble, sourceName: action.sourceName, sourceId: action.sourceId } }
 }
 
 export function cancelBuildTwoPayment(state: GameState): GameState {
