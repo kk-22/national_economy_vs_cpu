@@ -2,10 +2,25 @@ import { getPlayer, drawCards, drawConsumption, shuffle, nextId, updatePlayer, w
 import { FREE_BUILD_ANY_LIMIT } from './constants'
 import { getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards, getNoSellBuildableCards, getFreeBuildableCards, getBuildableCardsConsumptionDouble, getConstructionDiscount } from './build'
 import { cpuRevealPick, cpuDiscardDraw, cpuDiscardGain, cpuBuild, cpuBuildFarmFree, cpuBuildDouble, cpuBuildNoSell, cpuBuildFree, cpuBuildTwo } from './cpu'
-import type { GameState, GameEffect, Worker, HandCard, BuildingCard, CpuStrategy } from './types'
+import type { GameState, GameEffect, Worker, HandCard, BuildingCard, OwnedBuilding, CpuStrategy } from './types'
+
+// 消費財を手札に持つことで直接利益を得る効果
+const CONSUMPTION_VALUE_EFFECT_KINDS = new Set([
+  'p-per-consumption',          // 農協: 手札消費財枚数×勝利点
+  'gain-per-consumption',       // 観光牧場: 手札消費財枚数×収入
+  'p-if-consumption-in-hand-min', // 収穫祭: 手札消費財が規定枚数以上で終了ボーナス
+  'build-consumption-double',   // モダニズム建設: 建設コスト支払い時に消費財1枚=2コスト
+])
+
+// 自分の場に消費財を有効活用できる建物があるか
+export function hasConsumptionValueBuilding(ownedBuildings: OwnedBuilding[]): boolean {
+  return ownedBuildings.some(b => CONSUMPTION_VALUE_EFFECT_KINDS.has(ALL_BUILDING_CARDS[b.name]?.effect.kind ?? ''))
+}
 
 // round.ts の手札上限処理でも使用する
-export function preSelectConsumptions(hand: HandCard[], count: number, series: string): string[] {
+export function preSelectConsumptions(hand: HandCard[], count: number, series: string, ownedBuildings: OwnedBuilding[] = []): string[] {
+  // 消費財を有効活用できる建物がある場合はデフォルト選択しない
+  if (hasConsumptionValueBuilding(ownedBuildings)) return []
   const consumptions = hand.filter(c => c.kind === 'consumption')
   // メセナシリーズでは消費財を最低1枚残す
   const maxAutoSelect = series === 'mecenat'
@@ -67,7 +82,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       if (isCpu) return cpuDiscardDraw(state, playerId, effect.discard, effect.draw, strategy)
       return {
         ...state,
-        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: -1, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series), drawCount: effect.draw },
+        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: -1, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series, player.ownedBuildings), drawCount: effect.draw },
       }
     }
 
@@ -98,7 +113,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       if (isCpu) return cpuDiscardGain(state, playerId, effect.discard, effect.gain, strategy)
       return {
         ...state,
-        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series) },
+        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series, player.ownedBuildings) },
       }
     }
 
@@ -149,7 +164,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       if (isCpu) return cpuDiscardGain(state, playerId, effect.discard, effect.gain, strategy)
       return {
         ...state,
-        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series) },
+        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series, player.ownedBuildings) },
       }
     }
 
@@ -250,7 +265,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       if (isCpu) return cpuDiscardDraw(state, playerId, effect.discard, effect.draw, strategy)
       return {
         ...state,
-        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: -1, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series), drawCount: effect.draw },
+        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: -1, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series, player.ownedBuildings), drawCount: effect.draw },
       }
     }
 
@@ -264,7 +279,7 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       if (isCpu) return cpuDiscardGain(state, playerId, effect.discard, effect.gain, strategy)
       return {
         ...state,
-        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series) },
+        pendingAction: { kind: 'choose-discard', playerId, count: effect.discard, gainAmount: effect.gain, selected: preSelectConsumptions(player.hand, effect.discard - 1, state.series, player.ownedBuildings) },
       }
     }
 

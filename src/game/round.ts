@@ -212,7 +212,7 @@ function finishRoundEnd(state: GameState, noCpu: boolean): GameState {
     if (p.hand.length <= limit) continue
     const excess = p.hand.length - limit
     // メセナシリーズでは消費財を最低1枚残す（消費財1枚だけの場合は自動選択しない）
-    const preSelected = preSelectConsumptions(p.hand, excess - 1, s.series)
+    const preSelected = preSelectConsumptions(p.hand, excess - 1, s.series, p.ownedBuildings)
     s = { ...s, pendingAction: { kind: 'choose-hand-limit', playerId: player.id, limit, count: excess, selected: preSelected, noCpu } }
     return s
   }

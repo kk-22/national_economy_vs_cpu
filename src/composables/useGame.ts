@@ -20,6 +20,7 @@ import {
 } from '../game/build'
 import { toggleDiscardSelection, cancelDiscardChoice, toggleHandLimitSelection } from '../game/resolution'
 import { ALL_BUILDING_CARDS } from '../game/primitives'
+import { hasConsumptionValueBuilding } from '../game/effects'
 import { ROUND_CARDS } from '../game/constants'
 import { GameHistory } from '../game/history'
 import type { HistoryEntry } from '../game/history'
@@ -226,8 +227,12 @@ export function useGame() {
     if (newPa?.kind === 'choose-double-payment') resolveDoublePayment(newPa)
   }
 
-  // メセナシリーズでは消費財を最低1枚残す
-  function autoSelectConsumptionIds(payable: { kind: string; id: string }[], cost: number): string[] {
+  // 消費財を有効活用できる建物がある場合はデフォルト選択しない
+  function autoSelectConsumptionIds(payable: { kind: string; id: string }[], cost: number, playerId?: number): string[] {
+    if (playerId !== undefined) {
+      const player = state.game?.players.find(p => p.id === playerId)
+      if (player && hasConsumptionValueBuilding(player.ownedBuildings)) return []
+    }
     const consumptions = payable.filter(c => c.kind === 'consumption')
     const maxAutoSelect = state.game?.series === 'mecenat'
       ? Math.max(0, Math.min(cost - 1, consumptions.length - 1))
@@ -268,7 +273,7 @@ export function useGame() {
     if (payable.length === pa.cost) {
       confirmDoublePaymentWithEntry(pa, payable.map(c => c.id))
     } else {
-      paymentSelectedIds.value = autoSelectConsumptionIds(payable, pa.cost)
+      paymentSelectedIds.value = autoSelectConsumptionIds(payable, pa.cost, pa.playerId)
     }
   }
 
@@ -297,7 +302,7 @@ export function useGame() {
       }
       state.game = confirmBuildPayment(state.game!, ids)
     } else {
-      paymentSelectedIds.value = autoSelectConsumptionIds(payable, pa.cost)
+      paymentSelectedIds.value = autoSelectConsumptionIds(payable, pa.cost, pa.playerId)
     }
   }
 
@@ -489,7 +494,7 @@ export function useGame() {
         }
         state.game = confirmBuildTwoCards(state.game, payable.map(c => c.id))
       } else {
-        paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.totalCost)
+        paymentSelectedIds.value = autoSelectConsumptionIds(payable, newPa.totalCost, newPa.playerId)
       }
     }
   }
