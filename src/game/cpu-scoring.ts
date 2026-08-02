@@ -274,7 +274,7 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
     case 'draw-consumption-hold': {
       // 醸造所: 次ラウンドに消費財4枚（遅延価値）
       if (round >= 9) return -Infinity  // 最終ラウンドは意味なし
-      return effect.n * w.drawConsumptionFew * 0.7  // 遅延のため若干割引
+      return effect.n * w.drawConsumptionFew * 0.9  // 遅延のため若干割引（1ラウンド遅延のみ）
     }
     case 'p-if-empty-hand':
     case 'p-vp-double':
@@ -519,9 +519,12 @@ export function scoreIntermediateBeam(state: GameState, playerId: number, startR
 
   const buildingCards = player.hand.filter(c => c.kind === 'building').length
   const consumptionCards = player.hand.filter(c => c.kind === 'consumption').length
-  score += buildingCards * w.buildingCardValue + consumptionCards * w.consumptionCardValue
+  const consumptionCardValue = state.series === 'mecenat'
+    ? Math.min(w.consumptionCardValue * 3, w.buildingCardValue - 1)
+    : w.consumptionCardValue
+  score += buildingCards * w.buildingCardValue + consumptionCards * consumptionCardValue
 
-  if (state.players[state.startPlayerIndex]?.id === playerId) score += w.startPlayerBonus
+  if (state.players[state.startPlayerIndex]?.id === playerId) score += w.startPlayerBonus * 0.5
 
   score += player.ownedBuildings.reduce(
     (s, b) => s + (ALL_BUILDING_CARDS[b.name]?.assetValue ?? 0) * w.assetValueMult, 0,

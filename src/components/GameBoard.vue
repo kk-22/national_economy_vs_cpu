@@ -570,7 +570,7 @@ function tipOn(text: string | false | null | undefined) {
                   <span :class="['pending-title', sellSelectedTotal >= pendingAction.deficit ? 'sell-ok' : 'sell-warning']">
                     ⚠ 賃金不足のため売却する建物を選択（選択中 ${{ sellSelectedTotal }} / 必要額 ${{ pendingAction.deficit }}）
                   </span>
-                  <button class="btn-confirm" :disabled="pendingAction.selected.length === 0" @click="clickConfirmSellBuildings">確定</button>
+                  <button class="btn-confirm" :disabled="sellSelectedTotal < pendingAction.deficit" @click="clickConfirmSellBuildings">確定</button>
                 </div>
                 <div v-if="sellBuildingError" class="sell-error">{{ sellBuildingError }}</div>
                 <div class="sell-buildings-row">

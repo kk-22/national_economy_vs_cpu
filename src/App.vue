@@ -34,7 +34,7 @@ const showSetup = ref(false)
 const setupTotal = ref(4)       // 総プレイヤー数 (2-4)
 const setupHasPlayer = ref(true) // 人間プレイヤーあり
 const setupPlayerOrder = ref(1)
-const setupCpuStrategies = ref<CpuStrategy[]>(['random', 'random', 'random', 'random'])
+const setupCpuStrategies = ref<CpuStrategy[]>(['beam', 'beam', 'beam', 'beam'])
 const setupSeries = ref<GameSeries>('progress')
 const menuOpen = ref(false)
 const showSummary = ref(false)
@@ -65,9 +65,10 @@ function syncSetupFromGame(g: typeof game.value) {
   if (!g) return
   setupTotal.value = g.players.length
   setupHasPlayer.value = g.players.some(p => !p.isCpu)
+  const VALID_SETUP_STRATEGIES: CpuStrategy[] = ['greedy', 'disruptive', 'beam']
   const cpuStrategies = g.players.filter(p => p.isCpu).map(p => p.cpuStrategy)
   const next = [...setupCpuStrategies.value]
-  cpuStrategies.forEach((s, i) => { next[i] = s })
+  cpuStrategies.forEach((s, i) => { next[i] = VALID_SETUP_STRATEGIES.includes(s) ? s : 'beam' })
   setupCpuStrategies.value = next
 }
 

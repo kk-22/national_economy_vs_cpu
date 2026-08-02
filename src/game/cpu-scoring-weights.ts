@@ -78,7 +78,7 @@ export const DEFAULT_WEIGHTS: ScoreWeights = {
   drawWorkerMult:         1.887,
   drawFactoryBonus:       1.842,
   drawIfEmptyBase:        11.906,
-  drawBecomeStart:        17.823,
+  drawBecomeStart:        14.0,
   slashBurn:              19.150,
   drawConsumptionFew:     18.898,
   drawConsumptionMany:    4.618,

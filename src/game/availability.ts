@@ -34,6 +34,7 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity, 
         return player.hand.length - 2 >= cost
       })
     }
+    case 'draw-consumption-hold': return !state || state.round < 9
     case 'draw-consumption-to': return player.hand.length < effect.target
     case 'reveal-pick':     return true
     // --- メセナ専用 ---
