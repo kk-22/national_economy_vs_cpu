@@ -91,10 +91,13 @@ export function drawCards(state: GameState, playerId: number, n: number): GameSt
         drawn++
         continue
       }
-      let shuffled: BuildingCard[]
-      ;[s, shuffled] = shuffle(s, s.discardPile)
-      s = { ...s, buildingDeck: shuffled, discardPile: [] }
-      s = addLog(s, '山札が切れたため捨て札を切り直しました')
+      // 捨て順固定: シャッフルせず捨てた順に山札へ戻す。
+      // 理由: シャッフルすると「戻るボタンで捨てるカードを変えた際のスコア比較」ができなくなるため。
+      // （捨て選択がRNG消費経路を変えてシャッフル結果を大きく変動させてしまう）
+      // CPUの捨て札は非公開のため山札読みの優位は限定的で、かつCPUはシミュレーションで
+      // ドロー結果を先読みするズルが既に存在するため、プレイヤーの若干の優位は許容範囲とする。
+      s = { ...s, buildingDeck: [...s.discardPile], discardPile: [] }
+      s = addLog(s, '山札切れにより捨て札が山札に戻しました')
     }
     const [card, ...rest] = s.buildingDeck
     s = { ...s, buildingDeck: rest }

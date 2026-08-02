@@ -1,5 +1,5 @@
 import { ROUND_CARDS } from './constants'
-import { rngNext, shuffle, updatePlayer, getPlayer, drawCards, workerCount, ALL_BUILDING_CARDS } from './primitives'
+import { rngNext, updatePlayer, getPlayer, drawCards, workerCount, ALL_BUILDING_CARDS } from './primitives'
 import { constructBuilding, getConstructionDiscount } from './build'
 import type { GameState, HandCard, BuildingCard, CpuStrategy } from './types'
 
@@ -49,9 +49,8 @@ export function cpuRevealPick(state: GameState, playerId: number, n: number, str
   for (let i = 0; i < n; i++) {
     if (s.buildingDeck.length === 0) {
       if (s.discardPile.length > 0) {
-        let shuffled: BuildingCard[]
-        ;[s, shuffled] = shuffle(s, s.discardPile)
-        s = { ...s, buildingDeck: shuffled, discardPile: [] }
+        // 捨て順固定（primitives.ts の drawCards と同様の理由）
+        s = { ...s, buildingDeck: [...s.discardPile], discardPile: [] }
       } else break
     }
     const [card, ...rest] = s.buildingDeck

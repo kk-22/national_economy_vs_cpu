@@ -1,8 +1,8 @@
-import { getPlayer, drawCards, drawConsumption, shuffle, nextId, updatePlayer, workerCount, getMaxWorkers, addLog, availableWorkers, ALL_BUILDING_CARDS } from './primitives'
+import { getPlayer, drawCards, drawConsumption, nextId, updatePlayer, workerCount, getMaxWorkers, addLog, availableWorkers, ALL_BUILDING_CARDS } from './primitives'
 import { FREE_BUILD_ANY_LIMIT } from './constants'
 import { getBuildableCards, getFarmBuildableCards, getDoubleBuildableFirstCards, getNoSellBuildableCards, getFreeBuildableCards, getBuildableCardsConsumptionDouble, getConstructionDiscount } from './build'
 import { cpuRevealPick, cpuDiscardDraw, cpuDiscardGain, cpuBuild, cpuBuildFarmFree, cpuBuildDouble, cpuBuildNoSell, cpuBuildFree, cpuBuildTwo } from './cpu'
-import type { GameState, GameEffect, Worker, HandCard, BuildingCard, OwnedBuilding, CpuStrategy } from './types'
+import type { GameState, GameEffect, Worker, HandCard, OwnedBuilding, CpuStrategy } from './types'
 
 // 消費財を手札に持つことで直接利益を得る効果
 const CONSUMPTION_VALUE_EFFECT_KINDS = new Set([
@@ -65,9 +65,8 @@ export function applyEffect(state: GameState, playerId: number, effect: GameEffe
       for (let i = 0; i < effect.n; i++) {
         if (s.buildingDeck.length === 0) {
           if (s.discardPile.length > 0) {
-            let shuffled: BuildingCard[]
-            ;[s, shuffled] = shuffle(s, s.discardPile)
-            s = { ...s, buildingDeck: shuffled, discardPile: [] }
+            // 捨て順固定（primitives.ts の drawCards と同様の理由）
+            s = { ...s, buildingDeck: [...s.discardPile], discardPile: [] }
           } else break
         }
         const [card, ...rest] = s.buildingDeck
