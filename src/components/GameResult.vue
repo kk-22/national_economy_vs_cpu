@@ -10,6 +10,7 @@ const emit = defineEmits<{
   replay: []
   openSetup: []
   close: []
+  undo: []
 }>()
 
 function strategyLabel(strategy: CpuStrategy): string {
@@ -59,6 +60,7 @@ function strategyLabel(strategy: CpuStrategy): string {
       </table>
       <p class="winner-msg">🏆 {{ game.players[scores.reduce((a,b) => a.total > b.total ? a : b).playerId].name }} の勝利！</p>
       <div class="gameover-actions">
+        <button class="btn-secondary" @click="emit('undo')">◀ 1手戻る</button>
         <button class="btn-primary" @click="emit('replay')">もう一度</button>
         <button class="btn-secondary" @click="emit('openSetup')">設定を変更</button>
       </div>

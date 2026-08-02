@@ -16,6 +16,7 @@ const {
   saveGameState, hasSavedGame, restoreGame,
   isUndoRedo, cpuPaused, resumeCpu,
   replayError, clearReplayError,
+  undo,
 } = useGame()
 
 // ---- ドロワーログ ハイライト ----
@@ -493,6 +494,7 @@ function replayGame() {
       @replay="replayGame"
       @openSetup="openSetup"
       @close="showResult = false"
+      @undo="() => { showResult = false; undo() }"
     />
   </template>
 

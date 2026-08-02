@@ -319,7 +319,7 @@ function tipOn(text: string | false | null | undefined) {
           @touchstart="startRedoLongPress"
           @touchend.prevent="handleRedoTouchEnd"
           @click="handleRedoClick"
-        >次へ ▶</button>
+        >進む ▶</button>
       </div>
       <button class="menu-btn" @click="emit('menuOpen')">☰</button>
     </div>
@@ -344,8 +344,10 @@ function tipOn(text: string | false | null | undefined) {
                   <span v-if="cpu.victoryPoints > 0" class="vp-badge">勝利点{{ cpu.victoryPoints }}枚</span>
                   <span class="worker-badge">労働者{{ workerAvailable(cpu.workers) }}/<span :class="{ 'worker-limit-alert': workerUnderCapacity(cpu) }">{{ regularWorkers(cpu.workers).length }}</span><template v-if="automatons(cpu.workers).length > 0"> 機械人形{{ automatonAvailable(cpu.workers) }}/{{ automatons(cpu.workers).length }}</template></span>
                   <span class="cpu-money">${{ cpu.money }}</span>
-                  <span class="hand-count"><span class="hand-count-bold">手札{{ handCount(cpu.hand) }}</span>{{ handDetail(cpu.hand) }}</span>
-                  <span v-if="game.startPlayerIndex === cpu.id" class="sp-badge">🚩SP</span>
+                  <div class="cpu-header-row2">
+                    <span class="hand-count"><span class="hand-count-bold">手札{{ handCount(cpu.hand) }}</span>{{ handDetail(cpu.hand) }}</span>
+                    <span v-if="game.startPlayerIndex === cpu.id" class="sp-badge">🚩SP</span>
+                  </div>
                 </div>
                 <div class="cpu-cards-scroll">
                   <div class="card-wrap">
@@ -786,7 +788,7 @@ function tipOn(text: string | false | null | undefined) {
           @touchstart="startRedoLongPress"
           @touchend.prevent="handleRedoTouchEnd"
           @click="handleRedoClick"
-        >次へ ▶</button>
+        >進む ▶</button>
         </div>
         <div class="log-label">ログ</div>
         <div class="log-scroll">

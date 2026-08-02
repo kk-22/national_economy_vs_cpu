@@ -154,12 +154,16 @@ export function useGame() {
 
     if (pa?.kind === 'choose-discard') {
       const hand = state.game.players.find(p => p.id === pa.playerId)?.hand ?? []
-      if (hand.length === pa.count) {
-        const allIds = hand.map(c => c.id)
+      const allConsumption = hand.length > 0 && hand.every(c => c.kind === 'consumption')
+      if (hand.length === pa.count || allConsumption) {
+        const toSelect = hand.slice(0, pa.count).map(c => c.id)
         if (pendingEntry) {
-          pendingEntry.discardedCards = hand.map(c => ({ id: c.id, name: c.kind === 'building' ? c.name : '消費財' }))
+          pendingEntry.discardedCards = toSelect.map(sid => {
+            const c = hand.find(h => h.id === sid)!
+            return { id: c.id, name: c.kind === 'building' ? c.name : '消費財' }
+          })
         }
-        state.game = { ...state.game, pendingAction: { ...pa, selected: allIds } }
+        state.game = { ...state.game, pendingAction: { ...pa, selected: toSelect } }
         if (pa.gainAmount === -1) {
           state.game = confirmDiscardDraw(state.game, pa.drawCount ?? 4)
         } else {
