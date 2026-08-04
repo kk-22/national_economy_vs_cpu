@@ -16,7 +16,7 @@ const {
   saveGameState, hasSavedGame, restoreGame,
   isUndoRedo, cpuPaused, resumeCpu,
   replayError, clearReplayError,
-  undo,
+  undo, canUndo, availableRoundsForJump, jumpToRound,
 } = useGame()
 
 // ---- ドロワーログ ハイライト ----
@@ -491,10 +491,13 @@ function replayGame() {
     <GameResult v-if="game.phase === 'game-over' && showResult"
       :game="game"
       :scores="scores!"
+      :canUndo="canUndo"
+      :availableRoundsForJump="availableRoundsForJump"
       @replay="replayGame"
       @openSetup="openSetup"
       @close="showResult = false"
       @undo="() => { showResult = false; undo() }"
+      @jump="(round: number) => { showResult = false; jumpToRound(round) }"
     />
   </template>
 

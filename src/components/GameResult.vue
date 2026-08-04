@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { GameState, ScoreResult, CpuStrategy } from '../game/types'
+import { useLongPressAction } from '../composables/useLongPressAction'
+import RoundJumpDialog from './RoundJumpDialog.vue'
 
-defineProps<{
+const props = defineProps<{
   game: GameState
   scores: ScoreResult[]
+  canUndo: boolean
+  availableRoundsForJump: number[]
 }>()
 
 const emit = defineEmits<{
@@ -11,7 +16,21 @@ const emit = defineEmits<{
   openSetup: []
   close: []
   undo: []
+  jump: [round: number]
 }>()
+
+// ---- 1手戻る 長押し ----
+const canUndo = computed(() => props.canUndo)
+const {
+  showDialog: showRoundJumpDialog,
+  startLongPress, cancelLongPress, handleTouchEnd,
+  handleClick: handleUndoClick,
+} = useLongPressAction(canUndo, () => emit('undo'))
+
+function handleRoundJump(round: number) {
+  showRoundJumpDialog.value = false
+  emit('jump', round)
+}
 
 function strategyLabel(strategy: CpuStrategy): string {
   switch (strategy) {
@@ -60,10 +79,26 @@ function strategyLabel(strategy: CpuStrategy): string {
       </table>
       <p class="winner-msg">🏆 {{ game.players[scores.reduce((a,b) => a.total > b.total ? a : b).playerId].name }} の勝利！</p>
       <div class="gameover-actions">
-        <button class="btn-secondary" @click="emit('undo')">◀ 1手戻る</button>
+        <button
+          class="btn-secondary"
+          :disabled="!canUndo"
+          @mousedown="startLongPress"
+          @mouseup="cancelLongPress"
+          @mouseleave="cancelLongPress"
+          @touchstart="startLongPress"
+          @touchend.prevent="handleTouchEnd"
+          @click="handleUndoClick"
+        >◀ 1手戻る</button>
         <button class="btn-primary" @click="emit('replay')">もう一度</button>
         <button class="btn-secondary" @click="emit('openSetup')">設定を変更</button>
       </div>
     </div>
   </div>
+
+  <RoundJumpDialog
+    v-if="showRoundJumpDialog"
+    :available-rounds="availableRoundsForJump"
+    @close="showRoundJumpDialog = false"
+    @jump="handleRoundJump"
+  />
 </template>

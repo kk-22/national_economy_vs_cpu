@@ -416,8 +416,11 @@ function tipOn(text: string | false | null | undefined) {
               <span v-if="(humanPlayer?.victoryPoints ?? 0) > 0" class="vp-badge">勝利点{{ humanPlayer!.victoryPoints }}枚</span>
               <span class="worker-badge">労働者{{ humanPlayer ? workerAvailable(humanPlayer.workers) : '' }}/<span :class="{ 'worker-limit-alert': humanPlayer != null && workerUnderCapacity(humanPlayer) }">{{ humanPlayer ? regularWorkers(humanPlayer.workers).length : '' }}</span><template v-if="humanPlayer && automatons(humanPlayer.workers).length > 0"> 機械人形{{ automatonAvailable(humanPlayer.workers) }}/{{ automatons(humanPlayer.workers).length }}</template></span>
               <span class="wage-summary">
-                所持金${{ displayMoney }} -
-                <span :class="displayMoney >= (humanPlayer ? regularWorkers(humanPlayer.workers).length : 0) * currentWage ? 'wage-cost wage-cost--ok' : 'wage-cost'">賃金${{ (humanPlayer ? regularWorkers(humanPlayer.workers).length : 0) * currentWage }}</span>
+                所持金${{ displayMoney }}
+                <template v-if="game?.phase !== 'game-over'">
+                  -
+                  <span :class="displayMoney >= (humanPlayer ? regularWorkers(humanPlayer.workers).length : 0) * currentWage ? 'wage-cost wage-cost--ok' : 'wage-cost'">賃金${{ (humanPlayer ? regularWorkers(humanPlayer.workers).length : 0) * currentWage }}</span>
+                </template>
               </span>
               <span v-if="game.startPlayerIndex === humanPlayer?.id" class="sp-badge">🚩SP</span>
             </div>
