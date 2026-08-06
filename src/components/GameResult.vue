@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref } from 'vue'
 import type { GameState, ScoreResult, CpuStrategy } from '../game/types'
-import { useLongPressAction } from '../composables/useLongPressAction'
 import RoundJumpDialog from './RoundJumpDialog.vue'
 
 const props = defineProps<{
@@ -19,13 +18,7 @@ const emit = defineEmits<{
   jump: [round: number]
 }>()
 
-// ---- 1手戻る 長押し ----
-const canUndo = computed(() => props.canUndo)
-const {
-  showDialog: showRoundJumpDialog,
-  startLongPress, cancelLongPress, handleTouchEnd,
-  handleClick: handleUndoClick,
-} = useLongPressAction(canUndo, () => emit('undo'))
+const showRoundJumpDialog = ref(false)
 
 function handleRoundJump(round: number) {
   showRoundJumpDialog.value = false
@@ -82,12 +75,12 @@ function strategyLabel(strategy: CpuStrategy): string {
         <button
           class="btn-secondary"
           :disabled="!canUndo"
-          @mousedown="startLongPress"
-          @mouseup="cancelLongPress"
-          @mouseleave="cancelLongPress"
-          @touchstart="startLongPress"
-          @touchend.prevent="handleTouchEnd"
-          @click="handleUndoClick"
+          @click="showRoundJumpDialog = true"
+        >ラウンド指定で戻る</button>
+        <button
+          class="btn-secondary"
+          :disabled="!canUndo"
+          @click="emit('undo')"
         >◀ 1手戻る</button>
         <button class="btn-primary" @click="emit('replay')">もう一度</button>
         <button class="btn-secondary" @click="emit('openSetup')">設定を変更</button>
