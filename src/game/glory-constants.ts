@@ -31,7 +31,7 @@ export const GLORY_BUILDING_CARDS: Record<string, BuildingCardDef> = {
   '収穫祭':         { name: '収穫祭',         cost: 5, assetValue: 26,  tags: [],              canSell: false, isWorkplace: false, count: 1, effect: { kind: 'p-if-consumption-in-hand-min', minCount: 4, bonus: 26 } },
   '技術展示会':     { name: '技術展示会',     cost: 5, assetValue: 24,  tags: [],              canSell: false, isWorkplace: false, count: 1, effect: { kind: 'p-if-tag-asset-min', tag: 'industry', minAsset: 30, bonus: 24 } },
   // cost: 6
-  '温室':           { name: '温室',           cost: 6, assetValue: 18,  tags: [],              canSell: true,  isWorkplace: true,  count: 2, constructionDiscount: { condition: 'own-vp-min', minVp: 4, discount: 2 }, effect: { kind: 'draw-consumption', n: 4 },           beamCategory: 'draw-consumption' },
+  '温室':           { name: '温室',           cost: 6, assetValue: 18,  tags: ['agriculture'],              canSell: true,  isWorkplace: true,  count: 2, constructionDiscount: { condition: 'own-vp-min', minVp: 4, discount: 2 }, effect: { kind: 'draw-consumption', n: 4 },           beamCategory: 'draw-consumption' },
   '神殿':           { name: '神殿',           cost: 6, assetValue: 30,  tags: [],              canSell: false, isWorkplace: false, count: 1, effect: { kind: 'p-if-only-no-sell', bonus: 30 } },
   // cost: 7
   '機関車工場':     { name: '機関車工場',     cost: 7, assetValue: 24,  tags: ['industry'],    canSell: true,  isWorkplace: true,  count: 2, constructionDiscount: { condition: 'own-vp-min', minVp: 5, discount: 3 }, effect: { kind: 'discard-draw', discard: 3, draw: 7 }, beamCategory: 'draw-building' },
