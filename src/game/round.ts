@@ -424,11 +424,12 @@ export function calculateScores(state: GameState): ScoreResult[] {
     const forgivenWages = Math.min(unpaidWages, forgiveMax)
     const unpaidPenalty = (unpaidWages - forgivenWages) * 3
 
-    // 勝利点計算: floor(n/3)*10 + (n%3)*1。会計事務所所有で2倍
+    // 勝利点計算: floor(n/3)*10 + (n%3)*1。会計事務所所有で2倍（2倍分の増加は建物効果側に計上）
     const vp = player.victoryPoints ?? 0
     const baseVpScore = Math.floor(vp / 3) * 10 + (vp % 3) * 1
     const hasKaikei = player.ownedBuildings.some(b => ALL_BUILDING_CARDS[b.name]?.effect.kind === 'p-vp-double')
-    const vpScore = hasKaikei ? baseVpScore * 2 : baseVpScore
+    if (hasKaikei) bonuses += baseVpScore
+    const vpScore = baseVpScore
 
     const money = player.money ?? 0
     return {

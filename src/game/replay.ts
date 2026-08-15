@@ -133,26 +133,33 @@ function replayHumanEntry(state: GameState, entry: HistoryEntry): GameState {
   return resolvePending(s, entry)
 }
 
+// 1エントリ分を現在の状態に適用する（undo/redo再生・履歴集計の双方から利用）
+export function applyHistoryEntry(state: GameState, entry: HistoryEntry): GameState {
+  let s = state
+  if (entry.targetId === '__cpu__') {
+    s = replayCpuEntry(s, entry)
+  } else if (entry.targetId === '__hand-limit__') {
+    if (s.pendingAction?.kind === 'choose-hand-limit') {
+      const pa = s.pendingAction
+      const ids = entry.handLimitDiscarded ?? []
+      s = { ...s, pendingAction: { ...pa, selected: ids } }
+      s = confirmHandLimitDiscard(s)
+    }
+  } else if (entry.targetId === '__sell__') {
+    if (s.pendingAction?.kind === 'choose-sell-buildings') {
+      s = confirmSellBuildings(s, entry.soldBuildingIds ?? [])
+    }
+  } else {
+    s = replayHumanEntry(s, entry)
+  }
+  return s
+}
+
 // initialState から actionLog の全エントリを順に再実行して状態を返す
 export function replayToIndex(initialState: GameState, actionLog: HistoryEntry[]): GameState {
   let s = initialState
   for (const entry of actionLog) {
-    if (entry.targetId === '__cpu__') {
-      s = replayCpuEntry(s, entry)
-    } else if (entry.targetId === '__hand-limit__') {
-      if (s.pendingAction?.kind === 'choose-hand-limit') {
-        const pa = s.pendingAction
-        const ids = entry.handLimitDiscarded ?? []
-        s = { ...s, pendingAction: { ...pa, selected: ids } }
-        s = confirmHandLimitDiscard(s)
-      }
-    } else if (entry.targetId === '__sell__') {
-      if (s.pendingAction?.kind === 'choose-sell-buildings') {
-        s = confirmSellBuildings(s, entry.soldBuildingIds ?? [])
-      }
-    } else {
-      s = replayHumanEntry(s, entry)
-    }
+    s = applyHistoryEntry(s, entry)
   }
   return s
 }

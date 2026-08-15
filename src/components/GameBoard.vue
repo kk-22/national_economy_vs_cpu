@@ -15,6 +15,7 @@ import { getBuildTwoSecondCards, getConstructionDiscount } from '../game/build'
 import HandSortHeader from './HandSortHeader.vue'
 import HCard from './HCard.vue'
 import RoundJumpDialog from './RoundJumpDialog.vue'
+import GameMenuButtons from './GameMenuButtons.vue'
 
 const props = defineProps<{
   activatedIds: string[]
@@ -35,6 +36,7 @@ const emit = defineEmits<{
   openSetup: []
   openSummary: []
   openManual: []
+  openPlayHistory: []
   resume: []
   openResult: []
 }>()
@@ -764,9 +766,12 @@ function tipOn(text: string | false | null | undefined) {
             <span class="hbadge">家計 ${{ game.household }}</span>
             <span class="hbadge">賃金 ${{ currentWage }}</span>
           </div>
-          <button class="btn-restart" @click="emit('openManual')">📖 説明書</button>
-          <button class="btn-restart" @click="emit('openSetup')">⚙️ ゲーム設定</button>
-          <button class="btn-restart" @click="emit('openSummary')">📋 ラウンド毎の情報</button>
+          <GameMenuButtons
+            @openManual="emit('openManual')"
+            @openSetup="emit('openSetup')"
+            @openSummary="emit('openSummary')"
+            @openPlayHistory="emit('openPlayHistory')"
+          />
         </div>
         <div class="log-undo-bar">
           <button

@@ -8,6 +8,8 @@ import GameSetup from './components/GameSetup.vue'
 import GameResult from './components/GameResult.vue'
 import GameBoard from './components/GameBoard.vue'
 import ManualDialog from './components/ManualDialog.vue'
+import PlayHistoryModal from './components/PlayHistoryModal.vue'
+import GameMenuButtons from './components/GameMenuButtons.vue'
 
 const {
   game, humanPlayer, isHumanTurn, currentWage,
@@ -17,6 +19,7 @@ const {
   isUndoRedo, cpuPaused, resumeCpu,
   replayError, clearReplayError,
   undo, canUndo, availableRoundsForJump, jumpToRound,
+  finalizePlayHistory,
 } = useGame()
 
 // ---- ドロワーログ ハイライト ----
@@ -39,6 +42,7 @@ const setupCpuStrategies = ref<CpuStrategy[]>(['beam', 'beam', 'beam', 'beam'])
 const setupSeries = ref<GameSeries>('progress')
 const menuOpen = ref(false)
 const showSummary = ref(false)
+const showPlayHistory = ref(false)
 const showManual = ref(false)
 const showResult = ref(true)
 const animSpeed = ref<'none' | 'short' | 'long'>('short')
@@ -47,7 +51,7 @@ const settingsPaused = ref(false)
 const cpuThinkingPlayerId = ref<number | null>(null)
 
 watchEffect(() => {
-  const lock = (showManual.value || showSummary.value || !!replayError.value) ? 'hidden' : ''
+  const lock = (showManual.value || showSummary.value || showPlayHistory.value || !!replayError.value) ? 'hidden' : ''
   document.documentElement.style.overflow = lock
   document.body.style.overflow = lock
 })
@@ -207,6 +211,10 @@ watch(game, (newGame, oldGame) => {
       }
     }
     return
+  }
+
+  if (newGame.phase === 'game-over' && oldGame.phase !== 'game-over') {
+    finalizePlayHistory()
   }
 
   const hasRoundChange = newGame.round === oldGame.round + 1
@@ -485,6 +493,7 @@ function replayGame() {
       @openSetup="openSetup"
       @openSummary="showSummary = true"
       @openManual="showManual = true"
+      @openPlayHistory="showPlayHistory = true"
       @resume="resumeAfterUndo"
       @openResult="showResult = true"
     />
@@ -495,6 +504,7 @@ function replayGame() {
       :availableRoundsForJump="availableRoundsForJump"
       @replay="replayGame"
       @openSetup="openSetup"
+      @openPlayHistory="showPlayHistory = true"
       @close="showResult = false"
       @undo="() => { showResult = false; undo() }"
       @jump="(round: number) => { showResult = false; jumpToRound(round) }"
@@ -538,9 +548,12 @@ function replayGame() {
             <span class="hbadge">賃金 ${{ currentWage }}</span>
             <span class="hbadge">家計 ${{ game.household }}</span>
             <span class="hbadge">山札 {{ game.buildingDeck.length }}枚</span>
-            <button class="btn-restart" @click="showManual = true; menuOpen = false">📖 説明書</button>
-            <button class="btn-restart" @click="openSetup(); menuOpen = false">⚙️ ゲーム設定</button>
-            <button class="btn-restart" @click="showSummary = true; menuOpen = false">📋 ラウンド毎の情報</button>
+            <GameMenuButtons
+              @openManual="showManual = true; menuOpen = false"
+              @openSetup="openSetup(); menuOpen = false"
+              @openSummary="showSummary = true; menuOpen = false"
+              @openPlayHistory="showPlayHistory = true; menuOpen = false"
+            />
           </div>
           <div class="drawer-log-label">ログ</div>
         </div>
@@ -580,6 +593,15 @@ function replayGame() {
       </div>
     </div>
     <ManualDialog v-if="showManual" @close="closeManual" />
+    <PlayHistoryModal
+      v-if="showPlayHistory"
+      :tipEnter="onTipEnter"
+      :tipLeave="onTipLeave"
+      :tipTouchStart="onTipTouchStart"
+      :tipTouchEnd="onTipTouchEnd"
+      :tipTouchMove="onTipTouchMove"
+      @close="showPlayHistory = false"
+    />
 
     <div v-if="replayError" class="modal-overlay" @click.self="clearReplayError()">
       <div class="modal replay-error-modal">

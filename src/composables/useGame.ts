@@ -25,7 +25,9 @@ import { ROUND_CARDS } from '../game/constants'
 import { GameHistory } from '../game/history'
 import type { HistoryEntry } from '../game/history'
 import { replayToIndex } from '../game/replay'
+import { computePlaySummary } from '../game/historyStats'
 import { useGamePersistence } from './useGamePersistence'
+import { usePlayHistory } from './usePlayHistory'
 import { useCpuTurns } from './useCpuTurns'
 
 const state = shallowReactive<{ game: GameState | null }>({ game: null })
@@ -35,6 +37,8 @@ const isUndoRedo = ref(false)
 const replayError = ref<string | null>(null)
 const cpuPaused = ref(false)
 const historyVersion = ref(0)  // incremented after each history mutation to drive canUndo/canRedo reactivity
+let isDebugGame = false
+let historyFinalized = false  // finalizePlayHistory の二重記録防止
 
 export function useGame() {
   const { saveGameState: savePersisted, hasSavedGame, loadSavedGame, clearSavedGame } = useGamePersistence()
@@ -63,6 +67,8 @@ export function useGame() {
       historyVersion.value++
       pendingEntry = null
       cpuPaused.value = false
+      isDebugGame = false
+      historyFinalized = false
       return true
     } catch { return false }
   }
@@ -75,6 +81,8 @@ export function useGame() {
     pendingEntry = null
     cpuPaused.value = false
     historyVersion.value++
+    isDebugGame = false
+    historyFinalized = false
   }
 
   function startDebugGame(cpuCount: number = 3, series: GameSeries = 'progress', playerOrder: number = 1) {
@@ -85,6 +93,19 @@ export function useGame() {
     pendingEntry = null
     cpuPaused.value = false
     historyVersion.value++
+    isDebugGame = true
+    historyFinalized = false
+  }
+
+  // ゲーム終了時に1回だけ、プレイ履歴要約を保存する
+  function finalizePlayHistory(): void {
+    if (historyFinalized || isDebugGame) return
+    if (!state.game || state.game.phase !== 'game-over' || !history.initialState) return
+    const sc = scores.value
+    if (!sc) return
+    historyFinalized = true
+    const summary = computePlaySummary(history.initialState, history.actionLog, state.game, sc)
+    if (summary) usePlayHistory().appendPlayRecord(summary)
   }
 
   const { autoAdvanceIfStuck, runCpuTurns, cpuStepAction, triggerRoundEnd } = useCpuTurns({
@@ -777,5 +798,6 @@ export function useGame() {
     jumpToEnd,
     replayError,
     clearReplayError: () => { replayError.value = null },
+    finalizePlayHistory,
   }
 }

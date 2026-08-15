@@ -129,7 +129,7 @@ describe('calculateScores: 勝利点計算', () => {
     expect(score.vpScore).toBe(11) // floor(4/3)*10 + (4%3)*1 = 10+1
   })
 
-  test('会計事務所（p-vp-double）所有時は勝利点スコアが2倍になる', () => {
+  test('会計事務所（p-vp-double）所有時、2倍分の増加は建物効果(bonuses)に計上され、勝利点(vpScore)はベース点のまま', () => {
     const player = makePlayer({
       id: 0, money: 0,
       ownedBuildings: [makeOwnedBuilding('会計事務所')],
@@ -139,7 +139,8 @@ describe('calculateScores: 勝利点計算', () => {
 
     const [score] = calculateScores(state)
 
-    expect(score.vpScore).toBe(22) // 11 × 2
+    expect(score.vpScore).toBe(11) // ベース点のまま（floor(4/3)*10 + (4%3)*1）
+    expect(score.bonuses).toBe(11) // 2倍分の増加がbonuses側に計上される
   })
 })
 

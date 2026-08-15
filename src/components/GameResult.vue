@@ -13,6 +13,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   replay: []
   openSetup: []
+  openPlayHistory: []
   close: []
   undo: []
   jump: [round: number]
@@ -72,18 +73,23 @@ function strategyLabel(strategy: CpuStrategy): string {
       </table>
       <p class="winner-msg">🏆 {{ game.players[scores.reduce((a,b) => a.total > b.total ? a : b).playerId].name }} の勝利！</p>
       <div class="gameover-actions">
-        <button
-          class="btn-secondary"
-          :disabled="!canUndo"
-          @click="showRoundJumpDialog = true"
-        >ラウンド指定で戻る</button>
-        <button
-          class="btn-secondary"
-          :disabled="!canUndo"
-          @click="emit('undo')"
-        >◀ 1手戻る</button>
-        <button class="btn-primary" @click="emit('replay')">もう一度</button>
-        <button class="btn-secondary" @click="emit('openSetup')">設定を変更</button>
+        <div class="gameover-actions-left">
+          <button
+            class="btn-secondary"
+            :disabled="!canUndo"
+            @click="showRoundJumpDialog = true"
+          >ラウンド指定で戻る</button>
+          <button
+            class="btn-secondary"
+            :disabled="!canUndo"
+            @click="emit('undo')"
+          >◀ 1手戻る</button>
+          <button class="btn-secondary" @click="emit('openPlayHistory')">🏆 プレイ履歴</button>
+        </div>
+        <div class="gameover-actions-right">
+          <button class="btn-primary" @click="emit('replay')">もう一度</button>
+          <button class="btn-secondary" @click="emit('openSetup')">設定を変更</button>
+        </div>
       </div>
     </div>
   </div>
