@@ -1,7 +1,7 @@
 import { ROUND_CARDS } from './constants'
 import { rngNext, updatePlayer, getPlayer, drawCards, workerCount, ALL_BUILDING_CARDS } from './primitives'
 import { constructBuilding, getConstructionDiscount } from './build'
-import type { GameState, HandCard, BuildingCard, CpuStrategy } from './types'
+import type { GameState, HandCard, BuildingCard, CpuStrategy, Player } from './types'
 
 export const MCTS_SIMULATIONS = 10
 
@@ -25,6 +25,42 @@ export function getConstructionDiscountForPlayer(player: { ownedBuildings: { nam
     return count * cd.discountPerTag
   }
   return 0
+}
+
+/**
+ * greedy/beam 共通の「この建物を建てるべきか」判定。
+ * cpuBuild・scoreEffect(build)・cpu-strategy-beam の resolveBuildBranches で共有する。
+ * getDiscount はカード固有の建設コスト割引取得（state 経由/player 経由で呼び出し元が変える）。
+ */
+export function isGreedyBuildable(
+  player: Player,
+  round: number,
+  cardName: string,
+  discount: number,
+  drawAfter: number,
+  availableAfter: number,
+  getDiscount: (cardName: string) => number,
+): boolean {
+  if (GREEDY_BUILD_EXCLUDED.has(cardName)) return false
+  const def = ALL_BUILDING_CARDS[cardName]
+  if (!def) return false
+  if (def.effect.kind.startsWith('p-')) {
+    // パッシブ効果: R8以降で得点があれば建設対象
+    return round >= 8 && def.assetValue > 0
+  }
+  // 7ラウンド以下は職場として使えない建物（倉庫など）を建設対象から除外（機械人形は例外）
+  if (round <= 7 && !def.isWorkplace && cardName !== '機械人形') return false
+  if (availableAfter >= 1) {
+    const selfDiscount = getDiscount(cardName)
+    const remainingHand = player.hand.length - 1 - Math.max(0, def.cost - discount - selfDiscount)
+    if (def.effect.kind === 'build' && remainingHand + drawAfter < 2) return false
+    return true
+  }
+  // availableAfter === 0: money が賃金以上なら建設OK
+  const expectedWageCpu = workerCount(player) * (ROUND_CARDS[round - 1]?.wage ?? 0)
+  if (player.money >= expectedWageCpu) return true
+  const cardCost = Math.max(0, def.cost - discount) + 1
+  return def.assetValue > cardCost * 6
 }
 
 // ---- 捨て札ソート（greedy/disruptive 共通: 消費財→低value建物の順） ----
@@ -126,27 +162,10 @@ export function cpuBuild(state: GameState, playerId: number, discount: number, d
   if (strategy === 'greedy' || strategy === 'beam') {
     const availableAfter = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
     // 建てて即売り損パターンを除外、7ラウンド以下は配置不可建物（職場でない建物）を建てない
-    buildable = buildable.filter(c => {
-      if (GREEDY_BUILD_EXCLUDED.has(c.name)) return false
-      const def = ALL_BUILDING_CARDS[c.name]!
-      if (def.effect.kind.startsWith('p-')) {
-        // パッシブ効果: R8以降で得点があれば建設対象
-        return state.round >= 8 && def.assetValue > 0
-      }
-      // 7ラウンド以下は職場として使えない建物（倉庫など）を建設対象から除外（機械人形は例外）
-      if (state.round <= 7 && !def.isWorkplace && c.name !== '機械人形') return false
-      if (availableAfter >= 1) {
-        const selfDiscount = getConstructionDiscount(state, playerId, c.name)
-        const remainingHand = player.hand.length - 1 - Math.max(0, def.cost - discount - selfDiscount)
-        if (def.effect.kind === 'build' && remainingHand + drawAfter < 2) return false
-        return true
-      }
-      // availableAfter === 0: Fix 1 - money が賃金以上なら建設OK
-      const expectedWageCpu = workerCount(player) * (ROUND_CARDS[state.round - 1]?.wage ?? 0)
-      if (player.money >= expectedWageCpu) return true
-      const cardCost = Math.max(0, def.cost - discount) + 1
-      return def.assetValue > cardCost * 6
-    })
+    buildable = buildable.filter(c => isGreedyBuildable(
+      player, state.round, c.name, discount, drawAfter, availableAfter,
+      name => getConstructionDiscount(state, playerId, name),
+    ))
     if (buildable.length === 0) return state
   }
 

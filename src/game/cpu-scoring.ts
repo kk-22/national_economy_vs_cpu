@@ -1,7 +1,7 @@
 import { ROUND_CARDS } from './constants'
 import { getPlayer, getMaxWorkers, workerCount as countRegularWorkers, ALL_BUILDING_CARDS } from './primitives'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
-import { GREEDY_BUILD_EXCLUDED, getConstructionDiscountForPlayer } from './cpu'
+import { getConstructionDiscountForPlayer, isGreedyBuildable } from './cpu'
 import { calculateScores } from './round'
 import type { GameState, BuildingCard, GameEffect, Player, PublicWorkplace, OwnedBuilding, BeamCategory } from './types'
 import {
@@ -66,28 +66,15 @@ export function scoreEffect(effect: GameEffect, player: Player, household: numbe
       let maxCost = -1
       for (const c of player.hand) {
         if (c.kind !== 'building') continue
-        if (GREEDY_BUILD_EXCLUDED.has((c as BuildingCard).name)) continue
-        const def = ALL_BUILDING_CARDS[(c as BuildingCard).name]
+        const cardName = (c as BuildingCard).name
+        const def = ALL_BUILDING_CARDS[cardName]
         if (!def) continue
-        const selfDiscount = getConstructionDiscountForPlayer(player, (c as BuildingCard).name)
-        const discountedCost = Math.max(0, def.cost - effect.discount - selfDiscount)
-        if (player.hand.length - 1 < discountedCost) continue
-        if (def.effect.kind.startsWith('p-')) {
-          if (round < 8 || def.assetValue <= 0) continue
-        } else {
-          // 7ラウンド以下は職場として使えない建物（倉庫など）を建設対象から除外（機械人形は例外）
-          if (round <= 7 && !def.isWorkplace && (c as BuildingCard).name !== '機械人形') continue
-          if (availableAfterBuild < 1) {
-            // Fix 1: money が賃金以上なら最後のワーカーでも建設可（assetValue制限を外す）
-            if (player.money < expectedWage) {
-              if (def.assetValue <= (discountedCost + 1) * 6) continue
-            }
-          } else {
-            // Fix 3: 建設後に手札不足で build 効果の建物が使えない場合は除外
-            const remainingHand = player.hand.length - 1 - discountedCost
-            if (def.effect.kind === 'build' && remainingHand < 2) continue
-          }
-        }
+        if (player.hand.length - 1 < Math.max(0, def.cost - effect.discount - getConstructionDiscountForPlayer(player, cardName))) continue
+        // cpuBuild の greedy フィルタ（isGreedyBuildable）と同じ条件で建設可能カードを探す
+        if (!isGreedyBuildable(
+          player, round, cardName, effect.discount, 0, availableAfterBuild,
+          name => getConstructionDiscountForPlayer(player, name),
+        )) continue
         maxCost = Math.max(maxCost, def.cost)
       }
       if (maxCost < 0) return -Infinity

@@ -1,5 +1,4 @@
 import { availableWorkers, getPlayer, updatePlayer, drawCards, ALL_BUILDING_CARDS } from './primitives'
-import { ROUND_CARDS } from './constants'
 import { processRoundEnd } from './round'
 import { getAvailablePublicWorkplaces, getAvailableOwnedBuildings } from './availability'
 import { evaluateSimEnd, getTopNActionsGreedy, pickWorkerExpansion } from './cpu-scoring'
@@ -11,7 +10,7 @@ import {
   getBuildableCards, getFarmBuildableCards, getFreeBuildableCards,
   getNoSellBuildableCards, constructBuilding, getConstructionDiscount,
 } from './build'
-import { GREEDY_BUILD_EXCLUDED } from './cpu'
+import { isGreedyBuildable } from './cpu'
 import type { GameState, HandCard } from './types'
 import type { ActionOption } from './cpu-scoring'
 
@@ -67,23 +66,11 @@ function resolveBuildBranches(stateWithPending: GameState): GameState[] {
       let targets = getBuildableCards(stateWithPending, pa.playerId, pa.discount)
       const player = getPlayer(stateWithPending, pa.playerId)
       const availableAfter = player.workers.filter(w => !w.isTraining && w.placedAt === null).length
-      const filtered = targets.filter(c => {
-        if (GREEDY_BUILD_EXCLUDED.has(c.name)) return false
-        const def = ALL_BUILDING_CARDS[c.name]!
-        if (def.effect.kind.startsWith('p-')) return stateWithPending.round >= 8 && def.assetValue > 0
-        if (stateWithPending.round <= 7 && !def.isWorkplace) return false
-        if (availableAfter >= 1) {
-          const selfDiscount = getConstructionDiscount(stateWithPending, pa.playerId, c.name)
-          const remainingHand = player.hand.length - 1 - Math.max(0, def.cost - pa.discount - selfDiscount)
-          if (def.effect.kind === 'build' && remainingHand + pa.drawAfter < 2) return false
-          return true
-        }
-        // availableAfter === 0: cpuBuildの賃金チェックと一致させる
-        const expectedWage = player.workers.length * (ROUND_CARDS[stateWithPending.round - 1]?.wage ?? 0)
-        if (player.money >= expectedWage) return true
-        const cardCost = Math.max(0, def.cost - pa.discount) + 1
-        return def.assetValue > cardCost * 6
-      })
+      // cpuBuild の greedy フィルタ（isGreedyBuildable）と一致させる
+      const filtered = targets.filter(c => isGreedyBuildable(
+        player, stateWithPending.round, c.name, pa.discount, pa.drawAfter, availableAfter,
+        name => getConstructionDiscount(stateWithPending, pa.playerId, name),
+      ))
       if (filtered.length > 0) targets = filtered
       else return []  // cpuBuildと一致させる（フィルター後が空なら建設しない）
 
