@@ -14,6 +14,7 @@ import { ALL_BUILDING_CARDS } from '../game/primitives'
 import { getBuildTwoSecondCards, getConstructionDiscount } from '../game/build'
 import HandSortHeader from './HandSortHeader.vue'
 import HCard from './HCard.vue'
+import HandCardPicker from './HandCardPicker.vue'
 import RoundJumpDialog from './RoundJumpDialog.vue'
 import GameMenuButtons from './GameMenuButtons.vue'
 
@@ -187,6 +188,26 @@ function clickBuildTwoSelect(cardId: string) {
   const firstId = buildTwoSelectedIds.value[0]
   buildTwoSelectedIds.value = []
   clickBuildTwoConfirm(firstId, cardId)
+}
+
+// pendingAction 系UI（HandCardPicker）の disabled-ids 算出に使う汎用フィルタ
+function idsWhere<T extends { id: string }>(items: T[], pred: (item: T) => boolean): string[] {
+  return items.filter(pred).map(i => i.id)
+}
+
+function notBuildableIds(cards: { id: string }[]): string[] {
+  return idsWhere(cards, c => !buildableCards.value.some(b => b.id === c.id))
+}
+
+// NOTE: vue-tscのテンプレート型チェックはpendingActionのkind絞り込みを
+// アロー関数クロージャ内まで伝播しないため、絞り込み後の値は呼び出し側の引数として渡す
+// （プロパティアクセス自体は絞り込みスコープ内で評価されるため型エラーにならない）。
+function limitedSelectionDisabledIds(cards: { id: string; kind: string }[], selected: string[], count: number, consumptionOnly?: boolean): string[] {
+  return idsWhere(cards, c => (!selected.includes(c.id) && selected.length >= count) || !!(consumptionOnly && c.kind !== 'consumption'))
+}
+
+function excludeIds(cards: { id: string }[], ...excluded: string[]): string[] {
+  return idsWhere(cards, c => excluded.includes(c.id))
 }
 
 function handCardName(cardId: string): string {
@@ -437,15 +458,8 @@ function tipOn(text: string | false | null | undefined) {
                      : `${pendingAction.sourceName}で建設する建物を選択` }}
                   </span>
                 </div>
-                <div class="card-wrap">
-                  <button v-for="card in sortedHand" :key="card.id"
-                    :class="['hcard', 'selectable', { 'card-disabled': !buildableCards.some(b => b.id === card.id) }]"
-                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
-                    @click="clickBuildTarget(card.id)">
-                    <HCard :card="card" />
-                  </button>
-                  <span v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</span>
-                </div>
+                <HandCardPicker :hand="sortedHand" :disabled-ids="notBuildableIds(sortedHand)" :tip-on="tipOn" @pick="clickBuildTarget" />
+                <span v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</span>
                 <button class="btn-cancel" @click="clickCancelBuildChoice">キャンセル</button>
               </template>
 
@@ -454,15 +468,14 @@ function tipOn(text: string | false | null | undefined) {
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">{{ pendingAction.sourceName }}で2棟同時に選択（同コスト2棟）</span>
                 </div>
-                <div class="card-wrap">
-                  <button v-for="card in sortedHand" :key="card.id"
-                    :class="['hcard', 'selectable', { selected: doubleSelectedIds.includes(card.id), 'card-disabled': isDoubleCardDisabled(card.id) }]"
-                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
-                    @click="clickDoubleSelect(card.id)">
-                    <HCard :card="card" />
-                  </button>
-                  <span v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</span>
-                </div>
+                <HandCardPicker
+                  :hand="sortedHand"
+                  :selected-ids="doubleSelectedIds"
+                  :disabled-ids="idsWhere(sortedHand, c => isDoubleCardDisabled(c.id))"
+                  :tip-on="tipOn"
+                  @pick="clickDoubleSelect"
+                />
+                <span v-if="buildableCards.length === 0" class="no-options">建設できる建物がありません</span>
                 <button class="btn-cancel" @click="cancelDoubleSelect">キャンセル</button>
               </template>
 
@@ -473,20 +486,14 @@ function tipOn(text: string | false | null | undefined) {
                     {{ paymentInfo?.title }}の建設コスト{{ paymentInfo?.cost }}{{ pendingAction.kind === 'choose-build-payment' && pendingAction.consumptionDouble ? '（消費財2倍）' : '枚' }}選択 ({{ paymentEffectiveSelected }}/{{ paymentInfo?.cost }})
                   </span>
                 </div>
-                <div class="card-wrap">
-                  <button
-                    v-for="card in sortedHand"
-                    :key="card.id"
-                    :class="['hcard', 'selectable', {
-                      selected: paymentSelected.includes(card.id),
-                      'card-drawn': drawnIds.includes(card.id),
-                      'card-disabled': paymentInfo?.disabledIds.includes(card.id)
-                    }]"
-                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
-                    @click="clickPaymentCard(card.id)">
-                    <HCard :card="card" />
-                  </button>
-                </div>
+                <HandCardPicker
+                  :hand="sortedHand"
+                  :selected-ids="paymentSelected"
+                  :drawn-ids="drawnIds"
+                  :disabled-ids="paymentInfo?.disabledIds ?? []"
+                  :tip-on="tipOn"
+                  @pick="clickPaymentCard"
+                />
                 <button class="btn-cancel" @click="pendingAction.kind === 'choose-build-payment' ? clickCancelBuildPayment() : clickCancelDoublePayment()">戻る</button>
               </template>
 
@@ -495,20 +502,14 @@ function tipOn(text: string | false | null | undefined) {
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">{{ pendingAction.sourceName }}の捨て札を選択 ({{ pendingAction.selected.length }}/{{ pendingAction.count }})</span>
                 </div>
-                <div class="card-wrap">
-                  <button v-for="card in sortedHand" :key="card.id"
-                    :class="['hcard', 'selectable', {
-                      selected: pendingAction.selected.includes(card.id),
-                      'card-drawn': drawnIds.includes(card.id),
-                      'card-disabled': (!pendingAction.selected.includes(card.id) && pendingAction.selected.length >= pendingAction.count)
-                                    || (pendingAction.consumptionOnly && card.kind !== 'consumption')
-                    }]"
-                    :disabled="pendingAction.consumptionOnly && card.kind !== 'consumption'"
-                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
-                    @click="clickDiscardCard(card.id)">
-                    <HCard :card="card" />
-                  </button>
-                </div>
+                <HandCardPicker
+                  :hand="sortedHand"
+                  :selected-ids="pendingAction.selected"
+                  :drawn-ids="drawnIds"
+                  :disabled-ids="limitedSelectionDisabledIds(sortedHand, pendingAction.selected, pendingAction.count, pendingAction.consumptionOnly)"
+                  :tip-on="tipOn"
+                  @pick="clickDiscardCard"
+                />
                 <button class="btn-cancel" @click="clickCancelDiscardChoice">キャンセル</button>
               </template>
 
@@ -558,18 +559,14 @@ function tipOn(text: string | false | null | undefined) {
                     （{{ pendingAction.selected.length }}/{{ pendingAction.count }}）
                   </span>
                 </div>
-                <div class="card-wrap">
-                  <button v-for="card in sortedHand" :key="card.id"
-                    :class="['hcard', 'selectable', {
-                      selected: pendingAction.selected.includes(card.id),
-                      'card-drawn': drawnIds.includes(card.id),
-                      'card-disabled': !pendingAction.selected.includes(card.id) && pendingAction.selected.length >= pendingAction.count
-                    }]"
-                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
-                    @click="clickHandLimitCard(card.id)">
-                    <HCard :card="card" />
-                  </button>
-                </div>
+                <HandCardPicker
+                  :hand="sortedHand"
+                  :selected-ids="pendingAction.selected"
+                  :drawn-ids="drawnIds"
+                  :disabled-ids="limitedSelectionDisabledIds(sortedHand, pendingAction.selected, pendingAction.count)"
+                  :tip-on="tipOn"
+                  @pick="clickHandLimitCard"
+                />
               </template>
 
               <template v-else-if="pendingAction.kind === 'choose-sell-buildings'">
@@ -617,17 +614,13 @@ function tipOn(text: string | false | null | undefined) {
                     ({{ buildTwoSelectedIds.length }}/2)
                   </span>
                 </div>
-                <div class="card-wrap">
-                  <button v-for="card in sortedHand" :key="card.id"
-                    :class="['hcard', 'selectable', {
-                      selected: buildTwoSelectedIds.includes(card.id),
-                      'card-disabled': isBuildTwoCardDisabled(card.id),
-                    }]"
-                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
-                    @click="clickBuildTwoSelect(card.id)">
-                    <HCard :card="card" />
-                  </button>
-                </div>
+                <HandCardPicker
+                  :hand="sortedHand"
+                  :selected-ids="buildTwoSelectedIds"
+                  :disabled-ids="idsWhere(sortedHand, c => isBuildTwoCardDisabled(c.id))"
+                  :tip-on="tipOn"
+                  @pick="clickBuildTwoSelect"
+                />
                 <button class="btn-cancel" @click="clickCancelBuildChoice">キャンセル</button>
               </template>
 
@@ -640,17 +633,13 @@ function tipOn(text: string | false | null | undefined) {
                     ({{ paymentSelected.length }}/{{ pendingAction.totalCost }})
                   </span>
                 </div>
-                <div class="card-wrap">
-                  <button v-for="card in sortedHand" :key="card.id"
-                    :class="['hcard', 'selectable', {
-                      selected: paymentSelected.includes(card.id),
-                      'card-disabled': card.id === pendingAction.firstId || card.id === pendingAction.secondId
-                    }]"
-                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
-                    @click="clickBuildTwoPayment(card.id)">
-                    <HCard :card="card" />
-                  </button>
-                </div>
+                <HandCardPicker
+                  :hand="sortedHand"
+                  :selected-ids="paymentSelected"
+                  :disabled-ids="excludeIds(sortedHand, pendingAction.firstId, pendingAction.secondId)"
+                  :tip-on="tipOn"
+                  @pick="clickBuildTwoPayment"
+                />
                 <button class="btn-cancel" @click="clickCancelBuildTwoPayment">戻る</button>
               </template>
 
@@ -679,14 +668,7 @@ function tipOn(text: string | false | null | undefined) {
                     {{ pendingAction.sourceName }}：{{ pendingAction.maxAsset >= FREE_BUILD_ANY_LIMIT ? '建物を無料建設' : `資産価値${pendingAction.maxAsset}以下の建物を無料建設` }}
                   </span>
                 </div>
-                <div class="card-wrap">
-                  <button v-for="card in sortedHand" :key="card.id"
-                    :class="['hcard', 'selectable', { 'card-disabled': !buildableCards.some(b => b.id === card.id) }]"
-                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
-                    @click="clickFreeBuildCard(card.id)">
-                    <HCard :card="card" />
-                  </button>
-                </div>
+                <HandCardPicker :hand="sortedHand" :disabled-ids="notBuildableIds(sortedHand)" :tip-on="tipOn" @pick="clickFreeBuildCard" />
                 <button class="btn-cancel" @click="clickCancelBuildChoice">キャンセル</button>
               </template>
 
@@ -696,14 +678,7 @@ function tipOn(text: string | false | null | undefined) {
                   <HandSortHeader v-model="handSort" :hand="humanPlayer?.hand ?? []" />
                   <span class="pending-title">{{ pendingAction.sourceName }}：売却不可の建物を選択して建設</span>
                 </div>
-                <div class="card-wrap">
-                  <button v-for="card in sortedHand" :key="card.id"
-                    :class="['hcard', 'selectable', { 'card-disabled': !buildableCards.some(b => b.id === card.id) }]"
-                                        v-bind="tipOn(card.kind === 'building' ? cardTooltip(card.name!) : '')"
-                    @click="clickNoSellBuildCard(card.id)">
-                    <HCard :card="card" />
-                  </button>
-                </div>
+                <HandCardPicker :hand="sortedHand" :disabled-ids="notBuildableIds(sortedHand)" :tip-on="tipOn" @pick="clickNoSellBuildCard" />
                 <button class="btn-cancel" @click="clickCancelBuildChoice">キャンセル</button>
               </template>
 
