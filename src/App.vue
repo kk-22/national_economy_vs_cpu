@@ -4,6 +4,8 @@ import { ref, onMounted, onUnmounted, computed, watch, watchEffect, nextTick } f
 import { useGame } from './composables/useGame'
 import { useLogHighlight } from './composables/useLogHighlight'
 import type { CpuStrategy, GameSeries } from './game/types'
+import { ROUND_CARDS } from './game/constants'
+import { effectDesc } from './utils/cardTooltip'
 import GameSetup from './components/GameSetup.vue'
 import GameResult from './components/GameResult.vue'
 import GameBoard from './components/GameBoard.vue'
@@ -579,15 +581,16 @@ function replayGame() {
             <tr><th>ラウンド</th><th>賃金</th><th>建物</th><th>機能</th></tr>
           </thead>
           <tbody>
-            <tr :class="{ 'summary-row--current': game?.round === 1 }"><td>1</td><td>$2</td><td>-</td><td>-</td></tr>
-            <tr :class="{ 'summary-row--current': game?.round === 2 }"><td>2</td><td>$2</td><td>露店</td><td>1枚捨てて家計から$6獲得</td></tr>
-            <tr :class="{ 'summary-row--current': game?.round === 3 }"><td>3</td><td>$3</td><td>市場</td><td>2枚捨てて家計から$12獲得</td></tr>
-            <tr :class="{ 'summary-row--current': game?.round === 4 }"><td>4</td><td>$3</td><td>高等学校</td><td>労働者を4人に増やす</td></tr>
-            <tr :class="{ 'summary-row--current': game?.round === 5 }"><td>5</td><td>$3</td><td>スーパーマーケット</td><td>3枚捨てて家計から$18獲得</td></tr>
-            <tr :class="{ 'summary-row--current': game?.round === 6 }"><td>6</td><td>$4</td><td>大学</td><td>労働者を5人に増やす</td></tr>
-            <tr :class="{ 'summary-row--current': game?.round === 7 }"><td>7</td><td>$4</td><td>百貨店</td><td>4枚捨てて家計から$24獲得</td></tr>
-            <tr :class="{ 'summary-row--current': game?.round === 8 }"><td>8</td><td>$5</td><td>専門学校</td><td>すぐ使える労働者を1人追加</td></tr>
-            <tr :class="{ 'summary-row--current': game?.round === 9 }"><td>9</td><td>$5</td><td>万博</td><td>5枚捨てて家計から$30獲得</td></tr>
+            <tr
+              v-for="(rc, i) in ROUND_CARDS"
+              :key="i"
+              :class="{ 'summary-row--current': game?.round === i + 1 }"
+            >
+              <td>{{ i + 1 }}</td>
+              <td>${{ rc.wage }}</td>
+              <td>{{ rc.workplaces.length === 1 ? rc.workplaces[0].name : '-' }}</td>
+              <td>{{ rc.workplaces.length === 1 ? effectDesc(rc.workplaces[0].effect) : '-' }}</td>
+            </tr>
           </tbody>
         </table>
       </div>
