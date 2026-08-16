@@ -1,7 +1,26 @@
 import { ALL_BUILDING_CARDS } from './primitives'
 import { availableWorkers, workerCount, getMaxWorkers, getPlayer } from './primitives'
 import { getConstructionDiscount } from './build'
-import type { GameState, Player, PublicWorkplace, OwnedBuilding, GameEffect } from './types'
+import type { GameState, Player, PublicWorkplace, OwnedBuilding, GameEffect, BuildingCardDef } from './types'
+
+// 手札に「discount割引後のコストを払って建設できる」建物が1枚でもあるか判定する
+// （filter で対象建物をさらに絞り込める。例: build-no-sell は canSell:false のみ対象）
+function hasAffordableBuilding(
+  player: Player,
+  state: GameState | undefined,
+  discount: number,
+  filter?: (def: BuildingCardDef) => boolean,
+): boolean {
+  return player.hand.some(c => {
+    if (c.kind !== 'building') return false
+    const def = ALL_BUILDING_CARDS[c.name]
+    if (!def) return false
+    if (filter && !filter(def)) return false
+    const selfDiscount = state ? getConstructionDiscount(state, player.id, c.name) : 0
+    const cost = Math.max(0, def.cost - discount - selfDiscount)
+    return player.hand.length - 1 >= cost
+  })
+}
 
 function canUseEffect(effect: GameEffect, player: Player, household = Infinity, state?: GameState): boolean {
   switch (effect.kind) {
@@ -10,13 +29,7 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity, 
     case 'discard-gain':    return player.hand.length >= effect.discard && household >= effect.gain
     case 'add-worker':      return workerCount(player) < getMaxWorkers(player)
     case 'fill-workers':    return workerCount(player) < Math.min(effect.target, getMaxWorkers(player))
-    case 'build':           return player.hand.some(c => {
-      if (c.kind !== 'building') return false
-      const def = ALL_BUILDING_CARDS[c.name]
-      const selfDiscount = state ? getConstructionDiscount(state, player.id, c.name) : 0
-      const cost = Math.max(0, def.cost - effect.discount - selfDiscount)
-      return player.hand.length - 1 >= cost
-    })
+    case 'build':           return hasAffordableBuilding(player, state, effect.discount)
     case 'build-farm-free': return player.hand.some(c =>
       c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.tags.includes('farm') ?? false)
     )
@@ -52,14 +65,7 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity, 
     }
     case 'discard-draw-min-hand':    return player.hand.length >= effect.minHand  // minHand枚未満は不可（minHand枚以上必要）
     case 'discard-gain-household-min': return player.hand.length >= effect.discard && household >= effect.minHousehold
-    case 'build-no-sell':            return player.hand.some(c => {
-      if (c.kind !== 'building') return false
-      const def = ALL_BUILDING_CARDS[c.name]
-      if (!def || def.canSell) return false
-      const selfDiscount = state ? getConstructionDiscount(state, player.id, c.name) : 0
-      const cost = Math.max(0, def.cost - selfDiscount)
-      return player.hand.length - 1 >= cost
-    })
+    case 'build-no-sell':            return hasAffordableBuilding(player, state, 0, def => !def.canSell)
     case 'build-free-if-cheap':      return player.hand.some(c =>
       c.kind === 'building' && (ALL_BUILDING_CARDS[c.name]?.assetValue ?? Infinity) <= effect.maxAsset
     )
@@ -77,33 +83,12 @@ function canUseEffect(effect: GameEffect, player: Player, household = Infinity, 
         })
       )
     }
-    case 'build-gain-vp':            return player.hand.some(c => {
-      if (c.kind !== 'building') return false
-      const def = ALL_BUILDING_CARDS[c.name]
-      if (!def) return false
-      const selfDiscount = state ? getConstructionDiscount(state, player.id, c.name) : 0
-      const cost = Math.max(0, def.cost - effect.discount - selfDiscount)
-      return player.hand.length - 1 >= cost
-    })
+    case 'build-gain-vp':            return hasAffordableBuilding(player, state, effect.discount)
     // --- グローリー専用 ---
     case 'draw-consumption-or-discard-draw': return true
-    case 'build-then-draw-consumption': return player.hand.some(c => {
-      if (c.kind !== 'building') return false
-      const def = ALL_BUILDING_CARDS[c.name]
-      if (!def) return false
-      const selfDiscount = state ? getConstructionDiscount(state, player.id, c.name) : 0
-      const cost = Math.max(0, def.cost - effect.discount - selfDiscount)
-      return player.hand.length - 1 >= cost
-    })
+    case 'build-then-draw-consumption': return hasAffordableBuilding(player, state, effect.discount)
     case 'draw-consumption-odd-even': return true
-    case 'build-draw-if-empty': return player.hand.some(c => {
-      if (c.kind !== 'building') return false
-      const def = ALL_BUILDING_CARDS[c.name]
-      if (!def) return false
-      const selfDiscount = state ? getConstructionDiscount(state, player.id, c.name) : 0
-      const cost = Math.max(0, def.cost - effect.discount - selfDiscount)
-      return player.hand.length - 1 >= cost
-    })
+    case 'build-draw-if-empty': return hasAffordableBuilding(player, state, effect.discount)
     case 'gain-household-by-workers': {
       // 配置後に他の未配置コマが残るかどうかで実際の獲得額を予測する（effects.ts と一致させる）
       const willHaveOtherKoma = availableWorkers(player).length > 1
