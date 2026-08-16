@@ -40,6 +40,21 @@ const historyVersion = ref(0)  // incremented after each history mutation to dri
 let isDebugGame = false
 let historyFinalized = false  // finalizePlayHistory の二重記録防止
 
+// useGame.ts の状態はモジュールレベルのシングルトン（全呼び出し元で共有）。
+// テストで各ケースを独立させるため、startGame/startDebugGame を呼ぶ前に
+// このリセットを呼んで前のテストの状態を持ち越さないようにする。
+export function resetGameForTest(): void {
+  state.game = null
+  history = new GameHistory(1)
+  pendingEntry = null
+  isUndoRedo.value = false
+  replayError.value = null
+  cpuPaused.value = false
+  historyVersion.value = 0
+  isDebugGame = false
+  historyFinalized = false
+}
+
 export function useGame() {
   const { saveGameState: savePersisted, hasSavedGame, loadSavedGame, clearSavedGame } = useGamePersistence()
 

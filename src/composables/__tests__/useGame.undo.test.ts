@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, beforeEach } from 'vitest'
-import { useGame } from '../useGame'
+import { useGame, resetGameForTest } from '../useGame'
 
 // vitest環境は node のため localStorage が存在しない。useGamePersistence が
 // 参照するので最小限のin-memory実装で代替する。
@@ -20,6 +20,7 @@ class MemoryStorage {
 
 describe('useGame: undo/redo のCPUブロックスキップ', () => {
   beforeEach(() => {
+    resetGameForTest()  // useGame.ts はモジュールシングルトンのためテスト間の状態持ち越しを防ぐ
     const g = useGame()
     g.startDebugGame(1, 'progress', 1)  // CPU1体、人間が先手（round 8開始）
   })
